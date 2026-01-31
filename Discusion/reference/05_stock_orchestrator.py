@@ -16,39 +16,65 @@ import anyio
 from datetime import datetime
 
 from claude_agent_sdk import query, ClaudeAgentOptions, AgentDefinition
-from utils import parse_agent_md, load_agents_from_dir, AgentConfig, print_stream
+from utils import (
+    parse_agent_md,
+    load_agents_from_dir,
+    AgentConfig,
+    print_stream,
+    build_full_system_prompt,
+)
 
 
-def agent_config_to_definition(config: AgentConfig) -> AgentDefinition:
+def agent_config_to_definition(
+    config: AgentConfig,
+    project_root: str | Path = ".",
+) -> AgentDefinition:
     """
     AgentConfigをClaude Agent SDKのAgentDefinitionに変換する。
 
+    CLAUDE.md + スキル内容 + エージェント本文 を結合したシステムプロンプトを使用。
+
     Args:
         config: parse_agent_mdで取得したAgentConfig
+        project_root: プロジェクトルート（CLAUDE.md/スキル検索用）
 
     Returns:
         AgentDefinition: SDKで使用可能なエージェント定義
     """
+    # CLAUDE.md + スキル + エージェント本文を結合
+    full_prompt = build_full_system_prompt(
+        config,
+        project_root=project_root,
+        include_claude_md=True,
+        include_skills=True,
+    )
+
     return AgentDefinition(
         description=config.description,
-        prompt=config.system_prompt,
+        prompt=full_prompt,
         tools=config.tools if config.tools else None,
         model=config.model or "sonnet",
     )
 
 
-def build_options_from_agents(agents: dict[str, AgentConfig]) -> ClaudeAgentOptions:
+def build_options_from_agents(
+    agents: dict[str, AgentConfig],
+    project_root: str | Path = ".",
+) -> ClaudeAgentOptions:
     """
     複数のAgentConfigからClaudeAgentOptionsを構築する。
 
+    各エージェントのシステムプロンプトには CLAUDE.md + スキル内容 が含まれる。
+
     Args:
         agents: エージェント名をキーとしたAgentConfig辞書
+        project_root: プロジェクトルート
 
     Returns:
         ClaudeAgentOptions: SDKオプション
     """
     agent_definitions = {
-        name: agent_config_to_definition(config)
+        name: agent_config_to_definition(config, project_root)
         for name, config in agents.items()
     }
 
@@ -92,6 +118,7 @@ async def run_agent(
 
 async def orchestrate_stock_analysis(
     stock_code: str,
+    project_root: str | Path = ".",
     agents_dir: str | Path = ".claude/agents",
     logs_dir: str | Path = "logs",
     rounds: int = 2,
@@ -99,12 +126,17 @@ async def orchestrate_stock_analysis(
     """
     株銘柄の考察をAnalyst → Devil's Advocate の順で交互に実行する。
 
+    各エージェント起動時に CLAUDE.md と stock-log-protocol スキルを読み込む。
+
     Args:
         stock_code: 銘柄コード（例: "7203"）
+        project_root: プロジェクトルート
         agents_dir: エージェントMDファイルのディレクトリ
         logs_dir: ログ出力先ディレクトリ
         rounds: 議論のラウンド数（1ラウンド = Analyst + Devil's Advocate）
     """
+    project_root = Path(project_root)
+
     # エージェント設定を読み込み
     agents = load_agents_from_dir(agents_dir)
 
@@ -113,11 +145,11 @@ async def orchestrate_stock_analysis(
     if "devils-advocate" not in agents:
         raise ValueError("devils-advocate.md が見つかりません")
 
-    # SDKオプションを構築
-    options = build_options_from_agents(agents)
+    # SDKオプションを構築（CLAUDE.md + スキルを含む）
+    options = build_options_from_agents(agents, project_root)
 
     # ログファイルパス
-    logs_path = Path(logs_dir)
+    logs_path = project_root / logs_dir
     logs_path.mkdir(exist_ok=True)
     log_file = logs_path / f"{stock_code}.md"
 
@@ -185,8 +217,13 @@ async def main():
     stock_code = sys.argv[1]
     rounds = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 
+    # referenceディレクトリから実行する場合、親ディレクトリがプロジェクトルート
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+
     await orchestrate_stock_analysis(
         stock_code=stock_code,
+        project_root=project_root,
         rounds=rounds,
     )
 
