@@ -135,6 +135,115 @@ def load_agents_from_dir(directory: str | Path) -> dict[str, AgentConfig]:
     return agents
 
 
+def load_skill_content(skill_name: str, project_root: str | Path = ".") -> str | None:
+    """
+    スキル名からSKILL.mdの本文（フロントマター除く）を読み込む。
+
+    検索順序:
+    1. .claude/skills/<skill_name>/SKILL.md
+    2. ~/.claude/skills/<skill_name>/SKILL.md
+
+    Args:
+        skill_name: スキル名（ディレクトリ名）
+        project_root: プロジェクトルート
+
+    Returns:
+        str | None: スキルの本文。見つからなければNone
+    """
+    project_path = Path(project_root)
+    home_path = Path.home()
+
+    # 検索パスリスト
+    search_paths = [
+        project_path / ".claude" / "skills" / skill_name / "SKILL.md",
+        home_path / ".claude" / "skills" / skill_name / "SKILL.md",
+    ]
+
+    for skill_path in search_paths:
+        if skill_path.exists():
+            content = skill_path.read_text(encoding="utf-8")
+            _, body = _split_frontmatter(content)
+            return body.strip()
+
+    return None
+
+
+def load_claude_md(project_root: str | Path = ".") -> str | None:
+    """
+    CLAUDE.mdを読み込む。
+
+    検索順序:
+    1. .claude/CLAUDE.md
+    2. CLAUDE.md（プロジェクトルート）
+    3. ~/.claude/CLAUDE.md
+
+    Args:
+        project_root: プロジェクトルート
+
+    Returns:
+        str | None: CLAUDE.mdの内容。見つからなければNone
+    """
+    project_path = Path(project_root)
+    home_path = Path.home()
+
+    search_paths = [
+        project_path / ".claude" / "CLAUDE.md",
+        project_path / "CLAUDE.md",
+        home_path / ".claude" / "CLAUDE.md",
+    ]
+
+    for claude_md_path in search_paths:
+        if claude_md_path.exists():
+            return claude_md_path.read_text(encoding="utf-8")
+
+    return None
+
+
+def build_full_system_prompt(
+    config: AgentConfig,
+    project_root: str | Path = ".",
+    include_claude_md: bool = True,
+    include_skills: bool = True,
+) -> str:
+    """
+    AgentConfigから完全なシステムプロンプトを構築する。
+
+    CLAUDE.md + スキル内容 + エージェント本文 を結合して返す。
+
+    Args:
+        config: パース済みのAgentConfig
+        project_root: プロジェクトルート
+        include_claude_md: CLAUDE.mdを含めるか
+        include_skills: スキル内容を含めるか
+
+    Returns:
+        str: 結合されたシステムプロンプト
+    """
+    parts = []
+
+    # 1. CLAUDE.md（共通ルール）
+    if include_claude_md:
+        claude_md = load_claude_md(project_root)
+        if claude_md:
+            parts.append("# プロジェクト共通ルール（CLAUDE.md）\n")
+            parts.append(claude_md)
+            parts.append("\n---\n")
+
+    # 2. スキル内容
+    if include_skills and config.skills:
+        for skill_name in config.skills:
+            skill_content = load_skill_content(skill_name, project_root)
+            if skill_content:
+                parts.append(f"# スキル: {skill_name}\n")
+                parts.append(skill_content)
+                parts.append("\n---\n")
+
+    # 3. エージェント本文
+    parts.append(config.system_prompt)
+
+    return "\n".join(parts)
+
+
 def extract_text(message) -> str | None:
     """AssistantMessageからテキストを抽出"""
     if isinstance(message, AssistantMessage):
