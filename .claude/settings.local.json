@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx -y @anthropic-ai/context7-mcp@latest resolve-library-id --library-id \"anthropics/claude-code\")",
+      "WebSearch",
+      "Bash(ren:*)",
+      "Bash(powershell -Command \"Rename-Item -Path ''C:\\\\Users\\\\osuim\\\\Dev\\\\Test_Calude\\\\Kabu-Trading'' -NewName ''Kabu-Trading1''\")"
+    ]
+  }
+}
