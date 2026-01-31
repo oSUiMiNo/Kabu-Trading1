@@ -244,6 +244,116 @@ def build_full_system_prompt(
     return "\n".join(parts)
 
 
+@dataclass
+class ExportData:
+    """EXPORTブロックのパース結果"""
+    stance: str | None = None
+    confidence: str | None = None
+    as_of: str | None = None
+    raw: dict = field(default_factory=dict)
+
+
+def extract_latest_export(log_content: str) -> ExportData | None:
+    """
+    ログファイルから最後のEXPORTブロックを抽出してパースする。
+
+    Args:
+        log_content: ログファイルの全内容
+
+    Returns:
+        ExportData | None: パース結果。EXPORTが見つからなければNone
+    """
+    # ### EXPORT（yaml） または ### EXPORT のブロックを探す
+    pattern = r"###\s+EXPORT[^\n]*\n(.*?)(?=\n##|\n---|\Z)"
+    matches = list(re.finditer(pattern, log_content, re.DOTALL | re.IGNORECASE))
+
+    if not matches:
+        return None
+
+    # 最後のEXPORTを取得
+    last_match = matches[-1]
+    yaml_content = last_match.group(1).strip()
+
+    # YAMLブロック内のコードフェンスを除去
+    yaml_content = re.sub(r"^```ya?ml?\s*\n?", "", yaml_content)
+    yaml_content = re.sub(r"\n?```\s*$", "", yaml_content)
+
+    try:
+        data = yaml.safe_load(yaml_content)
+        if data is None:
+            data = {}
+    except yaml.YAMLError:
+        # YAMLパース失敗時は行単位で簡易パース
+        data = _simple_yaml_parse(yaml_content)
+
+    return ExportData(
+        stance=data.get("stance"),
+        confidence=data.get("confidence"),
+        as_of=data.get("as_of"),
+        raw=data,
+    )
+
+
+def _simple_yaml_parse(content: str) -> dict:
+    """
+    簡易的なYAMLパーサー（key: value形式のみ対応）
+    """
+    result = {}
+    for line in content.split("\n"):
+        line = line.strip()
+        if ":" in line and not line.startswith("#"):
+            key, _, value = line.partition(":")
+            key = key.strip()
+            value = value.strip()
+            # リスト形式の値は文字列として保持
+            if value.startswith("[") and value.endswith("]"):
+                result[key] = value
+            else:
+                result[key] = value
+    return result
+
+
+def extract_latest_export_from_file(filepath: str | Path) -> ExportData | None:
+    """
+    ログファイルパスから最後のEXPORTを抽出する。
+
+    Args:
+        filepath: ログファイルのパス
+
+    Returns:
+        ExportData | None: パース結果。ファイルが存在しないかEXPORTが見つからなければNone
+    """
+    path = Path(filepath)
+    if not path.exists():
+        return None
+
+    content = path.read_text(encoding="utf-8")
+    return extract_latest_export(content)
+
+
+def check_convergence(
+    current: ExportData | None,
+    previous: ExportData | None,
+) -> bool:
+    """
+    stance と confidence が変化したかチェックする。
+
+    Args:
+        current: 現在のEXPORT
+        previous: 前回のEXPORT
+
+    Returns:
+        bool: 変化がなければTrue（収束）、変化があればFalse
+    """
+    if current is None or previous is None:
+        return False
+
+    stance_same = current.stance == previous.stance
+    confidence_same = current.confidence == previous.confidence
+
+    return stance_same and confidence_same
+
+
 def extract_text(message) -> str | None:
     """AssistantMessageからテキストを抽出"""
     if isinstance(message, AssistantMessage):

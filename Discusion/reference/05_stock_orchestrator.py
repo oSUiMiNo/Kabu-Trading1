@@ -4,11 +4,15 @@
 .claude/agents/ 配下のMDファイル（analyst.md, devils-advocate.md）を読み込み、
 Claude Agent SDKを使って交互に実行し、筆談ログを作成する。
 
+終了条件:
+- 最大ラウンド数 5 に達した
+- 末尾EXPORTの stance/confidence が 2 回連続で変わらない（収束）
+
 使い方:
-    python 05_stock_orchestrator.py <銘柄コード> [ラウンド数]
+    python 05_stock_orchestrator.py <銘柄コード>
 
 例:
-    python 05_stock_orchestrator.py 7203 2
+    python 05_stock_orchestrator.py 7203
 """
 import sys
 from pathlib import Path
@@ -22,7 +26,15 @@ from utils import (
     AgentConfig,
     print_stream,
     build_full_system_prompt,
+    extract_latest_export_from_file,
+    check_convergence,
+    ExportData,
 )
+
+
+# 定数
+MAX_ROUNDS = 5  # 最大ラウンド数
+CONVERGENCE_COUNT = 2  # 収束判定に必要な連続回数
 
 
 def agent_config_to_definition(
@@ -121,10 +133,13 @@ async def orchestrate_stock_analysis(
     project_root: str | Path = ".",
     agents_dir: str | Path = ".claude/agents",
     logs_dir: str | Path = "logs",
-    rounds: int = 2,
 ):
     """
     株銘柄の考察をAnalyst → Devil's Advocate の順で交互に実行する。
+
+    終了条件:
+    - 最大ラウンド数（MAX_ROUNDS=5）に達した
+    - stance/confidence が CONVERGENCE_COUNT=2 回連続で変化しなかった
 
     各エージェント起動時に CLAUDE.md と stock-log-protocol スキルを読み込む。
 
@@ -133,7 +148,6 @@ async def orchestrate_stock_analysis(
         project_root: プロジェクトルート
         agents_dir: エージェントMDファイルのディレクトリ
         logs_dir: ログ出力先ディレクトリ
-        rounds: 議論のラウンド数（1ラウンド = Analyst + Devil's Advocate）
     """
     project_root = Path(project_root)
 
@@ -155,12 +169,17 @@ async def orchestrate_stock_analysis(
 
     print(f"=== 銘柄 {stock_code} の分析を開始 ===")
     print(f"ログファイル: {log_file}")
-    print(f"ラウンド数: {rounds}")
+    print(f"最大ラウンド数: {MAX_ROUNDS}")
+    print(f"収束判定: stance/confidence が {CONVERGENCE_COUNT} 回連続で不変なら終了")
     print("=" * 40)
 
-    for round_num in range(1, rounds + 1):
+    # 収束判定用の履歴
+    export_history: list[ExportData | None] = []
+    convergence_streak = 0  # 連続で変化なしの回数
+
+    for round_num in range(1, MAX_ROUNDS + 1):
         print(f"\n{'='*40}")
-        print(f"Round {round_num}")
+        print(f"Round {round_num} / {MAX_ROUNDS}")
         print(f"{'='*40}")
 
         # === Analyst フェーズ ===
@@ -202,20 +221,58 @@ async def orchestrate_stock_analysis(
 
         await run_agent("devils-advocate", da_prompt, options)
 
-    print(f"\n{'='*40}")
-    print(f"分析完了: {log_file}")
+        # === 収束判定 ===
+        current_export = extract_latest_export_from_file(log_file)
+        export_history.append(current_export)
+
+        if current_export:
+            print(f"\n[EXPORT] stance={current_export.stance}, confidence={current_export.confidence}")
+
+        # 前回との比較
+        if len(export_history) >= 2:
+            previous_export = export_history[-2]
+            if check_convergence(current_export, previous_export):
+                convergence_streak += 1
+                print(f"[収束判定] 変化なし ({convergence_streak}/{CONVERGENCE_COUNT})")
+
+                if convergence_streak >= CONVERGENCE_COUNT:
+                    print(f"\n{'='*40}")
+                    print(f"収束検出: stance/confidence が {CONVERGENCE_COUNT} 回連続で不変")
+                    print(f"Round {round_num} で議論を終了します")
+                    print(f"{'='*40}")
+                    break
+            else:
+                convergence_streak = 0
+                print(f"[収束判定] 変化あり (リセット)")
+
+    else:
+        # forループが break せずに完了した場合
+        print(f"\n{'='*40}")
+        print(f"最大ラウンド数 {MAX_ROUNDS} に達しました")
+        print(f"{'='*40}")
+
+    # 最終結果サマリ
+    final_export = extract_latest_export_from_file(log_file)
+    print(f"\n=== 分析完了 ===")
+    print(f"ログファイル: {log_file}")
+    if final_export:
+        print(f"最終 stance: {final_export.stance}")
+        print(f"最終 confidence: {final_export.confidence}")
     print(f"{'='*40}")
 
 
 async def main():
     """CLIエントリーポイント"""
     if len(sys.argv) < 2:
-        print("使い方: python 05_stock_orchestrator.py <銘柄コード> [ラウンド数]")
-        print("例: python 05_stock_orchestrator.py 7203 2")
+        print("使い方: python 05_stock_orchestrator.py <銘柄コード>")
+        print("例: python 05_stock_orchestrator.py 7203")
+        print()
+        print(f"終了条件:")
+        print(f"  - 最大 {MAX_ROUNDS} ラウンド")
+        print(f"  - stance/confidence が {CONVERGENCE_COUNT} 回連続で不変")
         sys.exit(1)
 
     stock_code = sys.argv[1]
-    rounds = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 
     # referenceディレクトリから実行する場合、親ディレクトリがプロジェクトルート
     script_dir = Path(__file__).parent
@@ -224,7 +281,6 @@ async def main():
     await orchestrate_stock_analysis(
         stock_code=stock_code,
         project_root=project_root,
-        rounds=rounds,
     )
 
 
