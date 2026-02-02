@@ -1,0 +1,12 @@
+[project]
+name = "kabu-trading-src"
+version = "0.1.0"
+description = "株銘柄評価ツール"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk",
+    "anyio",
+]
+
+[dependency-groups]
+dev = []
