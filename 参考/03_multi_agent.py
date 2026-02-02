@@ -13,7 +13,7 @@ async def main():
         allowed_tools=["Read", "Write", "Grep", "Bash"],
         agents={
             "reviewer": AgentDefinition(
-                description="コードをレビューする専門家",
+                description="コードをレビューする専門家", # これ多分間違い。description は opitons 含まない
                 prompt="あなたはコードレビューの専門家です。"
                        "バグ、パフォーマンス問題、セキュリティ脆弱性を分析し、"
                        "建設的なフィードバックを日本語で提供してください。",
