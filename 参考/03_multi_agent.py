@@ -9,6 +9,8 @@ from utils import print_stream
 
 async def main():
     options = ClaudeAgentOptions(
+        description="マルチエージェント・オーケストレーション例",
+        allowed_tools=["Read", "Write", "Grep", "Bash"],
         agents={
             "reviewer": AgentDefinition(
                 description="コードをレビューする専門家",

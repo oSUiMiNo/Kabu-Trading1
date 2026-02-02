@@ -6,7 +6,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions
 
-from file_to_stream import file_to_stream
+from file_to_stream import parse_agent_file, file_to_stream
 from utils import print_stream
 
 
@@ -20,21 +20,48 @@ async def print_file(
     ファイルパスを受け取り、その内容をClaude Codeにプロンプトとして渡して応答を表示する。
 
     流れ:
-        1. file_to_stream(path) → ファイル内容を非同期イテレーターとして取得
-        2. print_stream(...) → 内容をClaude Codeにプロンプトとして渡し、応答を表示
+        - フロントマター付きMDファイル（.claude/agents/*.md）の場合:
+            1. parse_agent_file(path) → ClaudeAgentOptions（tools/model含む）を取得
+            2. print_stream(...) → prompt/tools/modelを反映してClaude Codeに渡す
+        - 通常のファイルの場合:
+            1. file_to_stream(path) → ファイル内容を非同期イテレーターとして取得
+            2. print_stream(...) → 内容をClaude Codeにプロンプトとして渡す
 
     Args:
         file_path: 読み込むファイルのパス
         show_cost: コスト表示
         show_tools: ツール使用表示
-        options: Claude Codeへのオプション（allowed_tools, system_prompt等）
+        options: Claude Codeへのオプション（フロントマター付きファイルの場合は上書きされる）
 
     Usage:
         import asyncio
         from print_file import print_file
 
-        asyncio.run(print_file("prompt.txt"))
+        asyncio.run(print_file(".claude/agents/analyst.md"))
     """
+    path = Path(file_path)
+    content = path.read_text(encoding="utf-8")
+
+    # フロントマター付きファイルの場合はパースしてtools/modelを反映
+    if content.startswith("---"):
+        try:
+            parsed_options = parse_agent_file(file_path)
+            agent_def = next(iter(parsed_options.agents.values()))
+
+            async def prompt_stream():
+                yield agent_def.prompt
+
+            await print_stream(
+                prompt_stream(),
+                show_cost=show_cost,
+                show_tools=show_tools,
+                options=parsed_options,
+            )
+            return
+        except (ValueError, StopIteration):
+            pass
+
+    # 通常のファイル
     await print_stream(
         file_to_stream(file_path),
         show_cost=show_cost,
