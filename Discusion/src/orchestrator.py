@@ -78,13 +78,15 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path) -> str:
             return (
                 f"銘柄「{ticker.upper()}」の分析を続けてください。\n"
                 f"ログファイル: {log_abs}\n"
-                f"前回のDevil's Advocateの指摘を読み、Round {round_num} として回答・追記してください。"
+                f"前回のDevil's Advocateが反対側の立場から出した反論Claimsを読み、\n"
+                f"Round {round_num} として回答・追記してください。"
             )
     else:  # devils-advocate
         return (
-            f"銘柄「{ticker.upper()}」のログを検証してください。\n"
+            f"銘柄「{ticker.upper()}」のログを読み、最新のAnalystのstanceの反対側に立ってください。\n"
             f"ログファイル: {log_abs}\n"
-            f"最新のAnalystのRoundを読み、Round {round_num} として反論・追記してください。"
+            f"Analystのstanceを反転し、反対側の立場から反論Claims（C#）を組み立てて、\n"
+            f"Round {round_num} として追記してください。"
         )
 
 
