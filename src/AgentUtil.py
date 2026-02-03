@@ -2,6 +2,7 @@
 Claude Agent SDK 共通ユーティリティ
 """
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -13,6 +14,14 @@ from claude_agent_sdk import (
     query,
     ClaudeAgentOptions,
 )
+
+
+@dataclass
+class AgentResult:
+    """call_agent()の戻り値"""
+    text: str = ""
+    cost: float | None = None
+    tools_used: list[str] = field(default_factory=list)
 
 
 def extract_text(message) -> str | None:
@@ -131,9 +140,9 @@ async def call_agent(
     file_path: str | Path | None = None,
     show_cost: bool = True,
     show_tools: bool = False,
-):
+) -> AgentResult:
     """
-    プロンプトを受け取り、Claude Codeに渡して応答を表示する。
+    プロンプトを受け取り、Claude Codeに渡して応答を表示し、結果を返す。
 
     Args:
         messages: 文字列または非同期イテレーター（文字列またはAssistantMessageを返す）
@@ -141,15 +150,18 @@ async def call_agent(
         show_cost: コスト表示
         show_tools: ツール使用表示
 
+    Returns:
+        AgentResult: text（応答テキスト）, cost（コスト）, tools_used（使用ツール）
+
     Usage:
         import asyncio
-        from utils import call_agent
+        from AgentUtil import call_agent
 
-        # ファイル指定あり（エージェント定義からsystem_prompt/tools/modelを取得）
-        asyncio.run(call_agent("〇〇銘柄を分析して", file_path=".claude/agents/analyst.md"))
-
-        # ファイル指定なし（プロンプトのみ）
-        asyncio.run(call_agent("こんにちは"))
+        # 応答を受け取って後続処理に使う
+        result = asyncio.run(call_agent("〇〇銘柄を分析して", file_path=".claude/agents/analyst.md"))
+        print(result.text)        # 応答テキスト
+        print(result.cost)        # コスト（USD）
+        print(result.tools_used)  # ["Read", "WebSearch", ...]
     """
     # 文字列ならそのまま使う、非同期イテレーターなら収集
     if isinstance(messages, str):
@@ -168,20 +180,31 @@ async def call_agent(
     # file_pathが指定されていればパースしてoptions作成
     options = parse_agent_file(file_path) if file_path else None
 
+    result = AgentResult()
+
     # Claude Codeにクエリを投げて応答を表示
+    text_parts = []
     async for response in query(prompt=prompt, options=options):
         text = extract_text(response)
         if text:
             print(text)
+            text_parts.append(text)
 
-        if show_tools:
-            for tool in extract_tool_use(response):
-                print(f"[ツール: {tool}]")
+        tools = extract_tool_use(response)
+        if tools:
+            result.tools_used.extend(tools)
+            if show_tools:
+                for tool in tools:
+                    print(f"[ツール: {tool}]")
 
-        if show_cost:
-            cost = extract_cost(response)
-            if cost:
+        cost = extract_cost(response)
+        if cost:
+            result.cost = cost
+            if show_cost:
                 print(f"\n(コスト: ${cost:.4f})")
+
+    result.text = "\n".join(text_parts)
+    return result
 
 
 if __name__ == "__main__":
