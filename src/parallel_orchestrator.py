@@ -15,6 +15,7 @@ from orchestrator import (
     run_orchestrator,
     get_last_export,
 )
+from opinion_orchestrator import run_opinion_orchestrator
 
 
 def get_set_log_path(ticker: str, set_num: int) -> Path:
@@ -27,19 +28,22 @@ async def run_parallel(
     num_sets: int = 3,
     max_rounds: int = 6,
     initial_prompt: str | None = None,
+    opinions_per_set: int = 2,
 ):
     """
-    同一銘柄に対して複数セットの議論を並行実行する。
+    同一銘柄に対して複数セットの議論を並行実行し、
+    全セット完了後にopinionエージェントを並行起動する。
 
-    各セットは独立したログファイル（例: AMZN_set1.md, AMZN_set2.md, ...）に
-    書き込むため、互いに干渉しない。
-    全セット完了後に結果を比較表示する。
+    フロー:
+      1. 3セットのAnalyst vs Devil's Advocate 議論を並行実行
+      2. 全セット完了後、各セットに対して2体のopinionエージェントを並行起動
 
     Args:
         ticker: 銘柄コード（例: "NVDA"）
         num_sets: 並行セット数（デフォルト: 3）
         max_rounds: 各セットの最大ラウンド数
         initial_prompt: 初回Analystへの追加指示（省略可）
+        opinions_per_set: 各セットに対するopinionエージェント数（デフォルト: 2）
     """
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -78,16 +82,23 @@ async def run_parallel(
 
     print("=" * 60)
 
+    # --- Phase 2: Opinion ---
+    print()
+    print(f">>> 議論完了 → Opinionフェーズへ移行")
+    print()
+    await run_opinion_orchestrator(ticker, opinions_per_set)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python parallel_orchestrator.py <TICKER> [num_sets] [max_rounds] [initial_prompt]")
-        print("例: python parallel_orchestrator.py NVDA 3 6 '特にAI市場に注目して'")
+        print("Usage: python parallel_orchestrator.py <TICKER> [num_sets] [max_rounds] [opinions_per_set] [initial_prompt]")
+        print("例: python parallel_orchestrator.py NVDA 3 6 2 '特にAI市場に注目して'")
         sys.exit(1)
 
     ticker = sys.argv[1]
     num_sets = int(sys.argv[2]) if len(sys.argv) > 2 else 3
     max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 6
-    initial_prompt = sys.argv[4] if len(sys.argv) > 4 else None
+    opinions_per_set = int(sys.argv[4]) if len(sys.argv) > 4 else 2
+    initial_prompt = sys.argv[5] if len(sys.argv) > 5 else None
 
-    anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt))
+    anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt, opinions_per_set))
