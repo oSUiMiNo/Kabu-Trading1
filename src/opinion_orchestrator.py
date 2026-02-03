@@ -4,6 +4,7 @@
 各セットの議論ログ（銘柄名_setN.md）に対して2体のopinionサブエージェントを
 並行起動し、買う/買わないの意見を独立に出させる。
 3セット × 2体 = 合計6体を同時に走らせる。
+全opinionが完了したら、各セットのペアをjudgeに渡して一致/不一致を判定させる。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
 import re
@@ -174,6 +175,25 @@ async def run_opinion_orchestrator(
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
+
+    # --- Phase: Judge ---
+    # 各セットの opinion ペアを judge に渡す
+    from judge_orchestrator import run_judge_orchestrator
+
+    # tasks は (set_num, opinion_num) のリスト。同一setの連続2つがペア。
+    opinion_pairs = []
+    pairs_by_set: dict[int, list[int]] = {}
+    for sn, on in tasks:
+        pairs_by_set.setdefault(sn, []).append(on)
+    for sn, nums in pairs_by_set.items():
+        if len(nums) >= 2:
+            opinion_pairs.append((sn, nums[0], nums[1]))
+
+    if opinion_pairs:
+        print()
+        print(f">>> Opinion完了 → Judgeフェーズへ移行")
+        print()
+        await run_judge_orchestrator(ticker, opinion_pairs)
 
 
 if __name__ == "__main__":
