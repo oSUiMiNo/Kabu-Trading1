@@ -92,6 +92,7 @@ async def run_orchestrator(
     ticker: str,
     max_rounds: int = 6,
     initial_prompt: str | None = None,
+    log_path: Path | None = None,
 ):
     """
     オーケストレーターのメインループ。
@@ -100,9 +101,11 @@ async def run_orchestrator(
         ticker: 銘柄コード（例: "NVDA"）
         max_rounds: 最大ラウンド数（Analyst + Devil's Advocate で2ラウンド = 1サイクル）
         initial_prompt: 初回Analystへの追加指示（省略可）
+        log_path: ログファイルパス（省略時は logs/{TICKER}.md）
     """
-    log_path = get_log_path(ticker)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    if log_path is None:
+        log_path = get_log_path(ticker)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     analyst_file = AGENTS_DIR / "analyst.md"
     devils_file = AGENTS_DIR / "devils-advocate.md"
