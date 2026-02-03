@@ -1,1 +1,15 @@
-nul
+# Python
+__pycache__/
+*.pyc
+
+# 仮想環境
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
