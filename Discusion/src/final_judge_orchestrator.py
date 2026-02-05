@@ -35,17 +35,28 @@ def get_next_final_judge_num(ticker: str) -> int:
 def build_final_judge_prompt(ticker: str, final_no: int) -> str:
     """final_judgeエージェントに渡すプロンプトを組み立てる"""
     t = ticker.upper()
+    set1_log = str(LOGS_DIR / f"{t}_set1.md")
+    set2_log = str(LOGS_DIR / f"{t}_set2.md")
+    set3_log = str(LOGS_DIR / f"{t}_set3.md")
     output = str(LOGS_DIR / f"{t}_final_judge_{final_no}.md")
 
     return (
-        f"銘柄「{t}」の全セット（set1〜3）の judge / opinion 結果を集約し、最終結論を出してください。\n"
+        f"銘柄「{t}」について最終判定を行ってください。\n"
+        f"\n"
+        f"【重要】まず各setの元ログを読んでから、judge/opinionを評価してください。\n"
+        f"\n"
+        f"元ログ（Analyst vs Devils）:\n"
+        f"  set1: {set1_log}\n"
+        f"  set2: {set2_log}\n"
+        f"  set3: {set3_log}\n"
         f"\n"
         f"対象フォルダ: {LOGS_DIR}\n"
         f"出力ファイル: {output}\n"
         f"final_no: {final_no}\n"
         f"\n"
-        f"logs/ フォルダ内で `{t}_set*_judge_*.md` や `{t}_set*_opinion_*.md` を探索し、\n"
-        f"各setの結果を集約して最終判定を出力ファイルに新規作成してください。\n"
+        f"1. 最初に set1〜3 の元ログをすべて読み、議論の内容を把握してください。\n"
+        f"2. 次に `{t}_set*_judge_*.md` や `{t}_set*_opinion_*.md` を探索し、各setの判定結果を確認してください。\n"
+        f"3. 各setの結果を集約して最終判定を出力ファイルに新規作成してください。\n"
         f"Glob による番号採番は不要です（オーケストレーターが決定済み）。"
     )
 

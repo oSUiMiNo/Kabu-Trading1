@@ -43,20 +43,25 @@ def build_judge_prompt(
 ) -> str:
     """judgeエージェントに渡すプロンプトを組み立てる"""
     t = ticker.upper()
+    source_log = str(LOGS_DIR / f"{t}_set{set_num}.md")
     file_a = str(LOGS_DIR / f"{t}_set{set_num}_opinion_{opinion_a}.md")
     file_b = str(LOGS_DIR / f"{t}_set{set_num}_opinion_{opinion_b}.md")
     output = str(LOGS_DIR / f"{t}_set{set_num}_judge_{judge_num}.md")
 
     return (
-        f"銘柄「{t}」の set{set_num} の2つの opinion を読み、一致/不一致を判定してください。\n"
+        f"銘柄「{t}」の set{set_num} について判定してください。\n"
         f"\n"
+        f"【重要】まず元の議論ログを読んでから、opinionを評価してください。\n"
+        f"\n"
+        f"元ログ（Analyst vs Devils）: {source_log}\n"
         f"opinion_A: {file_a}\n"
         f"opinion_B: {file_b}\n"
         f"出力ファイル: {output}\n"
         f"judge_no: {judge_num}\n"
         f"\n"
-        f"上記の2つの opinion ファイルを読み、supported_side が一致しているか判定し、\n"
-        f"結果を出力ファイルに新規作成してください。\n"
+        f"1. 最初に元ログを読み、議論の内容を把握してください。\n"
+        f"2. 次に2つの opinion ファイルを読み、supported_side が一致しているか判定してください。\n"
+        f"3. 結果を出力ファイルに新規作成してください。\n"
         f"Glob による番号採番は不要です（オーケストレーターが決定済み）。"
     )
 

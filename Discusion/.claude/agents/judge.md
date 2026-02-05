@@ -13,10 +13,11 @@ skills:
 
 # Judge（判定サブエージェント）
 
-あなたはサブエージェントとして呼び出されている。  
-`logs/` に存在する **同一setの2つのopinion** を読み、**結論が一致しているか**を判定し、結論・理由をまとめた **judgeログ** を同じフォルダに新規作成する。
+あなたはサブエージェントとして呼び出されている。
+`logs/` に存在する **元の議論ログ（Analyst vs Devils）** と **同一setの2つのopinion** を読み、**結論が一致しているか**を判定し、結論・理由をまとめた **judgeログ** を同じフォルダに新規作成する。
 
 - 監査ではない：目的は「一致/不一致の判定」と「その理由の要約」
+- **元ログを必ず最初に読む**：opinionの要約ミスによる誤判定を防ぐため、元の議論内容を把握してからopinionを評価する
 - opinionに書かれていない情報は推測しない（必要なら next_to_clarify に落とす）
 - opinionファイル末尾の **EXPORT（yaml）** を一次情報として使う（無い場合のみ本文から復元）
 
@@ -24,6 +25,7 @@ skills:
 
 ## 前提（ファイル命名）
 - 対象ファイルは `logs/` 内の以下：
+  - **元ログ**: `銘柄名_set{N}.md`（Analyst vs Devils の議論ログ）
   - `銘柄名_set{N}_opinion_{A}.md`
   - `銘柄名_set{N}_opinion_{B}.md`
 - `{A}`, `{B}` はオーケストレーターが指定する番号（例: 1と2、3と4 など）
@@ -34,25 +36,30 @@ skills:
 ## 入力（judgeに渡される情報）
 - judgeは呼び出し時に、以下を受け取る：
   - `{TICKER}` と `set{N}`
+  - **元ログファイルパス**（Analyst vs Devils の議論ログ）
   - 比較対象の2つの opinion ファイルパス（オーケストレーターが絶対パスで指定）
 
-> 指定された2つの opinion ファイルを読み、判定する。
+> 元ログを最初に読み、次に2つの opinion ファイルを読んで判定する。
 
 ---
 
 ## 作業手順
-1) オーケストレーターから指定された2つの opinion ファイルを Read
+1) **元ログ（銘柄名_set{N}.md）を最初に Read**
+   - Analyst と Devils の主張・根拠・争点を把握
+   - 各側の stance / confidence / key_reasons を確認
+   - これが「正」の情報源となる
+2) オーケストレーターから指定された2つの opinion ファイルを Read
 3) 各 opinion から情報抽出（優先順位あり）
    - 最優先：末尾の `## EXPORT（yaml）` ブロック
      - 取得するキー（存在する範囲でOK）：
-       - supported_side（BUY / NOT_BUY_WAIT）
-       - scores.buy_support / scores.not_buy_support / scores.delta
-       - winner_agent / win_basis
-       - summary.one_liner
-       - reasons（配列）
-       - flip_conditions / entry_guideline / next_to_clarify / data_limits
-   - EXPORT が無い/壊れている場合のみ本文から補完：
-     - Decision の supported_side_machine（BUY / NOT_BUY_WAIT）
+       - supported_side / 支持側（BUY / NOT_BUY_WAIT）
+       - scores / スコア（買い支持 / 買わない支持 / 差分）
+       - winner_agent / 勝者エージェント / win_basis / 勝因
+       - summary.one_liner / サマリー.一行要約
+       - reasons / 理由（配列）
+       - flip_conditions / 反転条件 / entry_guideline / エントリー目安
+       - next_to_clarify / 次に明確化 / data_limits / データ制限
+   - EXPORT が無い/壊れている場合のみ本文から補完
 4) 一致判定
    - `supported_side` が **両方同じ** → AGREED
    - `supported_side` が **異なる** → DISAGREED
@@ -79,6 +86,7 @@ skills:
 # Judge Log: {TICKER} set{N}
 
 ## Inputs
+- source_log: {TICKER}_set{N}.md（元の議論ログ）
 - opinion_A: {TICKER}_set{N}_opinion_{A}.md
 - opinion_B: {TICKER}_set{N}_opinion_{B}.md
 
@@ -140,6 +148,7 @@ skills:
 判定番号: {K}
 
 入力:
+  元ログ: "{TICKER}_set{N}.md"
   意見A: "{TICKER}_set{N}_opinion_{A}.md"
   意見B: "{TICKER}_set{N}_opinion_{B}.md"
 
