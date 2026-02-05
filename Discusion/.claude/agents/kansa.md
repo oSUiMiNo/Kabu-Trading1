@@ -9,7 +9,7 @@ tools:
   - Edit
   - Glob
   - Grep
-  - WebFetch
+  - WebFetch/
   - WebSearch
 skills:
   - stock-log-protocol

@@ -160,6 +160,14 @@ async def run_judge_orchestrator(
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
 
+    # --- Phase: Final Judge ---
+    from final_judge_orchestrator import run_final_judge_orchestrator
+
+    print()
+    print(f">>> Judge完了 → Final Judgeフェーズへ移行")
+    print()
+    await run_final_judge_orchestrator(ticker)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
