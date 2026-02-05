@@ -130,41 +130,41 @@ skills:
 最後に必ず貼る：
 
 ```yaml
-ticker: {TICKER}
-final_no: {K}
+銘柄: {TICKER}
+最終判定番号: {K}
 
-inputs:
-  set1_source: "{...}"
-  set2_source: "{...}"
-  set3_source: "{...}"
+入力:
+  set1ソース: "{...}"
+  set2ソース: "{...}"
+  set3ソース: "{...}"
 
-per_set:
+セット別結果:
   set1:
-    supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-    agreement: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-    one_liner: "{...}"
+    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
+    一致度: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
+    一行要約: "{...}"
   set2:
-    supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-    agreement: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-    one_liner: "{...}"
+    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
+    一致度: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
+    一行要約: "{...}"
   set3:
-    supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-    agreement: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-    one_liner: "{...}"
+    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
+    一致度: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
+    一行要約: "{...}"
 
-final_decision:
-  supported_side: BUY | NOT_BUY_WAIT
-  overall_agreement: AGREED_STRONG | MIXED | INCOMPLETE
+最終判定:
+  支持側: BUY | NOT_BUY_WAIT
+  総合一致度: AGREED_STRONG | MIXED | INCOMPLETE
 
-rationale:
+根拠:
   - "{理由1}"
   - "{理由2}"
 
-conflicts:
+対立点:
   - "{割れ/不足1}"
 
-next_to_clarify:
+次に明確化:
   - "{論点1}"
 
-data_limits:
+データ制限:
   - "{例: set2のjudgeが欠損}"
