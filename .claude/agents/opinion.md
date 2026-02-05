@@ -151,47 +151,47 @@ skills:
 最後に必ず貼る：
 
 ```yaml
-ticker: {TICKER}
-set: set{N}
-opinion_no: {K}
+銘柄: {TICKER}
+セット: set{N}
+意見番号: {K}
 
-# side naming rule:
-# - display: "BUY" / "NOT_BUY (WAIT)" はMarkdown本文のみ
-# - machine: BUY / NOT_BUY_WAIT はyamlに固定（集計のため）
-supported_side: BUY | NOT_BUY_WAIT
+# 支持側の命名規則:
+# - 表示用: "買い" / "買わない（様子見）" はMarkdown本文のみ
+# - 機械用: BUY / NOT_BUY_WAIT はyamlに固定（集計のため）
+支持側: BUY | NOT_BUY_WAIT
 
-# which agent "won" and why（結論か/議論運用か）
-winner_agent: analyst | devils-advocate
-win_basis: conclusion | debate_operation
+# どのエージェントがなぜ勝ったか（結論か/議論運用か）
+勝者エージェント: analyst | devils-advocate
+勝因: conclusion | debate_operation
 
-scores:
-  buy_support: {0-100}
-  not_buy_support: {0-100}
-  delta: {整数}
+スコア:
+  買い支持: {0-100}
+  買わない支持: {0-100}
+  差分: {整数}
 
-tie_break:
-  threshold: 5
-  applied: true/false
+同点判定:
+  閾値: 5
+  適用: true/false
 
-summary:
-  one_liner: "{短い結論}"
+サマリー:
+  一行要約: "{短い結論}"
 
-reasons:
+理由:
   # 数字/具体値がある項目は末尾に (log: RoundX / Fy) を添える
   - "{理由1}"
   - "{理由2}"
 
-flip_conditions:
+反転条件:
   # ログで検証できる条件だけ
   - "{反転条件1}"
 
-entry_guideline:
+エントリー目安:
   # 目安・提案（ログの確定条件ではない）
   - "{目安1}"
 
-next_to_clarify:
+次に明確化:
   - "{論点1}"
 
-data_limits:
-  # 入力ログに無い指標は断定しない。必要ならここか next_to_clarify へ。
+データ制限:
+  # 入力ログに無い指標は断定しない。必要ならここか 次に明確化 へ。
   - "{例: EV/FCFなどの指標がログに無い}"

@@ -135,45 +135,45 @@ skills:
 最後に必ず貼る：
 
 ```yaml
-ticker: {TICKER}
-set: set{N}
-judge_no: {K}
+銘柄: {TICKER}
+セット: set{N}
+判定番号: {K}
 
-inputs:
-  opinion_A: "{TICKER}_set{N}_opinion_{A}.md"
-  opinion_B: "{TICKER}_set{N}_opinion_{B}.md"
+入力:
+  意見A: "{TICKER}_set{N}_opinion_{A}.md"
+  意見B: "{TICKER}_set{N}_opinion_{B}.md"
 
-parsed:
-  opinion_A:
-    supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-    one_liner: "{...}"
-    scores:
-      buy_support: {0-100|null}
-      not_buy_support: {0-100|null}
-      delta: {int|null}
-    winner_agent: analyst | devils-advocate | unknown
-    win_basis: conclusion | debate_operation | unknown
-  opinion_B:
-    supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-    one_liner: "{...}"
-    scores:
-      buy_support: {0-100|null}
-      not_buy_support: {0-100|null}
-      delta: {int|null}
-    winner_agent: analyst | devils-advocate | unknown
-    win_basis: conclusion | debate_operation | unknown
+解析結果:
+  意見A:
+    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
+    一行要約: "{...}"
+    スコア:
+      買い支持: {0-100|null}
+      買わない支持: {0-100|null}
+      差分: {int|null}
+    勝者エージェント: analyst | devils-advocate | unknown
+    勝因: conclusion | debate_operation | unknown
+  意見B:
+    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
+    一行要約: "{...}"
+    スコア:
+      買い支持: {0-100|null}
+      買わない支持: {0-100|null}
+      差分: {int|null}
+    勝者エージェント: analyst | devils-advocate | unknown
+    勝因: conclusion | debate_operation | unknown
 
-decision:
-  agreement: AGREED | DISAGREED | INCOMPLETE
-  agreed_supported_side: BUY | NOT_BUY_WAIT | null
+判定:
+  一致度: AGREED | DISAGREED | INCOMPLETE
+  一致支持側: BUY | NOT_BUY_WAIT | null
 
-why:
+理由:
   - "{短い理由1}"
   - "{短い理由2}"
 
-next_to_clarify:
-  # DISAGREED / INCOMPLETE のとき優先。opinionの next_to_clarify / data_limits 由来のみ。
+次に明確化:
+  # DISAGREED / INCOMPLETE のとき優先。opinionの 次に明確化 / データ制限 由来のみ。
   - "{論点1}"
 
-data_limits:
-  - "{例: opinion_B のEXPORTが欠損}"
+データ制限:
+  - "{例: 意見B のEXPORTが欠損}"

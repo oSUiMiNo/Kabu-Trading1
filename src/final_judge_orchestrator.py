@@ -87,8 +87,9 @@ async def run_final_judge_orchestrator(ticker: str) -> AgentResult:
     final_path = LOGS_DIR / f"{t}_final_judge_{final_no}.md"
     if final_path.exists():
         content = final_path.read_text(encoding="utf-8")
-        m_side = re.search(r"supported_side:\s*(\S+)", content)
-        m_agree = re.search(r"overall_agreement:\s*(\S+)", content)
+        # 日本語フィールド名を優先、フォールバックで英語も対応
+        m_side = re.search(r"(?:支持側|supported_side):\s*(\S+)", content)
+        m_agree = re.search(r"(?:総合一致度|overall_agreement):\s*(\S+)", content)
         side = m_side.group(1) if m_side else "N/A"
         agree = m_agree.group(1) if m_agree else "N/A"
         print(f"  最終判定: {side}")

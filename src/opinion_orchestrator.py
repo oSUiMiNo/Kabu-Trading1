@@ -146,7 +146,7 @@ async def run_opinion_orchestrator(
         cost = r.cost if r and r.cost else 0.0
         total_cost += cost
 
-        # opinionファイルからEXPORTを簡易読み取り
+        # opinionファイルからEXPORTを簡易読み取り（日本語フィールド対応）
         opinion_path = LOGS_DIR / f"{ticker.upper()}_set{sn}_opinion_{on}.md"
         side = "N/A"
         buy_score = "?"
@@ -155,19 +155,20 @@ async def run_opinion_orchestrator(
         basis = "?"
         if opinion_path.exists():
             content = opinion_path.read_text(encoding="utf-8")
-            m_side = re.search(r"supported_side:\s*(\S+)", content)
+            # 日本語フィールド名を優先、フォールバックで英語も対応
+            m_side = re.search(r"(?:支持側|supported_side):\s*(\S+)", content)
             if m_side:
                 side = m_side.group(1)
-            m_buy = re.search(r"buy_support:\s*(\d+)", content)
+            m_buy = re.search(r"(?:買い支持|buy_support):\s*(\d+)", content)
             if m_buy:
                 buy_score = m_buy.group(1)
-            m_notbuy = re.search(r"not_buy_support:\s*(\d+)", content)
+            m_notbuy = re.search(r"(?:買わない支持|not_buy_support):\s*(\d+)", content)
             if m_notbuy:
                 notbuy_score = m_notbuy.group(1)
-            m_winner = re.search(r"winner_agent:\s*(\S+)", content)
+            m_winner = re.search(r"(?:勝者エージェント|winner_agent):\s*(\S+)", content)
             if m_winner:
                 winner = m_winner.group(1)
-            m_basis = re.search(r"win_basis:\s*(\S+)", content)
+            m_basis = re.search(r"(?:勝因|win_basis):\s*(\S+)", content)
             if m_basis:
                 basis = m_basis.group(1)
 

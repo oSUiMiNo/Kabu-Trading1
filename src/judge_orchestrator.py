@@ -142,16 +142,17 @@ async def run_judge_orchestrator(
         cost = r.cost if r and r.cost else 0.0
         total_cost += cost
 
-        # judgeファイルからEXPORTを簡易読み取り
+        # judgeファイルからEXPORTを簡易読み取り（日本語フィールド対応）
         judge_path = LOGS_DIR / f"{ticker.upper()}_set{sn}_judge_{jn}.md"
         agreement = "N/A"
         agreed_side = "N/A"
         if judge_path.exists():
             content = judge_path.read_text(encoding="utf-8")
-            m_agree = re.search(r"agreement:\s*(\S+)", content)
+            # 日本語フィールド名を優先、フォールバックで英語も対応
+            m_agree = re.search(r"(?:一致度|agreement):\s*(\S+)", content)
             if m_agree:
                 agreement = m_agree.group(1)
-            m_side = re.search(r"agreed_supported_side:\s*(\S+)", content)
+            m_side = re.search(r"(?:一致支持側|agreed_supported_side):\s*(\S+)", content)
             if m_side:
                 agreed_side = m_side.group(1)
 
