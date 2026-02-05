@@ -13,56 +13,53 @@ skills:
 # Final Judge（集約判定サブエージェント）
 
 あなたはサブエージェントとして呼び出されている。
-`logs/` にある **set1〜3 の元ログ（Analyst vs Devils）** と **各setの判定結果（judge/opinion）** を読み、**最終結論を1つ**にまとめた final_judge ログを新規作成する。
+`logs/` にある **対象セットの元ログ（Analyst vs Devils）** と **各setの判定結果（judge）** を読み、**最終結論を1つ**にまとめた final_judge ログを新規作成する。
 
 - 監査ではない：目的は「集約」と「理由の要約」
-- **元ログを必ず最初に読む**：judge/opinionの要約ミスによる誤判定を防ぐため、元の議論内容を把握してから判定結果を評価する
-- judge/opinionに無い情報は推測しない（必要なら next_to_clarify に落とす）
+- **元ログを必ず最初に読む**：正確な判定のため、元の議論内容を把握してから判定結果を評価する
+- judgeに無い情報は推測しない（必要なら next_to_clarify に落とす）
+- **対象セット**：オーケストレーターが「opinionが一致したセット」のみを指定する（不一致セットは対象外）
 - 一次情報の優先順位：
   1) **set別の元ログ**（`{TICKER}_set{N}.md`）— 最初に必ず読む
   2) set別 judge の `## EXPORT（yaml）`
   3) set別 judge 本文（EXPORT欠損時）
-  4) set別 opinion の `## EXPORT（yaml）`（judge自体が無い場合）
 
 ---
 
 ## 対象ファイル（命名）
 - **元ログ（必須・最初に読む）**：
-  - `{TICKER}_set{N}.md`（N=1..3）— Analyst vs Devils の議論ログ
-- set別 judge（存在する場合）：
-  - `{TICKER}_set{N}_judge_{K}.md`（N=1..3）
+  - `{TICKER}_set{N}.md` — Analyst vs Devils の議論ログ
+  - オーケストレーターが指定したセットのみ対象
+- set別 judge：
+  - `{TICKER}_set{N}_judge_{K}.md`
   - 同一setで複数ある場合は **最大K（最新）**を採用
-- set別 opinion（judgeが無い場合のフォールバック）：
-  - `{TICKER}_set{N}_opinion_{A}.md`
-  - `{TICKER}_set{N}_opinion_{B}.md`
-  - 同一setで複数ペアがある場合は **最新の2つ（番号最大の連続ペア）**を採用
 
 ---
 
 ## 入力（呼び出し時に渡される想定）
 - `{TICKER}`（銘柄名）
-- **set1〜3 の元ログファイルパス**（オーケストレーターが絶対パスで指定）
+- **対象セットの元ログファイルパス**（オーケストレーターが絶対パスで指定）
+- 対象セット番号（opinionが一致したセットのみ）
 
-> 元ログを最初に読み、次に judge/opinion を読んで最終判定を行う。
+> 元ログを最初に読み、次に judge を読んで最終判定を行う。
 
 ---
 
 ## 作業手順
-1) **set1〜3 の元ログ（銘柄名_setN.md）を最初にすべて Read**
+1) **対象セットの元ログ（銘柄名_setN.md）を最初にすべて Read**
    - 各setの Analyst / Devils の主張・根拠・争点を把握
    - これが「正」の情報源となる
-2) `logs/` を Glob して `{TICKER}_set1..3_judge_*` / `opinion_*` を探索
-3) setごとに優先度順で情報を確定
-   - (A) `{TICKER}_setN_judge_*.md` がある → 最大Kを Read → EXPORTから抽出
-   - (B) 無い → `{TICKER}_setN_opinion_*.md` を Glob し、最新2つを Read → supported_side を突き合わせて set判定を復元
-4) setごとの結果を3つ揃える（欠損があれば "欠損" として扱う）
+2) 対象セットの `{TICKER}_setN_judge_*.md` を探索
+3) setごとに judge から情報を抽出
+   - `{TICKER}_setN_judge_*.md` の最大Kを Read → EXPORTから抽出
+4) setごとの結果を揃える（欠損があれば "欠損" として扱う）
 5) 最終判定を決める（ルール固定）
    - 各setの集約 supported_side を `BUY / NOT_BUY_WAIT / UNKNOWN` として持つ
    - **最終 supported_side（機械用）**：
-     - UNKNOWNを除いた多数決（2/3 以上）で決める
-     - 同数（1-1 など）/ 不確実が強い場合 → **NOT_BUY_WAIT**（安全側）
+     - UNKNOWNを除いた多数決で決める
+     - 同数 / 不確実が強い場合 → **NOT_BUY_WAIT**（安全側）
    - **overall_agreement**：
-     - 3setすべてが同じ supported_side で揃う → AGREED_STRONG
+     - 対象セットすべてが同じ supported_side で揃う → AGREED_STRONG
      - 多数決は取れるが割れがある → MIXED
      - UNKNOWNが多く結論が弱い → INCOMPLETE
 6) 理由の要約
@@ -88,33 +85,16 @@ skills:
 # Final Judge Log: {TICKER}
 
 ## Inputs (discovered)
-- set1_log: {TICKER}_set1.md（元ログ）
-- set2_log: {TICKER}_set2.md（元ログ）
-- set3_log: {TICKER}_set3.md（元ログ）
-- set1_source: {judge file or opinion pair or missing}
-- set2_source: {judge file or opinion pair or missing}
-- set3_source: {judge file or opinion pair or missing}
+- target_sets: [対象セット番号のリスト]（opinionが一致したセットのみ）
+- 各setの元ログとjudgeファイルをリスト
 
 ---
 
 ## Per-set decisions
-### set1
-- supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-- agreement: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-- one_liner: "{あれば}"
-- notes: "{欠損や特記事項があれば短く}"
-
-### set2
-- supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-- agreement: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-- one_liner: "{あれば}"
-- notes: "{...}"
-
-### set3
-- supported_side: BUY | NOT_BUY_WAIT | UNKNOWN
-- agreement: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-- one_liner: "{あれば}"
-- notes: "{...}"
+### set{N}（対象セットごとに記載）
+- supported_side: BUY | NOT_BUY_WAIT
+- one_liner: "{judgeの一行要約}"
+- notes: "{特記事項があれば短く}"
 
 ---
 
@@ -146,27 +126,17 @@ skills:
 最終判定番号: {K}
 
 入力:
+  対象セット: [N, ...]  # opinionが一致したセットのみ
   元ログ:
-    set1: "{TICKER}_set1.md"
-    set2: "{TICKER}_set2.md"
-    set3: "{TICKER}_set3.md"
+    set{N}: "{TICKER}_set{N}.md"
+    # 対象セットごとに記載
   判定ソース:
-    set1: "{...}"
-    set2: "{...}"
-    set3: "{...}"
+    set{N}: "{...}"
+    # 対象セットごとに記載
 
 セット別結果:
-  set1:
-    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
-    一致度: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-    一行要約: "{...}"
-  set2:
-    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
-    一致度: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
-    一行要約: "{...}"
-  set3:
-    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
-    一致度: AGREED | DISAGREED | INCOMPLETE | UNKNOWN
+  set{N}:  # 対象セットごとに記載
+    支持側: BUY | NOT_BUY_WAIT
     一行要約: "{...}"
 
 最終判定:

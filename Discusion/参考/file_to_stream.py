@@ -17,10 +17,10 @@ async def file_to_stream(file_path: str | Path):
         AssistantMessage: ファイル内容をTextBlockでラップしたメッセージ
 
     Usage:
-        from utils import print_stream
+        from utils import call_agnet
         from file_to_stream import file_to_stream
 
-        await print_stream(file_to_stream("path/to/file.txt"))
+        await call_agnet(file_to_stream("path/to/file.txt"))
     """
     path = Path(file_path)
     content = path.read_text(encoding="utf-8")

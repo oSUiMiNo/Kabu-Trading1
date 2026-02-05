@@ -4,7 +4,7 @@ ClaudeSDKClientを使った複数ターンの会話
 """
 import anyio
 from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
-from utils import print_stream
+from utils import call_agnet
 
 
 async def main():
@@ -16,11 +16,11 @@ async def main():
     async with ClaudeSDKClient(options=options) as client:
         print("--- 1ターン目 ---")
         await client.query("このディレクトリにあるPythonファイルを教えてください")
-        await print_stream(client.receive_response(), show_tools=True)
+        await call_agnet(client.receive_response(), show_tools=True)
 
         print("\n--- 2ターン目 ---")
         await client.query("その中で一番シンプルなファイルの内容を見せてください")
-        await print_stream(client.receive_response(), show_tools=True)
+        await call_agnet(client.receive_response(), show_tools=True)
 
 
 if __name__ == "__main__":
