@@ -37,7 +37,7 @@ def extract_tool_use(message) -> list[str]:
     return tools
 
 
-async def print_stream(messages, show_cost=True, show_tools=False):
+async def call_agnet(messages, show_cost=True, show_tools=False):
     """ストリームからメッセージを表示する汎用関数"""
     async for msg in messages:
         text = extract_text(msg)

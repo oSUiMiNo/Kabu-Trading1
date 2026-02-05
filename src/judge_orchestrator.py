@@ -142,6 +142,9 @@ async def run_judge_orchestrator(
     print("=" * 60)
 
     total_cost = 0.0
+    agreed_sets = []  # AGREEDのセットを記録
+    disagreed_sets = []  # DISAGREEDのセットを記録
+
     for idx, (sn, oa, ob, jn) in enumerate(tasks):
         r = results[idx]
         cost = r.cost if r and r.cost else 0.0
@@ -161,18 +164,37 @@ async def run_judge_orchestrator(
             if m_side:
                 agreed_side = m_side.group(1)
 
-        print(f"  Set{sn} Judge#{jn}: {agreement}  side={agreed_side}  ${cost:.4f}")
+        # 一致/不一致を判定
+        if agreement == "AGREED":
+            agreed_sets.append(sn)
+            print(f"  Set{sn} Judge#{jn}: ✓ 一致 ({agreed_side})  ${cost:.4f}")
+        else:
+            disagreed_sets.append(sn)
+            print(f"  Set{sn} Judge#{jn}: ✗ 不一致 → このセットのフローは終了  ${cost:.4f}")
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
 
+    # --- 不一致セットの処理 ---
+    if disagreed_sets:
+        print()
+        print(f"【不一致】Set {', '.join(map(str, disagreed_sets))} は opinion が一致しなかったためフロー終了")
+
     # --- Phase: Final Judge ---
+    if not agreed_sets:
+        print()
+        print("【終了】全セットが不一致のため、Final Judge は実行しません")
+        return
+
     from final_judge_orchestrator import run_final_judge_orchestrator
 
     print()
-    print(f">>> Judge完了 → Final Judgeフェーズへ移行")
+    if disagreed_sets:
+        print(f">>> 一致した Set {', '.join(map(str, agreed_sets))} のみで Final Judgeフェーズへ移行")
+    else:
+        print(f">>> 全セット一致 → Final Judgeフェーズへ移行")
     print()
-    await run_final_judge_orchestrator(ticker)
+    await run_final_judge_orchestrator(ticker, agreed_sets)
 
 
 if __name__ == "__main__":

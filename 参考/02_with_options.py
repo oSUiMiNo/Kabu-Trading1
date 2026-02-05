@@ -4,7 +4,7 @@
 """
 import anyio
 from claude_agent_sdk import query, ClaudeAgentOptions
-from utils import print_stream
+from utils import call_agnet
 
 
 async def main():
@@ -14,7 +14,7 @@ async def main():
         max_turns=3,
     )
 
-    await print_stream(
+    await call_agnet(
         query(prompt="現在のディレクトリの内容を教えてください", options=options),
         show_tools=True,
     )

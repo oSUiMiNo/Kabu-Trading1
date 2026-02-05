@@ -4,7 +4,7 @@
 """
 import anyio
 from claude_agent_sdk import query, ClaudeAgentOptions, AgentDefinition
-from utils import print_stream
+from utils import call_agnet
 
 
 async def main():
@@ -38,7 +38,7 @@ async def main():
     )
 
     print("=== reviewer エージェントを使用 ===\n")
-    await print_stream(
+    await call_agnet(
         query(
             prompt="reviewer エージェントを使って、このプロジェクトのPythonファイルをレビューしてください",
             options=options,
