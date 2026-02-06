@@ -1,26 +1,26 @@
 """
-並行オーケストレーター
+並行オーケストレーター（レーン型アーキテクチャ）
 
-同一銘柄に対して複数セットの議論（Analyst vs Devil's Advocate）を
-並行で実行し、セットごとに独立したログを生成する。
-各セットが終わった後、全セットの最終結論を一覧表示する。
+同一銘柄に対して複数のレーンを並行実行する。
+各レーンは「議論 → Opinion → Judge」のフローを独立して完結させる。
+全レーン完了後、AGREEDレーンのみでFinal Judgeを実行する。
+
+Before (フェーズ単位バリア同期):
+  Phase1(3並列) → 待ち → Phase2 → ...
+
+After (レーン単位独立実行):
+  Lane1: 議論→Opinion→Judge ─┐
+  Lane2: 議論→Opinion→Judge ─┼→ Final Judge
+  Lane3: 議論→Opinion→Judge ─┘
 """
 import sys
 from pathlib import Path
 
 import anyio
 
-from orchestrator import (
-    LOGS_DIR,
-    run_orchestrator,
-    get_last_export,
-)
-from opinion_orchestrator import run_opinion_orchestrator
-
-
-def get_set_log_path(ticker: str, set_num: int) -> Path:
-    """セット番号付きのログパスを返す"""
-    return LOGS_DIR / f"{ticker.upper()}_set{set_num}.md"
+from discussion_orchestrator import LOGS_DIR
+from lane_orchestrator import run_lane, LaneResult
+from final_judge_orchestrator import run_final_judge_orchestrator
 
 
 async def run_parallel(
@@ -31,62 +31,99 @@ async def run_parallel(
     opinions_per_set: int = 2,
 ):
     """
-    同一銘柄に対して複数セットの議論を並行実行し、
-    全セット完了後にopinionエージェントを並行起動する。
+    同一銘柄に対して複数レーンを並行実行し、
+    全レーン完了後にAGREEDレーンのみでFinal Judgeを実行する。
 
     フロー:
-      1. 3セットのAnalyst vs Devil's Advocate 議論を並行実行
-      2. 全セット完了後、各セットに対して2体のopinionエージェントを並行起動
+      1. Nレーンを並行起動（各レーンは議論→Opinion→Judgeを独立実行）
+      2. 全レーン完了後、AGREEDレーンのみでFinal Judgeを実行
 
     Args:
         ticker: 銘柄コード（例: "NVDA"）
-        num_sets: 並行セット数（デフォルト: 3）
-        max_rounds: 各セットの最大ラウンド数
+        num_sets: 並行レーン数（デフォルト: 3）
+        max_rounds: 各レーンの議論最大ラウンド数
         initial_prompt: 初回Analystへの追加指示（省略可）
-        opinions_per_set: 各セットに対するopinionエージェント数（デフォルト: 2）
+        opinions_per_set: 各レーンで生成するOpinion数（デフォルト: 2）
     """
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    log_paths = [get_set_log_path(ticker, i + 1) for i in range(num_sets)]
+    t = ticker.upper()
 
-    print(f"=== {ticker.upper()} 並行オーケストレーター ({num_sets}セット) ===")
-    for i, lp in enumerate(log_paths, 1):
-        print(f"  Set {i}: {lp}")
+    print(f"{'='*70}")
+    print(f"=== {t} レーン型並行オーケストレーター ({num_sets}レーン) ===")
+    print(f"{'='*70}")
+    print(f"各レーンが独立して「議論 → Opinion → Judge」を実行します")
+    for i in range(1, num_sets + 1):
+        print(f"  Lane {i}: {LOGS_DIR / f'{t}_set{i}.md'}")
     print()
 
-    # 全セットを並行実行
+    # 全レーンを並行実行
+    lane_results: list[LaneResult] = [None] * num_sets
+
+    async def _run_lane(idx: int, set_num: int):
+        """1レーンを実行（エラーは内部でキャッチ済み）"""
+        lane_results[idx] = await run_lane(
+            ticker,
+            set_num=set_num,
+            max_rounds=max_rounds,
+            initial_prompt=initial_prompt,
+            opinions_per_lane=opinions_per_set,
+        )
+
     async with anyio.create_task_group() as tg:
         for i in range(num_sets):
-            tg.start_soon(
-                run_orchestrator,
-                ticker,
-                max_rounds,
-                initial_prompt,
-                log_paths[i],
-            )
+            tg.start_soon(_run_lane, i, i + 1)
 
-    # 全セット完了後、結果を比較表示
+    # 全レーン完了後、結果を集約表示
     print()
-    print("=" * 60)
-    print(f"=== 全{num_sets}セット完了 — 結果比較 ===")
-    print("=" * 60)
+    print("=" * 70)
+    print(f"=== 全{num_sets}レーン完了 — 結果一覧 ===")
+    print("=" * 70)
 
-    for i, lp in enumerate(log_paths, 1):
-        export = get_last_export(lp)
-        if export:
-            stance = export.get("stance", export.get("rating", "N/A"))
-            confidence = export.get("confidence", "N/A")
-            print(f"  Set {i}: stance={stance}  confidence={confidence}")
+    total_cost = 0.0
+    agreed_sets: list[int] = []
+    disagreed_sets: list[int] = []
+    error_sets: list[int] = []
+
+    for r in lane_results:
+        if r is None:
+            continue
+        total_cost += r.total_cost
+
+        if r.agreement == "AGREED":
+            agreed_sets.append(r.set_num)
+            print(f"  Lane {r.set_num}: ✓ AGREED ({r.agreed_side})  ${r.total_cost:.4f}")
+        elif r.agreement == "DISAGREED":
+            disagreed_sets.append(r.set_num)
+            print(f"  Lane {r.set_num}: ✗ DISAGREED  ${r.total_cost:.4f}")
         else:
-            print(f"  Set {i}: EXPORT なし")
+            error_sets.append(r.set_num)
+            print(f"  Lane {r.set_num}: ⚠ ERROR  ${r.total_cost:.4f}")
 
-    print("=" * 60)
+    print(f"\n  レーン合計コスト: ${total_cost:.4f}")
+    print("=" * 70)
 
-    # --- Phase 2: Opinion ---
+    # --- 結果サマリ ---
+    if error_sets:
+        print(f"\n【エラー】Lane {', '.join(map(str, error_sets))} でエラーが発生しました")
+
+    if disagreed_sets:
+        print(f"\n【不一致】Lane {', '.join(map(str, disagreed_sets))} はOpinionが一致しなかったためフロー終了")
+
+    # --- Final Judge ---
+    if not agreed_sets:
+        print()
+        print("【終了】全レーンが不一致/エラーのため、Final Judge は実行しません")
+        return
+
     print()
-    print(f">>> 議論完了 → Opinionフェーズへ移行")
+    if len(agreed_sets) < num_sets:
+        print(f">>> 一致した Lane {', '.join(map(str, agreed_sets))} のみで Final Judgeフェーズへ移行")
+    else:
+        print(f">>> 全レーン一致 → Final Judgeフェーズへ移行")
     print()
-    await run_opinion_orchestrator(ticker, opinions_per_set)
+
+    await run_final_judge_orchestrator(ticker, agreed_sets)
 
 
 if __name__ == "__main__":
