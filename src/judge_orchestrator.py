@@ -157,10 +157,11 @@ async def run_judge_orchestrator(
         if judge_path.exists():
             content = judge_path.read_text(encoding="utf-8")
             # 日本語フィールド名を優先、フォールバックで英語も対応
-            m_agree = re.search(r"(?:一致度|agreement):\s*(\S+)", content)
+            # **AGREED** のようなマークダウン太字にも対応
+            m_agree = re.search(r"(?:一致度|agreement):\s*\**(\w+)", content)
             if m_agree:
                 agreement = m_agree.group(1)
-            m_side = re.search(r"(?:一致支持側|agreed_supported_side):\s*(\S+)", content)
+            m_side = re.search(r"(?:一致支持側|agreed_supported_side):\s*\**(\S+?)(?:\*|$|\s)", content)
             if m_side:
                 agreed_side = m_side.group(1)
 

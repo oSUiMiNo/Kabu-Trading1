@@ -90,7 +90,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path) -> str:
         )
 
 
-async def run_orchestrator(
+async def run_discussion(
     ticker: str,
     max_rounds: int = 6,
     initial_prompt: str | None = None,
@@ -173,12 +173,12 @@ async def run_orchestrator(
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python orchestrator.py <TICKER> [max_rounds] [initial_prompt]")
-        print("例: python orchestrator.py NVDA 6 '特にAI市場の競合状況に注目して'")
+        print("Usage: python discussion_orchestrator.py <TICKER> [max_rounds] [initial_prompt]")
+        print("例: python discussion_orchestrator.py NVDA 6 '特にAI市場の競合状況に注目して'")
         sys.exit(1)
 
     ticker = sys.argv[1]
     max_rounds = int(sys.argv[2]) if len(sys.argv) > 2 else 6
     initial_prompt = sys.argv[3] if len(sys.argv) > 3 else None
 
-    anyio.run(lambda: run_orchestrator(ticker, max_rounds, initial_prompt))
+    anyio.run(lambda: run_discussion(ticker, max_rounds, initial_prompt))
