@@ -5,6 +5,12 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Windows環境でcp932によるUnicodeエンコードエラーを防止
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import yaml
 from claude_agent_sdk import (
     AssistantMessage,
@@ -180,6 +186,13 @@ async def call_agent(
     # file_pathが指定されていればパースしてoptions作成
     options = parse_agent_file(file_path) if file_path else None
 
+    # common-prompt.md をシステムプロンプトの冒頭に挿入
+    common_prompt_path = Path(__file__).resolve().parent / "common-prompt.md"
+    if common_prompt_path.exists() and options:
+        common_prompt = common_prompt_path.read_text(encoding="utf-8").strip()
+        if common_prompt:
+            options.system_prompt = f"{common_prompt}\n\n{options.system_prompt}"
+
     result = AgentResult()
 
     # Claude Codeにクエリを投げて応答を表示
@@ -187,21 +200,21 @@ async def call_agent(
     async for response in query(prompt=prompt, options=options):
         text = extract_text(response)
         if text:
-            print(text)
+            # print(text)
             text_parts.append(text)
 
-        tools = extract_tool_use(response)
-        if tools:
-            result.tools_used.extend(tools)
-            if show_tools:
-                for tool in tools:
-                    print(f"[ツール: {tool}]")
+        # tools = extract_tool_use(response)
+        # if tools:
+        #     result.tools_used.extend(tools)
+        #     if show_tools:
+                # for tool in tools:
+                    # print(f"[ツール: {tool}]")
 
-        cost = extract_cost(response)
-        if cost:
-            result.cost = cost
-            if show_cost:
-                print(f"\n(コスト: ${cost:.4f})")
+        # cost = extract_cost(response)
+        # if cost:
+        #     result.cost = cost
+            # if show_cost:
+                # print(f"\n(コスト: ${cost:.4f})")
 
     result.text = "\n".join(text_parts)
     return result
