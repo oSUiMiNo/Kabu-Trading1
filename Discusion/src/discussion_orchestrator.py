@@ -11,7 +11,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult
+from AgentUtil import call_agent, AgentResult, load_debug_config
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -142,14 +142,13 @@ async def run_discussion(
             prompt = f"{initial_prompt}\n\n{prompt}"
 
         # エージェント呼び出し
+        dbg = load_debug_config("discussion")
         result: AgentResult = await call_agent(
             prompt,
             file_path=str(agent_file),
-            show_options=True,
-            show_prompt=True,
-            show_response=True,
             show_cost=True,
             show_tools=False,
+            **dbg,
         )
 
         print(f"\n--- Round {round_num} 完了 ---")

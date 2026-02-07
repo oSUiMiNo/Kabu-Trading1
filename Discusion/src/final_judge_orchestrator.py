@@ -10,7 +10,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult
+from AgentUtil import call_agent, AgentResult, load_debug_config
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -97,14 +97,13 @@ async def run_final_judge_orchestrator(ticker: str, agreed_sets: list[int] | Non
     agent_file = AGENTS_DIR / "final-judge.md"
 
     print(f"[起動] Final Judge")
+    dbg = load_debug_config("final_judge")
     result = await call_agent(
         prompt,
         file_path=str(agent_file),
-        show_options=True,
-        show_prompt=True,
-        show_response=True,
         show_cost=True,
         show_tools=False,
+        **dbg,
     )
     print(f"[完了] Final Judge")
     if result.cost:
