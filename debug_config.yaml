@@ -1,0 +1,30 @@
+# 共通プロンプトのさらに手前に挿入される
+debug_prompt: |
+ 下記は本番用のプロンプトだが、
+ 今回はデバッグ用にあなたを呼んでいるのでスピード重視だ。深く考えずそれっぽいことを答えてほしい
+
+# フェーズごとのデバッグ表示設定
+# show_options  : AIに渡すオプション（allowed_tools 等）
+# show_prompt   : AIに渡すプロンプト（共通システム / システム / プロンプト）
+# show_response : AIの回答テキスト
+
+# 議論
+discussion:
+  show_options: true
+  show_prompt: false
+  show_response: true
+# 監査
+opinion:
+  show_options: false
+  show_prompt: false
+  show_response: true
+# 監査ダブルチェックの判定
+judge:
+  show_options: false
+  show_prompt: true
+  show_response: true
+# 最終ジャッジ
+final_judge:
+  show_options: false
+  show_prompt: true
+  show_response: true

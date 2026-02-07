@@ -22,6 +22,26 @@ from claude_agent_sdk import (
 )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEBUG_CONFIG_PATH = PROJECT_ROOT / "debug_config.yaml"
+
+
+def load_debug_config(phase: str) -> dict:
+    """
+    debug_config.yaml から指定フェーズの表示設定を読み込む。
+
+    Returns:
+        {"show_options": bool, "show_prompt": bool, "show_response": bool}
+        ファイルが無い or フェーズが未定義なら全て False。
+    """
+    defaults = {"show_options": False, "show_prompt": False, "show_response": False}
+    if not DEBUG_CONFIG_PATH.exists():
+        return defaults
+    data = yaml.safe_load(DEBUG_CONFIG_PATH.read_text(encoding="utf-8")) or {}
+    section = data.get(phase, {})
+    return {k: section.get(k, False) for k in defaults}
+
+
 @dataclass
 class AgentResult:
     """call_agent()の戻り値"""
@@ -189,6 +209,12 @@ async def call_agent(
     # file_pathが指定されていればパースしてoptions作成
     options = parse_agent_file(file_path) if file_path else None
 
+    # debug_config.yaml から debug_prompt を読み込み
+    debug_prompt = ""
+    if DEBUG_CONFIG_PATH.exists():
+        _cfg = yaml.safe_load(DEBUG_CONFIG_PATH.read_text(encoding="utf-8")) or {}
+        debug_prompt = (_cfg.get("debug_prompt") or "").strip()
+
     # common-prompt.md を読み込み
     common_prompt = ""
     common_prompt_path = Path(__file__).resolve().parent / "common-prompt.md"
@@ -198,9 +224,10 @@ async def call_agent(
     # エージェント固有のシステムプロンプト（共通プロンプト合成前）を保持
     agent_system_prompt = options.system_prompt if options else ""
 
-    # 共通プロンプトをシステムプロンプトの冒頭に挿入
-    if common_prompt and options:
-        options.system_prompt = f"{common_prompt}\n\n{options.system_prompt}"
+    # システムプロンプトの冒頭に挿入: debug_prompt → common_prompt → agent_system_prompt
+    if options:
+        parts = [p for p in [debug_prompt, common_prompt, agent_system_prompt] if p]
+        options.system_prompt = "\n\n".join(parts)
 
     # AIに渡すプロンプト / オプションをログ出力
     if show_prompt or show_options:
@@ -216,6 +243,9 @@ async def call_agent(
                 print(f"  {key}: {value}")
             print()
         if show_prompt:
+            print("── デバッグプロンプト ──")
+            print(debug_prompt if debug_prompt else "(なし)")
+            print()
             print("── 共通システムプロンプト ──")
             print(common_prompt if common_prompt else "(なし)")
             print()
