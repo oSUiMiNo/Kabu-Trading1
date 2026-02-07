@@ -10,15 +10,15 @@
 ## Parsed
 ### opinion_A
 - supported_side: NOT_BUY_WAIT
-- one_liner: "NVIDIA支配・MI350実績未確定・Q1ガイダンス未達で様子見が妥当"
-- scores: buy=42 not_buy=58 delta=-16
+- one_liner: "MI300実売上未確認のため決算待ちが合理的"
+- scores: buy=48 not_buy=58 delta=-10
 - winner_agent: analyst
 - win_basis: conclusion
 
 ### opinion_B
 - supported_side: NOT_BUY_WAIT
-- one_liner: "弱気HOLD=実質様子見、本格買いはMI350実績確認後"
-- scores: buy=42 not_buy=58 delta=-16
+- one_liner: "MI300実売上が未確認（ガイダンスのみ）"
+- scores: buy=48 not_buy=55 delta=-7
 - winner_agent: analyst
 - win_basis: conclusion
 
@@ -28,22 +28,23 @@
 - agreement: **AGREED**
 - agreed_supported_side: NOT_BUY_WAIT
 - why (short):
-  - 両opinion共にsupported_side=NOT_BUY_WAITで完全一致
-  - スコアも buy=42, not_buy=58, delta=-16 で同一
-  - 勝者エージェント=analyst、勝因=conclusion で一致
-  - 元ログのAnalyst最終結論「弱気HOLD、本格買いはMI350確認後」を両者が同様に解釈
+  - 両意見ともMI300実売上未確認を最大理由として採用
+  - 両意見ともAnalystの慎重姿勢を支持
+  - 両意見ともQ4決算待ちを合理的と判断
+  - スコア差（-10 vs -7）は方向性一致、程度差のみ
 
 ---
 
 ## Why (details)
 ### If AGREED
-- 共通して強い根拠（3点）
-  1. NVIDIA市場シェア80-95%維持でAMDは2番手固定の構造（両opinionが引用）
-  2. MI350シリーズの実績データが2025年後半まで未確定（情報待ちが合理的）
-  3. Q1ガイダンス未達が一時的か構造的か未確定のまま買い増しはリスク
+- 共通して強い根拠（2〜4）
+  - MI300実売上がガイダンスのみで実績未確認（Q2未解消）
+  - 決算前の「条件付き買い」は投機的要素が強い
+  - 両エージェントが同一トリガー（MI300 >$1B/Q）を設定しており、確認前行動は合意外
+  - EPYC成長とバリュエーション優位性でダウンサイドは限定的（待機コスト許容範囲）
 - 補助情報
-  - 両者とも反転条件として「MI350好レビュー」「Data Center成長率維持」「$100以下で割安圏」を挙げており、判断軸が一致
-  - data_limitsとして「PER17倍の計算根拠未明示」「Blackwell性能差データ不在」を共通認識
+  - flip_trigger共通: Q4決算でMI300売上 >$1B/Qなら BUY 再検討
+  - data_limits共通: S1-S5のretrieved_atが月単位で粗い、Q2/Q3未解消
 
 ---
 
@@ -62,20 +63,20 @@
 解析結果:
   意見A:
     支持側: NOT_BUY_WAIT
-    一行要約: "NVIDIA支配・MI350実績未確定・Q1ガイダンス未達で様子見が妥当"
+    一行要約: "MI300実売上未確認のため決算待ちが合理的"
     スコア:
-      買い支持: 42
+      買い支持: 48
       買わない支持: 58
-      差分: -16
+      差分: -10
     勝者エージェント: analyst
     勝因: conclusion
   意見B:
     支持側: NOT_BUY_WAIT
-    一行要約: "弱気HOLD=実質様子見、本格買いはMI350実績確認後"
+    一行要約: "MI300実売上が未確認（ガイダンスのみ）"
     スコア:
-      買い支持: 42
-      買わない支持: 58
-      差分: -16
+      買い支持: 48
+      買わない支持: 55
+      差分: -7
     勝者エージェント: analyst
     勝因: conclusion
 
@@ -84,16 +85,15 @@
   一致支持側: NOT_BUY_WAIT
 
 理由:
-  - "両opinionとも supported_side=NOT_BUY_WAIT で完全一致"
-  - "スコア(42/58/-16)・勝者(analyst)・勝因(conclusion)全て同一"
-  - "NVIDIA支配・MI350実績待ち・Q1ガイダンス未達を共通懸念として認識"
+  - "両意見ともMI300実売上未確認を最大理由として採用"
+  - "両意見ともQ4決算待ちを合理的と判断"
+  - "スコア差（-10 vs -7）は方向性一致、程度差のみ"
 
 次に明確化:
-  - "Q1 2026決算（2025年4月）でのガイダンス達成状況"
-  - "MI350シリーズ初期顧客レビュー・ベンチマーク"
-  - "Blackwell世代との性能比較データ"
+  - "2024Q4決算（MI300売上実績）"
+  - "NVDA供給状況"
 
 データ制限:
-  - "PER17倍の計算根拠（EPS期間）未明示"
-  - "Blackwell性能差の具体的ベンチマーク不在"
+  - "S1-S5のretrieved_atが月単位で粗い"
+  - "Q2（MI300実売上）がRound3まで未解消"
 ```

@@ -144,6 +144,9 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
 async def call_agent(
     messages,
     file_path: str | Path | None = None,
+    show_options: bool = False,
+    show_prompt: bool = False,
+    show_response: bool = False,
     show_cost: bool = True,
     show_tools: bool = False,
 ) -> AgentResult:
@@ -186,12 +189,43 @@ async def call_agent(
     # file_pathが指定されていればパースしてoptions作成
     options = parse_agent_file(file_path) if file_path else None
 
-    # common-prompt.md をシステムプロンプトの冒頭に挿入
+    # common-prompt.md を読み込み
+    common_prompt = ""
     common_prompt_path = Path(__file__).resolve().parent / "common-prompt.md"
     if common_prompt_path.exists() and options:
         common_prompt = common_prompt_path.read_text(encoding="utf-8").strip()
-        if common_prompt:
-            options.system_prompt = f"{common_prompt}\n\n{options.system_prompt}"
+
+    # エージェント固有のシステムプロンプト（共通プロンプト合成前）を保持
+    agent_system_prompt = options.system_prompt if options else ""
+
+    # 共通プロンプトをシステムプロンプトの冒頭に挿入
+    if common_prompt and options:
+        options.system_prompt = f"{common_prompt}\n\n{options.system_prompt}"
+
+    # AIに渡すプロンプト / オプションをログ出力
+    if show_prompt or show_options:
+        print("╔══════════ リク ══════════")
+        if show_options and options:
+            _skip = {"system_prompt", "debug_stderr"}
+            print("── オプション ──")
+            for key, value in vars(options).items():
+                if key in _skip:
+                    continue
+                if value is None or value == [] or value == {} or value is False:
+                    continue
+                print(f"  {key}: {value}")
+            print()
+        if show_prompt:
+            print("── 共通システムプロンプト ──")
+            print(common_prompt if common_prompt else "(なし)")
+            print()
+            print("── システムプロンプト ──")
+            print(agent_system_prompt if agent_system_prompt else "(なし)")
+            print()
+            print("── プロンプト ──")
+            print(prompt)
+            print()
+        print("╚══════════════════════════")
 
     result = AgentResult()
 
@@ -200,23 +234,29 @@ async def call_agent(
     async for response in query(prompt=prompt, options=options):
         text = extract_text(response)
         if text:
-            # print(text)
             text_parts.append(text)
 
-        # tools = extract_tool_use(response)
-        # if tools:
-        #     result.tools_used.extend(tools)
-        #     if show_tools:
-                # for tool in tools:
-                    # print(f"[ツール: {tool}]")
+        tools = extract_tool_use(response)
+        if tools:
+            result.tools_used.extend(tools)
+            if show_tools:
+                for tool in tools:
+                    print(f"[ツール: {tool}]")
 
-        # cost = extract_cost(response)
-        # if cost:
-        #     result.cost = cost
-            # if show_cost:
-                # print(f"\n(コスト: ${cost:.4f})")
+        cost = extract_cost(response)
+        if cost:
+            result.cost = cost
+            if show_cost:
+                print(f"\n(コスト: ${cost:.4f})")
 
     result.text = "\n".join(text_parts)
+
+    # AIの回答をログ出力
+    if show_response and result.text:
+        print("╔══════════ レス ══════════")
+        print(result.text)
+        print("╚══════════════════════════")
+
     return result
 
 

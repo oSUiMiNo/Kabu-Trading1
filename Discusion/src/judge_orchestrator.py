@@ -83,6 +83,9 @@ async def run_single_judge(
     result = await call_agent(
         prompt,
         file_path=str(agent_file),
+        show_options=True,
+        show_prompt=True,
+        show_response=True,
         show_cost=True,
         show_tools=False,
     )
