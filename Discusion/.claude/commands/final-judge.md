@@ -8,6 +8,7 @@ tools:
   - Grep
 skills:
   - stock-log-protocol
+model: Haiku
 ---
 
 # Final Judge（集約判定サブエージェント）
@@ -23,6 +24,15 @@ skills:
   1) **set別の元ログ**（`{TICKER}_set{N}.md`）— 最初に必ず読む
   2) set別 judge の `## EXPORT（yaml）`
   3) set別 judge 本文（EXPORT欠損時）
+
+---
+
+## 議論モード
+
+プロンプトに `【議論モード】` が指定される。
+
+- **買うモード**（`【議論モード: 買う】`）: supported_side は `BUY` / `NOT_BUY_WAIT`。安全側（同数/不確実時）: `NOT_BUY_WAIT`
+- **売るモード**（`【議論モード: 売る】`）: supported_side は `SELL` / `NOT_SELL_HOLD`。安全側（同数/不確実時）: `NOT_SELL_HOLD`
 
 ---
 
@@ -54,10 +64,14 @@ skills:
    - `{TICKER}_setN_judge_*.md` の最大Kを Read → EXPORTから抽出
 4) setごとの結果を揃える（欠損があれば "欠損" として扱う）
 5) 最終判定を決める（ルール固定）
-   - 各setの集約 supported_side を `BUY / NOT_BUY_WAIT / UNKNOWN` として持つ
+   - 各setの集約 supported_side を持つ
+     - 買うモード: `BUY / NOT_BUY_WAIT / UNKNOWN`
+     - 売るモード: `SELL / NOT_SELL_HOLD / UNKNOWN`
    - **最終 supported_side（機械用）**：
      - UNKNOWNを除いた多数決で決める
-     - 同数 / 不確実が強い場合 → **NOT_BUY_WAIT**（安全側）
+     - 同数 / 不確実が強い場合 → 安全側に倒す
+       - 買うモード: **NOT_BUY_WAIT**
+       - 売るモード: **NOT_SELL_HOLD**
    - **overall_agreement**：
      - 対象セットすべてが同じ supported_side で揃う → AGREED_STRONG
      - 多数決は取れるが割れがある → MIXED
@@ -99,8 +113,8 @@ skills:
 ---
 
 ## Final Decision
-- supported_side_display: **BUY** or **NOT_BUY (WAIT)**
-- supported_side_machine: BUY or NOT_BUY_WAIT
+- supported_side_display: **BUY** or **NOT_BUY (WAIT)** （売るモード: **SELL** or **NOT_SELL (HOLD)**）
+- supported_side_machine: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
 - overall_agreement: **AGREED_STRONG** | **MIXED** | **INCOMPLETE**
 - rationale (short):
   - 3〜6個（最終結論を支持する理由。set由来のみ、推測禁止）
@@ -136,11 +150,11 @@ skills:
 
 セット別結果:
   set{N}:  # 対象セットごとに記載
-    支持側: BUY | NOT_BUY_WAIT
+    支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
     一行要約: "{...}"
 
 最終判定:
-  支持側: BUY | NOT_BUY_WAIT
+  支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
   総合一致度: AGREED_STRONG | MIXED | INCOMPLETE
 
 根拠:

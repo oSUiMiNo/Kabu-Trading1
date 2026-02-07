@@ -11,7 +11,7 @@ debug_prompt: |
 # 議論
 discussion:
   show_options: true
-  show_prompt: false
+  show_prompt: true
   show_response: true
 # 監査
 opinion:

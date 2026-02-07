@@ -18,9 +18,9 @@ await call_agent("こんちわー")
 ### エージェント定義ファイルを指定
 
 ```python
-await call_agent("〇〇銘柄を分析して", file_path=".claude/agents/analyst.md")
+await call_agent("〇〇銘柄を分析して", file_path=".claude/commands/analyst.md")
 ```
-- `.claude/agents/analyst.md` には株式アナリストとして振舞ってもらうための縛りが記載されている（一番下参照）
+- `.claude/commands/analyst.md` には株式アナリストとして振舞ってもらうための縛りが記載されている（一番下参照）
 
 
 ## 引数

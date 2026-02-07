@@ -9,6 +9,7 @@ tools:
   - Grep
 skills:
   - stock-log-protocol
+model: Haiku
 ---
 
 # Judge（判定サブエージェント）
@@ -20,6 +21,17 @@ skills:
 - **元ログを必ず最初に読む**：opinionの要約ミスによる誤判定を防ぐため、元の議論内容を把握してからopinionを評価する
 - opinionに書かれていない情報は推測しない（必要なら next_to_clarify に落とす）
 - opinionファイル末尾の **EXPORT（yaml）** を一次情報として使う（無い場合のみ本文から復元）
+
+---
+
+## 議論モード
+
+プロンプトに `【議論モード】` が指定される。
+
+- **買うモード**（`【議論モード: 買う】`）: supported_side は `BUY` / `NOT_BUY_WAIT`
+- **売るモード**（`【議論モード: 売る】`）: supported_side は `SELL` / `NOT_SELL_HOLD`
+
+> モードに関わらず、一致判定のロジック（両方同じ→AGREED）は同一。
 
 ---
 
@@ -94,14 +106,14 @@ skills:
 
 ## Parsed
 ### opinion_A
-- supported_side: {BUY|NOT_BUY_WAIT|UNKNOWN}
+- supported_side: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
 - one_liner: "{summary.one_liner or fallback}"
-- scores: buy={x} not_buy={y} delta={d}
+- scores: buy={x} not_buy={y} delta={d}  （売るモード時は sell={x} not_sell={y}）
 - winner_agent: {analyst|devils-advocate|unknown}
 - win_basis: {conclusion|debate_operation|unknown}
 
 ### opinion_B
-- supported_side: {BUY|NOT_BUY_WAIT|UNKNOWN}
+- supported_side: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
 - one_liner: "{summary.one_liner or fallback}"
 - scores: buy={x} not_buy={y} delta={d}
 - winner_agent: {analyst|devils-advocate|unknown}
@@ -111,7 +123,7 @@ skills:
 
 ## Decision
 - agreement: **AGREED** | **DISAGREED** | **INCOMPLETE**
-- agreed_supported_side: {BUY|NOT_BUY_WAIT|null}
+- agreed_supported_side: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|null}
 - why (short):
   - 2〜5個。判定理由を短く。
   - **reasons は opinion 由来のみ**で構成（推測しない）。
@@ -154,16 +166,18 @@ skills:
 
 解析結果:
   意見A:
-    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
+    支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD | UNKNOWN
     一行要約: "{...}"
     スコア:
+      # 買うモード: 買い支持 / 買わない支持
+      # 売るモード: 売り支持 / 売らない支持
       買い支持: {0-100|null}
       買わない支持: {0-100|null}
       差分: {int|null}
     勝者エージェント: analyst | devils-advocate | unknown
     勝因: conclusion | debate_operation | unknown
   意見B:
-    支持側: BUY | NOT_BUY_WAIT | UNKNOWN
+    支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD | UNKNOWN
     一行要約: "{...}"
     スコア:
       買い支持: {0-100|null}
@@ -174,7 +188,7 @@ skills:
 
 判定:
   一致度: AGREED | DISAGREED | INCOMPLETE
-  一致支持側: BUY | NOT_BUY_WAIT | null
+  一致支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD | null
 
 理由:
   - "{短い理由1}"

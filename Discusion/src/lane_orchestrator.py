@@ -52,6 +52,7 @@ async def run_lane(
     max_rounds: int = 6,
     initial_prompt: str | None = None,
     opinions_per_lane: int = 2,
+    mode: str = "buy",
 ) -> LaneResult:
     """
     1レーン分のフローを一気通貫で実行する。
@@ -68,6 +69,7 @@ async def run_lane(
         max_rounds: 議論の最大ラウンド数
         initial_prompt: 初回Analystへの追加指示（省略可）
         opinions_per_lane: このレーンで生成するOpinion数（デフォルト: 2）
+        mode: 議論モード（"buy" = 買う/買わない、"sell" = 売る/売らない）
 
     Returns:
         LaneResult: レーンの実行結果
@@ -88,6 +90,7 @@ async def run_lane(
             max_rounds=max_rounds,
             initial_prompt=initial_prompt,
             log_path=log_path,
+            mode=mode,
         )
         print(f"[Lane {set_num}] Phase 1: 議論完了")
 
@@ -102,7 +105,7 @@ async def run_lane(
         opinion_results: list[AgentResult] = [None] * opinions_per_lane
 
         async def _run_opinion(idx: int, opinion_num: int):
-            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num)
+            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode)
 
         async with anyio.create_task_group() as tg:
             for idx, on in enumerate(opinion_nums):
@@ -125,6 +128,7 @@ async def run_lane(
             opinion_nums[0],
             opinion_nums[1],
             judge_num,
+            mode,
         )
 
         if judge_result and judge_result.cost:
@@ -178,17 +182,20 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 3:
-        print("Usage: python lane_orchestrator.py <TICKER> <SET_NUM> [max_rounds] [opinions_per_lane] [initial_prompt]")
-        print("例: python lane_orchestrator.py NVDA 1 6 2 '特にAI市場に注目して'")
+        print("Usage: python lane_orchestrator.py <TICKER> <SET_NUM> [mode] [max_rounds] [opinions_per_lane] [initial_prompt]")
+        print("  mode: '買う' or '売る' (デフォルト: 買う)")
+        print("例: python lane_orchestrator.py NVDA 1 買う 6 2 '特にAI市場に注目して'")
         sys.exit(1)
 
     ticker = sys.argv[1]
     set_num = int(sys.argv[2])
-    max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 6
-    opinions_per_lane = int(sys.argv[4]) if len(sys.argv) > 4 else 2
-    initial_prompt = sys.argv[5] if len(sys.argv) > 5 else None
+    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
+    max_rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 6
+    opinions_per_lane = int(sys.argv[5]) if len(sys.argv) > 5 else 2
+    initial_prompt = sys.argv[6] if len(sys.argv) > 6 else None
 
     result = anyio.run(
-        lambda: run_lane(ticker, set_num, max_rounds, initial_prompt, opinions_per_lane)
+        lambda: run_lane(ticker, set_num, max_rounds, initial_prompt, opinions_per_lane, mode)
     )
     print(f"\n最終結果: {result}")

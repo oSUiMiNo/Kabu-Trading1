@@ -14,7 +14,7 @@ from AgentUtil import call_agent, AgentResult, load_debug_config
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
+AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
@@ -32,7 +32,7 @@ def get_next_final_judge_num(ticker: str) -> int:
     return max(nums) + 1 if nums else 1
 
 
-def build_final_judge_prompt(ticker: str, final_no: int, agreed_sets: list[int] | None = None) -> str:
+def build_final_judge_prompt(ticker: str, final_no: int, agreed_sets: list[int] | None = None, mode: str = "buy") -> str:
     """final_judgeエージェントに渡すプロンプトを組み立てる"""
     t = ticker.upper()
     output = str(LOGS_DIR / f"{t}_final_judge_{final_no}.md")
@@ -50,7 +50,13 @@ def build_final_judge_prompt(ticker: str, final_no: int, agreed_sets: list[int] 
     # 対象セット表示
     target_sets_str = ", ".join(f"set{sn}" for sn in agreed_sets)
 
+    if mode == "sell":
+        mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
+    else:
+        mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論です。\n\n"
+
     return (
+        f"{mode_line}"
         f"銘柄「{t}」について最終判定を行ってください。\n"
         f"\n"
         f"【対象セット】{target_sets_str}（opinionが一致したセットのみ）\n"
@@ -71,7 +77,7 @@ def build_final_judge_prompt(ticker: str, final_no: int, agreed_sets: list[int] 
     )
 
 
-async def run_final_judge_orchestrator(ticker: str, agreed_sets: list[int] | None = None) -> AgentResult:
+async def run_final_judge_orchestrator(ticker: str, agreed_sets: list[int] | None = None, mode: str = "buy") -> AgentResult:
     """
     最終判定オーケストレーターを実行。
 
@@ -93,7 +99,7 @@ async def run_final_judge_orchestrator(ticker: str, agreed_sets: list[int] | Non
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
-    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets)
+    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode)
     agent_file = AGENTS_DIR / "final-judge.md"
 
     print(f"[起動] Final Judge")
