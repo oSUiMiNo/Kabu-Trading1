@@ -96,7 +96,7 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
         from utils import parse_agent_file
 
         # フロントマター付き
-        options = parse_agent_file(".claude/agents/analyst.md")
+        options = parse_agent_file(".claude/commands/analyst.md")
         # options.allowed_tools → ["Read", "Write", ...]
         # options.system_prompt → "# Analyst（考察サブエージェント）\n..."
 
@@ -187,7 +187,7 @@ async def call_agent(
         from AgentUtil import call_agent
 
         # 応答を受け取って後続処理に使う
-        result = asyncio.run(call_agent("〇〇銘柄を分析して", file_path=".claude/agents/analyst.md"))
+        result = asyncio.run(call_agent("〇〇銘柄を分析して", file_path=".claude/commands/analyst.md"))
         print(result.text)        # 応答テキスト
         print(result.cost)        # コスト（USD）
         print(result.tools_used)  # ["Read", "WebSearch", ...]

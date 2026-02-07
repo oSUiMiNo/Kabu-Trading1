@@ -29,6 +29,7 @@ async def run_parallel(
     max_rounds: int = 6,
     initial_prompt: str | None = None,
     opinions_per_set: int = 2,
+    mode: str = "buy",
 ):
     """
     同一銘柄に対して複数レーンを並行実行し、
@@ -44,13 +45,16 @@ async def run_parallel(
         max_rounds: 各レーンの議論最大ラウンド数
         initial_prompt: 初回Analystへの追加指示（省略可）
         opinions_per_set: 各レーンで生成するOpinion数（デフォルト: 2）
+        mode: 議論モード（"buy" = 買う/買わない、"sell" = 売る/売らない）
     """
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
     t = ticker.upper()
 
+    mode_label = "売る/売らない" if mode == "sell" else "買う/買わない"
     print(f"{'='*70}")
     print(f"=== {t} レーン型並行オーケストレーター ({num_sets}レーン) ===")
+    print(f"=== 議論モード: {mode_label} ===")
     print(f"{'='*70}")
     print(f"各レーンが独立して「議論 → Opinion → Judge」を実行します")
     for i in range(1, num_sets + 1):
@@ -68,6 +72,7 @@ async def run_parallel(
             max_rounds=max_rounds,
             initial_prompt=initial_prompt,
             opinions_per_lane=opinions_per_set,
+            mode=mode,
         )
 
     async with anyio.create_task_group() as tg:
@@ -123,19 +128,23 @@ async def run_parallel(
         print(f">>> 全レーン一致 → Final Judgeフェーズへ移行")
     print()
 
-    await run_final_judge_orchestrator(ticker, agreed_sets)
+    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python parallel_orchestrator.py <TICKER> [num_sets] [max_rounds] [opinions_per_set] [initial_prompt]")
-        print("例: python parallel_orchestrator.py NVDA 3 6 2 '特にAI市場に注目して'")
+        print("Usage: python parallel_orchestrator.py <TICKER> [mode] [num_sets] [max_rounds] [opinions_per_set] [initial_prompt]")
+        print("  mode: '買う' or '売る' (デフォルト: 買う)")
+        print("例: python parallel_orchestrator.py NVDA 買う 3 6 2 '特にAI市場に注目して'")
+        print("例: python parallel_orchestrator.py NVDA 売る 3 6 2")
         sys.exit(1)
 
     ticker = sys.argv[1]
-    num_sets = int(sys.argv[2]) if len(sys.argv) > 2 else 3
-    max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 6
-    opinions_per_set = int(sys.argv[4]) if len(sys.argv) > 4 else 2
-    initial_prompt = sys.argv[5] if len(sys.argv) > 5 else None
+    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    mode = _mode_map.get(sys.argv[2], "buy") if len(sys.argv) > 2 else "buy"
+    num_sets = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+    max_rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 6
+    opinions_per_set = int(sys.argv[5]) if len(sys.argv) > 5 else 2
+    initial_prompt = sys.argv[6] if len(sys.argv) > 6 else None
 
-    anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt, opinions_per_set))
+    anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt, opinions_per_set, mode))

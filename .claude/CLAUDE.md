@@ -11,7 +11,7 @@ Analystが結論を出し、Devil's AdvocateはそのstanceのRound中は**常�
 ログのID体系、S#フォーマット（type/retrieved_at必須）、鮮度の目安、Round末尾の暫定結論/EXPORTはすべてskillに従う。
 
 ## サブエージェント
-- `.claude/agents/analyst.md`
-- `.claude/agents/devils-advocate.md`
+- `.claude/commands/analyst.md`
+- `.claude/commands/devils-advocate.md`
 
 両サブエージェントは frontmatter の `skills:` で `stock-log-protocol` をロードして運用する。

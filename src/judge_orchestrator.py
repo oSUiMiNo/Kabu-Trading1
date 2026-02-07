@@ -16,7 +16,7 @@ from AgentUtil import call_agent, AgentResult, load_debug_config
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
+AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
@@ -40,6 +40,7 @@ def build_judge_prompt(
     opinion_a: int,
     opinion_b: int,
     judge_num: int,
+    mode: str = "buy",
 ) -> str:
     """judgeエージェントに渡すプロンプトを組み立てる"""
     t = ticker.upper()
@@ -48,7 +49,13 @@ def build_judge_prompt(
     file_b = str(LOGS_DIR / f"{t}_set{set_num}_opinion_{opinion_b}.md")
     output = str(LOGS_DIR / f"{t}_set{set_num}_judge_{judge_num}.md")
 
+    if mode == "sell":
+        mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
+    else:
+        mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論です。\n\n"
+
     return (
+        f"{mode_line}"
         f"銘柄「{t}」の set{set_num} について判定してください。\n"
         f"\n"
         f"【重要】まず元の議論ログを読んでから、opinionを評価してください。\n"
@@ -72,12 +79,13 @@ async def run_single_judge(
     opinion_a: int,
     opinion_b: int,
     judge_num: int,
+    mode: str = "buy",
 ) -> AgentResult:
     """1体のjudgeエージェントを実行"""
     label = f"Set{set_num} Judge#{judge_num} (opinion {opinion_a} vs {opinion_b})"
     print(f"[起動] {label}")
 
-    prompt = build_judge_prompt(ticker, set_num, opinion_a, opinion_b, judge_num)
+    prompt = build_judge_prompt(ticker, set_num, opinion_a, opinion_b, judge_num, mode)
     agent_file = AGENTS_DIR / "judge.md"
 
     dbg = load_debug_config("judge")
@@ -99,6 +107,7 @@ async def run_single_judge(
 async def run_judge_orchestrator(
     ticker: str,
     opinion_pairs: list[tuple[int, int, int]],
+    mode: str = "buy",
 ):
     """
     判定オーケストレーターのメインループ。
@@ -131,7 +140,7 @@ async def run_judge_orchestrator(
     results: list[AgentResult] = [None] * len(tasks)
 
     async def _run(idx: int, set_num: int, oa: int, ob: int, jn: int):
-        results[idx] = await run_single_judge(ticker, set_num, oa, ob, jn)
+        results[idx] = await run_single_judge(ticker, set_num, oa, ob, jn, mode)
 
     async with anyio.create_task_group() as tg:
         for idx, (sn, oa, ob, jn) in enumerate(tasks):
@@ -197,7 +206,7 @@ async def run_judge_orchestrator(
     else:
         print(f">>> 全セット一致 → Final Judgeフェーズへ移行")
     print()
-    await run_final_judge_orchestrator(ticker, agreed_sets)
+    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode)
 
 
 if __name__ == "__main__":

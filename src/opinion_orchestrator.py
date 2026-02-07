@@ -17,7 +17,7 @@ from AgentUtil import call_agent, AgentResult, load_debug_config
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
+AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
@@ -41,12 +41,18 @@ def get_next_opinion_num(ticker: str, set_num: int) -> int:
     return max(nums) + 1 if nums else 1
 
 
-def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int) -> str:
+def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str = "buy") -> str:
     """opinionエージェントに渡すプロンプトを組み立てる"""
     log_abs = str(LOGS_DIR / f"{ticker.upper()}_set{set_num}.md")
     output_abs = str(LOGS_DIR / f"{ticker.upper()}_set{set_num}_opinion_{opinion_num}.md")
 
+    if mode == "sell":
+        mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論ログです。\n\n"
+    else:
+        mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論ログです。\n\n"
+
     return (
+        f"{mode_line}"
         f"銘柄「{ticker.upper()}」の議論ログを読み、意見を出してください。\n"
         f"\n"
         f"対象ログ: {log_abs}\n"
@@ -62,12 +68,13 @@ async def run_single_opinion(
     ticker: str,
     set_num: int,
     opinion_num: int,
+    mode: str = "buy",
 ) -> AgentResult:
     """1体のopinionエージェントを実行"""
     label = f"Set{set_num} Opinion#{opinion_num}"
     print(f"[起動] {label}")
 
-    prompt = build_opinion_prompt(ticker, set_num, opinion_num)
+    prompt = build_opinion_prompt(ticker, set_num, opinion_num, mode)
     agent_file = AGENTS_DIR / "opinion.md"
 
     dbg = load_debug_config("opinion")
@@ -89,6 +96,7 @@ async def run_single_opinion(
 async def run_opinion_orchestrator(
     ticker: str,
     opinions_per_set: int = 2,
+    mode: str = "buy",
 ):
     """
     意見オーケストレーターのメインループ。
@@ -130,7 +138,7 @@ async def run_opinion_orchestrator(
     results: list[AgentResult] = [None] * len(tasks)
 
     async def _run(idx: int, set_num: int, opinion_num: int):
-        results[idx] = await run_single_opinion(ticker, set_num, opinion_num)
+        results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode)
 
     async with anyio.create_task_group() as tg:
         for idx, (sn, on) in enumerate(tasks):
@@ -151,8 +159,8 @@ async def run_opinion_orchestrator(
         # opinionファイルからEXPORTを簡易読み取り（日本語フィールド対応）
         opinion_path = LOGS_DIR / f"{ticker.upper()}_set{sn}_opinion_{on}.md"
         side = "N/A"
-        buy_score = "?"
-        notbuy_score = "?"
+        pos_score = "?"
+        neg_score = "?"
         winner = "?"
         basis = "?"
         if opinion_path.exists():
@@ -161,12 +169,20 @@ async def run_opinion_orchestrator(
             m_side = re.search(r"(?:支持側|supported_side):\s*(\S+)", content)
             if m_side:
                 side = m_side.group(1)
+            # buy mode: 買い支持 / 買わない支持
             m_buy = re.search(r"(?:買い支持|buy_support):\s*(\d+)", content)
-            if m_buy:
-                buy_score = m_buy.group(1)
             m_notbuy = re.search(r"(?:買わない支持|not_buy_support):\s*(\d+)", content)
+            # sell mode: 売り支持 / 売らない支持
+            m_sell = re.search(r"(?:売り支持|sell_support):\s*(\d+)", content)
+            m_notsell = re.search(r"(?:売らない支持|not_sell_support):\s*(\d+)", content)
+            if m_buy:
+                pos_score = m_buy.group(1)
+            elif m_sell:
+                pos_score = m_sell.group(1)
             if m_notbuy:
-                notbuy_score = m_notbuy.group(1)
+                neg_score = m_notbuy.group(1)
+            elif m_notsell:
+                neg_score = m_notsell.group(1)
             m_winner = re.search(r"(?:勝者エージェント|winner_agent):\s*(\S+)", content)
             if m_winner:
                 winner = m_winner.group(1)
@@ -174,7 +190,12 @@ async def run_opinion_orchestrator(
             if m_basis:
                 basis = m_basis.group(1)
 
-        print(f"  Set{sn} Opinion#{on}: {side}  (Buy:{buy_score} / NotBuy:{notbuy_score})  winner={winner}({basis})  ${cost:.4f}")
+        # モードに応じた表示ラベル
+        if side in ("SELL", "NOT_SELL_HOLD"):
+            pos_label, neg_label = "Sell", "NotSell"
+        else:
+            pos_label, neg_label = "Buy", "NotBuy"
+        print(f"  Set{sn} Opinion#{on}: {side}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  winner={winner}({basis})  ${cost:.4f}")
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
@@ -196,16 +217,19 @@ async def run_opinion_orchestrator(
         print()
         print(f">>> Opinion完了 → Judgeフェーズへ移行")
         print()
-        await run_judge_orchestrator(ticker, opinion_pairs)
+        await run_judge_orchestrator(ticker, opinion_pairs, mode)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python opinion_orchestrator.py <TICKER> [opinions_per_set]")
-        print("例: python opinion_orchestrator.py GOOGL 2")
+        print("Usage: python opinion_orchestrator.py <TICKER> [mode] [opinions_per_set]")
+        print("  mode: '買う' or '売る' (デフォルト: 買う)")
+        print("例: python opinion_orchestrator.py GOOGL 買う 2")
         sys.exit(1)
 
     ticker = sys.argv[1]
-    opinions_per_set = int(sys.argv[2]) if len(sys.argv) > 2 else 2
+    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    mode = _mode_map.get(sys.argv[2], "buy") if len(sys.argv) > 2 else "buy"
+    opinions_per_set = int(sys.argv[3]) if len(sys.argv) > 3 else 2
 
-    anyio.run(lambda: run_opinion_orchestrator(ticker, opinions_per_set))
+    anyio.run(lambda: run_opinion_orchestrator(ticker, opinions_per_set, mode))

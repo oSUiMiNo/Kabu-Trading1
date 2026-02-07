@@ -15,7 +15,7 @@ from AgentUtil import call_agent, AgentResult, load_debug_config
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
+AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
@@ -61,13 +61,22 @@ def check_convergence(export: dict | None, prev_export: dict | None) -> bool:
     )
 
 
-def build_prompt(ticker: str, role: str, round_num: int, log_path: Path) -> str:
+def _mode_directive(mode: str) -> str:
+    """議論モードをプロンプト先頭に挿入する指示行を返す"""
+    if mode == "sell":
+        return "【議論モード: 売る】保有中の銘柄を「売るべきか・売らないべきか（保有継続）」で議論してください。\n\n"
+    return "【議論モード: 買う】この銘柄を「買うべきか・買わないべきか」で議論してください。\n\n"
+
+
+def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy") -> str:
     """各エージェントに渡すプロンプトを組み立てる"""
     log_abs = str(log_path)
+    directive = _mode_directive(mode)
 
     if role == "analyst":
         if round_num == 1:
             return (
+                f"{directive}"
                 f"銘柄「{ticker.upper()}」の初回分析を行ってください。\n"
                 f"ログファイル: {log_abs}\n"
                 f"ログが既にある場合は内容を読んで最新Roundの続きから追記してください。\n"
@@ -76,6 +85,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path) -> str:
             )
         else:
             return (
+                f"{directive}"
                 f"銘柄「{ticker.upper()}」の分析を続けてください。\n"
                 f"ログファイル: {log_abs}\n"
                 f"前回のDevil's Advocateが反対側の立場から出した反論Claimsを読み、\n"
@@ -83,6 +93,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path) -> str:
             )
     else:  # devils-advocate
         return (
+            f"{directive}"
             f"銘柄「{ticker.upper()}」のログを読み、最新のAnalystのstanceの反対側に立ってください。\n"
             f"ログファイル: {log_abs}\n"
             f"Analystのstanceを反転し、反対側の立場から反論Claims（C#）を組み立てて、\n"
@@ -95,6 +106,7 @@ async def run_discussion(
     max_rounds: int = 6,
     initial_prompt: str | None = None,
     log_path: Path | None = None,
+    mode: str = "buy",
 ):
     """
     オーケストレーターのメインループ。
@@ -104,6 +116,7 @@ async def run_discussion(
         max_rounds: 最大ラウンド数（Analyst + Devil's Advocate で2ラウンド = 1サイクル）
         initial_prompt: 初回Analystへの追加指示（省略可）
         log_path: ログファイルパス（省略時は logs/{TICKER}.md）
+        mode: 議論モード（"buy" = 買う/買わない、"sell" = 売る/売らない）
     """
     if log_path is None:
         log_path = get_log_path(ticker)
@@ -137,7 +150,7 @@ async def run_discussion(
         print(f"--- Round {round_num}: {label} ---\n")
 
         # プロンプト組み立て
-        prompt = build_prompt(ticker, role, round_num, log_path)
+        prompt = build_prompt(ticker, role, round_num, log_path, mode)
         if initial_prompt and round_num == start_round and role == "analyst":
             prompt = f"{initial_prompt}\n\n{prompt}"
 
@@ -175,12 +188,16 @@ async def run_discussion(
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python discussion_orchestrator.py <TICKER> [max_rounds] [initial_prompt]")
-        print("例: python discussion_orchestrator.py NVDA 6 '特にAI市場の競合状況に注目して'")
+        print("Usage: python discussion_orchestrator.py <TICKER> [mode] [max_rounds] [initial_prompt]")
+        print("  mode: '買う' or '売る' (デフォルト: 買う)")
+        print("例: python discussion_orchestrator.py NVDA 買う 6 '特にAI市場の競合状況に注目して'")
+        print("例: python discussion_orchestrator.py NVDA 売る 4")
         sys.exit(1)
 
     ticker = sys.argv[1]
-    max_rounds = int(sys.argv[2]) if len(sys.argv) > 2 else 6
-    initial_prompt = sys.argv[3] if len(sys.argv) > 3 else None
+    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    mode = _mode_map.get(sys.argv[2], "buy") if len(sys.argv) > 2 else "buy"
+    max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 6
+    initial_prompt = sys.argv[4] if len(sys.argv) > 4 else None
 
-    anyio.run(lambda: run_discussion(ticker, max_rounds, initial_prompt))
+    anyio.run(lambda: run_discussion(ticker, max_rounds, initial_prompt, mode=mode))
