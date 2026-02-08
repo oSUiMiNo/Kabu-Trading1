@@ -6,7 +6,7 @@ tools:
   - Grep
 skills:
   - stock-log-protocol
-model: Haiku
+model: claude-haiku-4-5
 ---
 
 # Opinion（意見サブエージェント）

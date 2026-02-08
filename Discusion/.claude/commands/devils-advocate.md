@@ -8,7 +8,7 @@ tools:
   - WebSearch
 skills:
   - stock-log-protocol
-model: Haiku
+model: claude-haiku-4-5
 ---
 
 # Devil's Advocate（反対側固定サブエージェント）

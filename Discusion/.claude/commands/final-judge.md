@@ -6,7 +6,7 @@ tools:
   - Grep
 skills:
   - stock-log-protocol
-model: Haiku
+model: claude-haiku-4-5
 ---
 
 # Final Judge（集約判定サブエージェント）
@@ -89,44 +89,45 @@ model: Haiku
 
 ---
 
-## Final Judgeログの出力フォーマット（必須）
+## 最終判定ログの出力フォーマット（必須）
+このフォーマットを崩さない。**見出し・フィールド名はすべて日本語で出力すること**：
 
-# Final Judge Log: {TICKER}
+# 最終判定ログ: {TICKER}
 
-## Inputs (discovered)
-- target_sets: [対象セット番号のリスト]（全セット）
-- agreed_sets: [一致セット番号]
-- disagreed_sets: [不一致セット番号]
+## 入力（検出済み）
+- 対象セット: [対象セット番号のリスト]（全セット）
+- 一致セット: [一致セット番号]
+- 不一致セット: [不一致セット番号]
 - 各setの元ログとjudgeファイルをリスト
 
 ---
 
-## Per-set decisions
+## セット別判定
 ### set{N}（対象セットごとに記載）
-- judge_agreement: AGREED | DISAGREED
-- supported_side: BUY | NOT_BUY_WAIT
-- one_liner: "{judgeの一行要約}"
-- notes: "{特記事項があれば短く。DISAGREEDの場合は両論の概要を記載}"
+- 判定一致度: AGREED | DISAGREED
+- 支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
+- 一行要約: "{judgeの一行要約}"
+- 補足: "{特記事項があれば短く。DISAGREEDの場合は両論の概要を記載}"
 
 ---
 
-## Final Decision
-- supported_side_display: **BUY** or **NOT_BUY (WAIT)** （売るモード: **SELL** or **NOT_SELL (HOLD)**）
-- supported_side_machine: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
-- overall_agreement: **AGREED_STRONG** | **MIXED** | **INCOMPLETE**
-- rationale (short):
+## 最終判定
+- 支持側（表示）: **BUY** or **NOT_BUY (WAIT)** （売るモード: **SELL** or **NOT_SELL (HOLD)**）
+- 支持側（機械）: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
+- 総合一致度: **AGREED_STRONG** | **MIXED** | **INCOMPLETE**
+- 根拠（要約）:
   - 3〜6個（最終結論を支持する理由。set由来のみ、推測禁止）
 
 ---
 
-## Conflicts (only if MIXED/INCOMPLETE)
+## 対立点（MIXED/INCOMPLETEの場合のみ）
 - 2〜4個（どこで割れているか / 何が不足しているか）
 
 ---
 
-## Next things to clarify (max 5)
-- set別の next_to_clarify / data_limits を統合し、重複排除して優先順に最大5
-- 推測禁止（出典は opinion/judge 内の記述のみ）
+## 次に明確化（最大5）
+- set別の「次に明確化」「データ制限」を統合し、重複排除して優先順に最大5
+- 推測禁止（出典は意見/判定内の記述のみ）
 
 ---
 

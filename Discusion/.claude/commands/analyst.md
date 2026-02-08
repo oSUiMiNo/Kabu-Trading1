@@ -8,7 +8,7 @@ tools:
   - WebSearch
 skills:
   - stock-log-protocol
-model: Haiku
+model: claude-haiku-4-5
 ---
 
 # Analyst（考察サブエージェント）

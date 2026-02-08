@@ -6,7 +6,7 @@ tools:
   - Grep
 skills:
   - stock-log-protocol
-model: Haiku
+model: claude-haiku-4-5
 ---
 
 # Judge（判定サブエージェント）
@@ -82,62 +82,62 @@ model: Haiku
 
 ---
 
-## Judgeログの出力フォーマット（必須）
-このフォーマットを崩さない：
+## 判定ログの出力フォーマット（必須）
+このフォーマットを崩さない。**見出し・フィールド名はすべて日本語で出力すること**：
 
-# Judge Log: {TICKER} set{N}
+# 判定ログ: {TICKER} set{N}
 
-## Inputs
-- source_log: {TICKER}_set{N}.md（元の議論ログ）
-- opinion_A: {TICKER}_set{N}_opinion_{A}.md
-- opinion_B: {TICKER}_set{N}_opinion_{B}.md
-
----
-
-## Parsed
-### opinion_A
-- supported_side: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
-- one_liner: "{summary.one_liner or fallback}"
-- scores: buy={x} not_buy={y} delta={d}  （売るモード時は sell={x} not_sell={y}）
-- winner_agent: {analyst|devils-advocate|unknown}
-- win_basis: {conclusion|debate_operation|unknown}
-
-### opinion_B
-- supported_side: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
-- one_liner: "{summary.one_liner or fallback}"
-- scores: buy={x} not_buy={y} delta={d}
-- winner_agent: {analyst|devils-advocate|unknown}
-- win_basis: {conclusion|debate_operation|unknown}
+## 入力
+- 元ログ: {TICKER}_set{N}.md（Analyst vs Devils の議論ログ）
+- 意見A: {TICKER}_set{N}_opinion_{A}.md
+- 意見B: {TICKER}_set{N}_opinion_{B}.md
 
 ---
 
-## Decision
-- agreement: **AGREED** | **DISAGREED** | **INCOMPLETE**
-- agreed_supported_side: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|null}
-- why (short):
+## 解析結果
+### 意見A
+- 支持側: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
+- 一行要約: "{要約テキスト}"
+- スコア: 買い支持={x} 買わない支持={y} 差分={d}  （売るモード時は 売り支持={x} 売らない支持={y}）
+- 勝者エージェント: {analyst|devils-advocate|unknown}
+- 勝因: {conclusion|debate_operation|unknown}
+
+### 意見B
+- 支持側: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
+- 一行要約: "{要約テキスト}"
+- スコア: 買い支持={x} 買わない支持={y} 差分={d}
+- 勝者エージェント: {analyst|devils-advocate|unknown}
+- 勝因: {conclusion|debate_operation|unknown}
+
+---
+
+## 判定
+- 一致度: **AGREED** | **DISAGREED** | **INCOMPLETE**
+- 一致支持側: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|null}
+- 理由（要約）:
   - 2〜5個。判定理由を短く。
-  - **reasons は opinion 由来のみ**で構成（推測しない）。
+  - **理由は意見由来のみ**で構成（推測しない）。
 
 ---
 
-## Why (details)
-### If AGREED
+## 理由（詳細）
+### 一致の場合（AGREED）
 - 共通して強い根拠（2〜4）
-  - opinion_A/B の reasons から **共通点**を抽出して要約
+  - 意見A/B の理由から **共通点**を抽出して要約
 - 補助情報（任意・最大2）
-  - 両者の flip_conditions / data_limits の共通点があれば短く
+  - 両者の反転条件 / データ制限の共通点があれば短く
 
-### If DISAGREED
+### 不一致の場合（DISAGREED）
 - どこで割れているか（2〜4）
-  - reasons の差分（片方だけが重視している懸念/勝ち筋）
-  - delta や tie_break の有無など「判断の軸」の違い
+  - 理由の差分（片方だけが重視している懸念/勝ち筋）
+  - 差分やスコア僅差の有無など「判断の軸」の違い
 - 次に一致させるための最短論点（最大3）
-  - opinion の next_to_clarify と data_limits を優先して統合
-  - ここも推測しない（opinion内から拾う）
+  - 意見の「次に明確化」と「データ制限」を優先して統合
+  - ここも推測しない（意見内から拾う）
 
-### If INCOMPLETE
-- 欠けているもの（例：opinion_B が見つからない / EXPORT が無い等）
-- 次にやること（例：対象ファイル名の再指定 / opinion再生成）
+### 判定不能の場合（INCOMPLETE）
+- 欠けているもの（例：意見B が見つからない / EXPORT が無い等）
+- 次にやること（例：対象ファイル名の再指定 / 意見再生成）
 
 ---
 
