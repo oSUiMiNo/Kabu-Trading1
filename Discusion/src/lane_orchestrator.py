@@ -23,7 +23,6 @@ from discussion_orchestrator import (
 )
 from opinion_orchestrator import (
     run_single_opinion,
-    get_next_opinion_num,
 )
 from judge_orchestrator import (
     run_single_judge,
@@ -97,9 +96,8 @@ async def run_lane(
         # --- Phase 2: Opinion ---
         print(f"\n[Lane {set_num}] Phase 2: Opinion開始 ({opinions_per_lane}体)")
 
-        # opinion番号を事前に決定（競合回避）
-        base_opinion_num = get_next_opinion_num(ticker, set_num)
-        opinion_nums = [base_opinion_num + i for i in range(opinions_per_lane)]
+        # opinion番号は固定連番（ファイルを作成しないので競合なし）
+        opinion_nums = [1 + i for i in range(opinions_per_lane)]
 
         # 並列実行
         opinion_results: list[AgentResult] = [None] * opinions_per_lane
@@ -121,12 +119,18 @@ async def run_lane(
         # --- Phase 3: Judge ---
         print(f"\n[Lane {set_num}] Phase 3: Judge開始")
 
+        # opinion テキストを取得して judge に渡す
+        opinion_a_text = opinion_results[0].text if opinion_results[0] and opinion_results[0].text else ""
+        opinion_b_text = opinion_results[1].text if opinion_results[1] and opinion_results[1].text else ""
+
         judge_num = get_next_judge_num(ticker, set_num)
         judge_result = await run_single_judge(
             ticker,
             set_num,
             opinion_nums[0],
+            opinion_a_text,
             opinion_nums[1],
+            opinion_b_text,
             judge_num,
             mode,
         )

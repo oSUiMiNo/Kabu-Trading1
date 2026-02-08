@@ -27,24 +27,9 @@ def find_set_logs(ticker: str) -> list[Path]:
     return [p for p in all_files if "_opinion_" not in p.name]
 
 
-def get_next_opinion_num(ticker: str, set_num: int) -> int:
-    """既存のopinionファイルから次の番号を返す"""
-    pattern = f"{ticker.upper()}_set{set_num}_opinion_*.md"
-    existing = list(LOGS_DIR.glob(pattern))
-    if not existing:
-        return 1
-    nums = []
-    for p in existing:
-        m = re.search(r"_opinion_(\d+)\.md$", p.name)
-        if m:
-            nums.append(int(m.group(1)))
-    return max(nums) + 1 if nums else 1
-
-
 def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str = "buy") -> str:
     """opinionエージェントに渡すプロンプトを組み立てる"""
     log_abs = str(LOGS_DIR / f"{ticker.upper()}_set{set_num}.md")
-    output_abs = str(LOGS_DIR / f"{ticker.upper()}_set{set_num}_opinion_{opinion_num}.md")
 
     if mode == "sell":
         mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論ログです。\n\n"
@@ -56,11 +41,10 @@ def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str 
         f"銘柄「{ticker.upper()}」の議論ログを読み、意見を出してください。\n"
         f"\n"
         f"対象ログ: {log_abs}\n"
-        f"出力ファイル: {output_abs}\n"
         f"opinion_no: {opinion_num}\n"
         f"\n"
-        f"上記の出力ファイルパスに、opinion_no={opinion_num} として意見ファイルを新規作成してください。\n"
-        f"Glob による番号採番は不要です（オーケストレーターが決定済み）。"
+        f"opinion_no={opinion_num} として意見を **応答テキストとして出力** してください。\n"
+        f"ファイルの作成は不要です。フォーマットに従ってテキストで応答してください。"
     )
 
 
@@ -127,12 +111,11 @@ async def run_opinion_orchestrator(
     print(f"各セット {opinions_per_set}体 × {len(set_nums)}セット = 合計 {total}体")
     print()
 
-    # 各セットのopinion番号を事前に決定（競合回避）
+    # 各セットのopinion番号を固定連番で決定
     tasks = []
     for sn in set_nums:
-        base_num = get_next_opinion_num(ticker, sn)
         for i in range(opinions_per_set):
-            tasks.append((sn, base_num + i))
+            tasks.append((sn, 1 + i))
 
     # 全体を並行実行
     results: list[AgentResult] = [None] * len(tasks)
@@ -156,15 +139,14 @@ async def run_opinion_orchestrator(
         cost = r.cost if r and r.cost else 0.0
         total_cost += cost
 
-        # opinionファイルからEXPORTを簡易読み取り（日本語フィールド対応）
-        opinion_path = LOGS_DIR / f"{ticker.upper()}_set{sn}_opinion_{on}.md"
+        # result.text からEXPORTを簡易読み取り（日本語フィールド対応）
+        content = r.text if r and r.text else ""
         side = "N/A"
         pos_score = "?"
         neg_score = "?"
         winner = "?"
         basis = "?"
-        if opinion_path.exists():
-            content = opinion_path.read_text(encoding="utf-8")
+        if content:
             # 日本語フィールド名を優先、フォールバックで英語も対応
             m_side = re.search(r"(?:支持側|supported_side):\s*(\S+)", content)
             if m_side:
@@ -201,17 +183,20 @@ async def run_opinion_orchestrator(
     print("=" * 60)
 
     # --- Phase: Judge ---
-    # 各セットの opinion ペアを judge に渡す
+    # 各セットの opinion テキストペアを judge に渡す
     from judge_orchestrator import run_judge_orchestrator
 
     # tasks は (set_num, opinion_num) のリスト。同一setの連続2つがペア。
     opinion_pairs = []
-    pairs_by_set: dict[int, list[int]] = {}
-    for sn, on in tasks:
-        pairs_by_set.setdefault(sn, []).append(on)
-    for sn, nums in pairs_by_set.items():
-        if len(nums) >= 2:
-            opinion_pairs.append((sn, nums[0], nums[1]))
+    pairs_by_set: dict[int, list[tuple[int, str]]] = {}
+    for idx, (sn, on) in enumerate(tasks):
+        r = results[idx]
+        text = r.text if r and r.text else ""
+        pairs_by_set.setdefault(sn, []).append((on, text))
+    for sn, items in pairs_by_set.items():
+        if len(items) >= 2:
+            # (set_num, opinion_num_a, opinion_text_a, opinion_num_b, opinion_text_b)
+            opinion_pairs.append((sn, items[0][0], items[0][1], items[1][0], items[1][1]))
 
     if opinion_pairs:
         print()

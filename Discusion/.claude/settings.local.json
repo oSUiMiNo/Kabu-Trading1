@@ -5,7 +5,8 @@
       "WebSearch",
       "Bash(ren:*)",
       "Bash(powershell -Command \"Rename-Item -Path ''C:\\\\Users\\\\osuim\\\\Dev\\\\Test_Calude\\\\Kabu-Trading'' -NewName ''Kabu-Trading1''\")",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(pushd:*)"
     ]
   }
 }

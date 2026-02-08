@@ -37,16 +37,16 @@ def get_next_judge_num(ticker: str, set_num: int) -> int:
 def build_judge_prompt(
     ticker: str,
     set_num: int,
-    opinion_a: int,
-    opinion_b: int,
+    opinion_a_num: int,
+    opinion_a_text: str,
+    opinion_b_num: int,
+    opinion_b_text: str,
     judge_num: int,
     mode: str = "buy",
 ) -> str:
-    """judgeエージェントに渡すプロンプトを組み立てる"""
+    """judgeエージェントに渡すプロンプトを組み立てる（opinionテキストをインライン埋め込み）"""
     t = ticker.upper()
     source_log = str(LOGS_DIR / f"{t}_set{set_num}.md")
-    file_a = str(LOGS_DIR / f"{t}_set{set_num}_opinion_{opinion_a}.md")
-    file_b = str(LOGS_DIR / f"{t}_set{set_num}_opinion_{opinion_b}.md")
     output = str(LOGS_DIR / f"{t}_set{set_num}_judge_{judge_num}.md")
 
     if mode == "sell":
@@ -61,13 +61,19 @@ def build_judge_prompt(
         f"【重要】まず元の議論ログを読んでから、opinionを評価してください。\n"
         f"\n"
         f"元ログ（Analyst vs Devils）: {source_log}\n"
-        f"opinion_A: {file_a}\n"
-        f"opinion_B: {file_b}\n"
         f"出力ファイル: {output}\n"
         f"judge_no: {judge_num}\n"
         f"\n"
-        f"1. 最初に元ログを読み、議論の内容を把握してください。\n"
-        f"2. 次に2つの opinion ファイルを読み、supported_side が一致しているか判定してください。\n"
+        f"--- opinion_A (opinion#{opinion_a_num}) ここから ---\n"
+        f"{opinion_a_text}\n"
+        f"--- opinion_A ここまで ---\n"
+        f"\n"
+        f"--- opinion_B (opinion#{opinion_b_num}) ここから ---\n"
+        f"{opinion_b_text}\n"
+        f"--- opinion_B ここまで ---\n"
+        f"\n"
+        f"1. 最初に元ログを Read し、議論の内容を把握してください。\n"
+        f"2. 上記の opinion_A / opinion_B テキストから supported_side が一致しているか判定してください。\n"
         f"3. 結果を出力ファイルに新規作成してください。\n"
         f"Glob による番号採番は不要です（オーケストレーターが決定済み）。"
     )
@@ -76,16 +82,18 @@ def build_judge_prompt(
 async def run_single_judge(
     ticker: str,
     set_num: int,
-    opinion_a: int,
-    opinion_b: int,
+    opinion_a_num: int,
+    opinion_a_text: str,
+    opinion_b_num: int,
+    opinion_b_text: str,
     judge_num: int,
     mode: str = "buy",
 ) -> AgentResult:
-    """1体のjudgeエージェントを実行"""
-    label = f"Set{set_num} Judge#{judge_num} (opinion {opinion_a} vs {opinion_b})"
+    """1体のjudgeエージェントを実行（opinionテキストをインラインで渡す）"""
+    label = f"Set{set_num} Judge#{judge_num} (opinion {opinion_a_num} vs {opinion_b_num})"
     print(f"[起動] {label}")
 
-    prompt = build_judge_prompt(ticker, set_num, opinion_a, opinion_b, judge_num, mode)
+    prompt = build_judge_prompt(ticker, set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text, judge_num, mode)
     agent_file = AGENTS_DIR / "judge.md"
 
     dbg = load_debug_config("judge")
@@ -106,7 +114,7 @@ async def run_single_judge(
 
 async def run_judge_orchestrator(
     ticker: str,
-    opinion_pairs: list[tuple[int, int, int]],
+    opinion_pairs: list[tuple[int, int, str, int, str]],
     mode: str = "buy",
 ):
     """
@@ -116,7 +124,7 @@ async def run_judge_orchestrator(
 
     Args:
         ticker: 銘柄コード
-        opinion_pairs: [(set_num, opinion_a, opinion_b), ...] のリスト
+        opinion_pairs: [(set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text), ...] のリスト
     """
     if not opinion_pairs:
         print("エラー: 判定対象の opinion ペアがありません")
@@ -126,25 +134,25 @@ async def run_judge_orchestrator(
 
     print(f"=== {ticker.upper()} 判定オーケストレーター ===")
     print(f"対象: {total}セット")
-    for sn, oa, ob in opinion_pairs:
-        print(f"  Set{sn}: opinion_{oa} vs opinion_{ob}")
+    for sn, oa_num, _, ob_num, _ in opinion_pairs:
+        print(f"  Set{sn}: opinion_{oa_num} vs opinion_{ob_num}")
     print()
 
     # 各セットの judge 番号を事前に決定
     tasks = []
-    for sn, oa, ob in opinion_pairs:
+    for sn, oa_num, oa_text, ob_num, ob_text in opinion_pairs:
         jn = get_next_judge_num(ticker, sn)
-        tasks.append((sn, oa, ob, jn))
+        tasks.append((sn, oa_num, oa_text, ob_num, ob_text, jn))
 
     # 全体を並行実行
     results: list[AgentResult] = [None] * len(tasks)
 
-    async def _run(idx: int, set_num: int, oa: int, ob: int, jn: int):
-        results[idx] = await run_single_judge(ticker, set_num, oa, ob, jn, mode)
+    async def _run(idx: int, set_num: int, oa_num: int, oa_text: str, ob_num: int, ob_text: str, jn: int):
+        results[idx] = await run_single_judge(ticker, set_num, oa_num, oa_text, ob_num, ob_text, jn, mode)
 
     async with anyio.create_task_group() as tg:
-        for idx, (sn, oa, ob, jn) in enumerate(tasks):
-            tg.start_soon(_run, idx, sn, oa, ob, jn)
+        for idx, (sn, oa_num, oa_text, ob_num, ob_text, jn) in enumerate(tasks):
+            tg.start_soon(_run, idx, sn, oa_num, oa_text, ob_num, ob_text, jn)
 
     # 結果まとめ
     print()
@@ -156,7 +164,7 @@ async def run_judge_orchestrator(
     agreed_sets = []  # AGREEDのセットを記録
     disagreed_sets = []  # DISAGREEDのセットを記録
 
-    for idx, (sn, oa, ob, jn) in enumerate(tasks):
+    for idx, (sn, _oa_num, _oa_text, _ob_num, _ob_text, jn) in enumerate(tasks):
         r = results[idx]
         cost = r.cost if r and r.cost else 0.0
         total_cost += cost
@@ -215,10 +223,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python judge_orchestrator.py <TICKER> [set_nums (comma-sep)]")
         print("例: python judge_orchestrator.py GOOGL 1,2,3")
-        print("  各セットの最新 opinion ペアを自動検出して judge を実行")
+        print("  各セットの最新 opinion ペアをファイルから読み込んで judge を実行")
         sys.exit(1)
-
-    from opinion_orchestrator import get_next_opinion_num
 
     ticker = sys.argv[1]
     if len(sys.argv) > 2:
@@ -226,12 +232,20 @@ if __name__ == "__main__":
     else:
         set_nums = [1, 2, 3]
 
-    # 各セットの最新ペアを自動検出
+    # 各セットの opinion ファイルを検出してテキストを読み込む
     pairs = []
     for sn in set_nums:
-        latest = get_next_opinion_num(ticker, sn) - 1
-        if latest >= 2:
-            pairs.append((sn, latest - 1, latest))
+        pattern = f"{ticker.upper()}_set{sn}_opinion_*.md"
+        existing = sorted(LOGS_DIR.glob(pattern))
+        if len(existing) >= 2:
+            # 最新2つを使用
+            file_a = existing[-2]
+            file_b = existing[-1]
+            num_a = int(re.search(r"_opinion_(\d+)\.md$", file_a.name).group(1))
+            num_b = int(re.search(r"_opinion_(\d+)\.md$", file_b.name).group(1))
+            text_a = file_a.read_text(encoding="utf-8")
+            text_b = file_b.read_text(encoding="utf-8")
+            pairs.append((sn, num_a, text_a, num_b, text_b))
         else:
             print(f"  Set{sn}: opinion が2つ未満のためスキップ")
 
