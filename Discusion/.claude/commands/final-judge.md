@@ -3,8 +3,6 @@ name: final_judge
 description: set1〜3の judge（無ければ opinion）を集約し、銘柄ごとに最終結論を1ファイルにまとめて出力する。推測しない。
 tools:
   - Read
-  - Write
-  - Glob
   - Grep
 skills:
   - stock-log-protocol
@@ -86,18 +84,13 @@ model: Haiku
 6) 理由の要約
    - 「最終 supported_side を支持する理由」を set別の why / reasons から **共通点優先**で 3〜6 個
    - set間で割れた場合は「割れてるポイント」を 2〜4 個（推測禁止）
-7) `logs/` に **最終1ファイル**を新規作成（上書き禁止）
+7) 結果を **テキスト応答として出力**
 
----
+## 出力方法
 
-## 出力（新規作成ファイル）
-- `{TICKER}_final_judge_1.md`
-- 既に存在する場合は `_final_judge_2`、以降インクリメント
-
-### 採番（必須）
-1) `logs/` で `{TICKER}_final_judge_*.md` を Glob
-2) 末尾番号の最大値+1 を final_no とする
-3) Write で新規作成（上書き禁止）
+**ファイルへの書き込みは不要**。結果は **テキスト応答として出力** してください。
+オーケストレーターがあなたの応答テキストをログファイルに書き出します。
+採番もオーケストレーターが決定済みです。
 
 ---
 

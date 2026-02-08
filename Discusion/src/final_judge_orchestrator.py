@@ -10,7 +10,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult, load_debug_config
+from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -90,13 +90,11 @@ def build_final_judge_prompt(
         f"{source_logs_str}\n"
         f"\n"
         f"対象フォルダ: {LOGS_DIR}\n"
-        f"出力ファイル: {output}\n"
-        f"final_no: {final_no}\n"
         f"\n"
         f"1. 最初に対象セットの元ログを読み、議論の内容を把握してください。\n"
         f"2. 次に対象セットの `{t}_set*_judge_*.md` を読み、各setの判定結果を確認してください。\n"
-        f"3. 各setの結果を集約して最終判定を出力ファイルに新規作成してください。\n"
-        f"Glob による番号採番は不要です（オーケストレーターが決定済み）。"
+        f"3. 各setの結果を集約して最終判定を**テキスト応答として出力**してください。\n"
+        f"   ファイルへの書き込みは不要です。採番もオーケストレーターが決定済みです。"
     )
 
 
@@ -151,15 +149,20 @@ async def run_final_judge_orchestrator(
     if result.cost:
         print(f"  コスト: ${result.cost:.4f}")
 
-    # 結果表示
+    # オーケストレーター側でログファイルに書き出し
+    final_path = LOGS_DIR / f"{t}_final_judge_{final_no}.md"
+    saved = save_result_log(result, final_path)
+    if saved:
+        print(f"  ログ書き出し: {saved.name}")
+
+    # 結果表示（result.text からパース）
     print()
     print("=" * 60)
     print(f"=== Final Judge 結果 ===")
     print("=" * 60)
 
-    final_path = LOGS_DIR / f"{t}_final_judge_{final_no}.md"
-    if final_path.exists():
-        content = final_path.read_text(encoding="utf-8")
+    content = result.text if result and result.text else ""
+    if content:
         # 日本語フィールド名を優先、フォールバックで英語も対応
         m_side = re.search(r"(?:支持側|supported_side):\s*(\S+)", content)
         m_agree = re.search(r"(?:総合一致度|overall_agreement):\s*(\S+)", content)
@@ -168,7 +171,7 @@ async def run_final_judge_orchestrator(
         print(f"  最終判定: {side}")
         print(f"  一致度: {agree}")
     else:
-        print(f"  ファイルが見つかりません: {final_path}")
+        print(f"  応答テキストが空です")
 
     print("=" * 60)
 
