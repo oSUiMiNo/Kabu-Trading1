@@ -3,9 +3,6 @@ name: devils-advocate
 description: Analystの結論に依存せず、常に「反対側の立場」をとって反論し、対立する主張をFacts（F#）ベースで組み立ててログに追記する。
 tools:
   - Read
-  - Write
-  - Edit
-  - Glob
   - Grep
   - WebFetch
   - WebSearch
@@ -74,8 +71,14 @@ model: Haiku
 
 鮮度の目安は skill に従う（price_metric: 〜1週、news: 〜2週、earnings/filing: 最新かどうか最重要）。
 
+## 出力方法
+
+**ファイルへの書き込みは不要**。結果は **テキスト応答として出力** してください。
+オーケストレーターがあなたの応答テキストをログファイルに追記します。
+
+- あなたの Round の内容のみを出力してください（ログの既存部分は出力しない）
+
 ## 出力ルール
-- 既存ログがある場合：**過去のRound本文は消さない（追記のみ）**
 - あなたのRoundでは最低限これを出す：
   - (1) 反転した stance の宣言（なぜ反対側か）
   - (2) 必要なら追加/更新したSources（S#）

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult, load_debug_config
+from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -78,26 +78,25 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
             return (
                 f"{directive}"
                 f"銘柄「{ticker.upper()}」の初回分析を行ってください。\n"
-                f"ログファイル: {log_abs}\n"
-                f"ログが既にある場合は内容を読んで最新Roundの続きから追記してください。\n"
-                f"ログがない場合は新規作成してください。\n"
-                f"Round {round_num} として追記してください。"
+                f"ログファイル（参照用）: {log_abs}\n"
+                f"ログの初期構造（メタ情報、Sources表、Facts、Claims）と Round {round_num} の内容を含めて、\n"
+                f"**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
             )
         else:
             return (
                 f"{directive}"
                 f"銘柄「{ticker.upper()}」の分析を続けてください。\n"
-                f"ログファイル: {log_abs}\n"
+                f"ログファイル（参照用）: {log_abs}\n"
                 f"前回のDevil's Advocateが反対側の立場から出した反論Claimsを読み、\n"
-                f"Round {round_num} として回答・追記してください。"
+                f"Round {round_num} の内容を**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
             )
     else:  # devils-advocate
         return (
             f"{directive}"
             f"銘柄「{ticker.upper()}」のログを読み、最新のAnalystのstanceの反対側に立ってください。\n"
-            f"ログファイル: {log_abs}\n"
+            f"ログファイル（参照用）: {log_abs}\n"
             f"Analystのstanceを反転し、反対側の立場から反論Claims（C#）を組み立てて、\n"
-            f"Round {round_num} として追記してください。"
+            f"Round {round_num} の内容を**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
         )
 
 
@@ -121,6 +120,10 @@ async def run_discussion(
     if log_path is None:
         log_path = get_log_path(ticker)
     log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 初回ログファイル作成（エージェントがReadできるように空ファイルを用意）
+    if not log_path.exists():
+        log_path.write_text("", encoding="utf-8")
 
     analyst_file = AGENTS_DIR / "analyst.md"
     devils_file = AGENTS_DIR / "devils-advocate.md"
@@ -167,6 +170,11 @@ async def run_discussion(
         print(f"\n--- Round {round_num} 完了 ---")
         if result.cost:
             print(f"コスト: ${result.cost:.4f}")
+
+        # オーケストレーター側でログに追記
+        saved = save_result_log(result, log_path, append=True)
+        if saved:
+            print(f"ログ追記: {saved.name}")
         print()
 
         # 収束チェック

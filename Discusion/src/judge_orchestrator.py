@@ -12,7 +12,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult, load_debug_config
+from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -108,10 +108,10 @@ async def run_single_judge(
         print(f"  コスト: ${result.cost:.4f}")
 
     # オーケストレーター側でファイル書き出し
-    if result and result.text:
-        judge_path = LOGS_DIR / f"{ticker.upper()}_set{set_num}_judge_{judge_num}.md"
-        judge_path.write_text(result.text, encoding="utf-8")
-        print(f"  ログ書き出し: {judge_path.name}")
+    judge_path = LOGS_DIR / f"{ticker.upper()}_set{set_num}_judge_{judge_num}.md"
+    saved = save_result_log(result, judge_path)
+    if saved:
+        print(f"  ログ書き出し: {saved.name}")
 
     return result
 

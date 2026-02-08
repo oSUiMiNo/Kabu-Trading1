@@ -50,6 +50,33 @@ class AgentResult:
     tools_used: list[str] = field(default_factory=list)
 
 
+def save_result_log(result: "AgentResult", log_path: str | Path, append: bool = False) -> Path | None:
+    """
+    AgentResult.text をログファイルに書き出す。
+
+    エージェントの応答テキストをそのままファイルに保存するユーティリティ。
+    opinion→judge→final-judge 等、エージェントがテキスト応答を返し
+    オーケストレーター側でファイル化するフローで共通利用する。
+
+    Args:
+        result: call_agent() の戻り値
+        log_path: 書き出し先のファイルパス
+        append: True なら既存ファイルの末尾に追記（議論ログのラウンド追記用）
+
+    Returns:
+        書き出したPathオブジェクト。result.text が空なら None。
+    """
+    if not result or not result.text:
+        return None
+    p = Path(log_path)
+    if append and p.exists():
+        existing = p.read_text(encoding="utf-8")
+        p.write_text(existing + result.text, encoding="utf-8")
+    else:
+        p.write_text(result.text, encoding="utf-8")
+    return p
+
+
 def extract_text(message) -> str | None:
     """AssistantMessageからテキストを抽出"""
     if isinstance(message, AssistantMessage):
