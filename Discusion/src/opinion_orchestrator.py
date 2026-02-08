@@ -55,7 +55,7 @@ async def run_single_opinion(
     mode: str = "buy",
 ) -> AgentResult:
     """1体のopinionエージェントを実行"""
-    label = f"Set{set_num} Opinion#{opinion_num}"
+    label = f"セット{set_num} 意見#{opinion_num}"
     print(f"[起動] {label}")
 
     prompt = build_opinion_prompt(ticker, set_num, opinion_num, mode)
@@ -174,10 +174,10 @@ async def run_opinion_orchestrator(
 
         # モードに応じた表示ラベル
         if side in ("SELL", "NOT_SELL_HOLD"):
-            pos_label, neg_label = "Sell", "NotSell"
+            pos_label, neg_label = "売り", "売らない"
         else:
-            pos_label, neg_label = "Buy", "NotBuy"
-        print(f"  Set{sn} Opinion#{on}: {side}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  winner={winner}({basis})  ${cost:.4f}")
+            pos_label, neg_label = "買い", "買わない"
+        print(f"  セット{sn} 意見#{on}: {side}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis})  ${cost:.4f}")
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
@@ -200,15 +200,15 @@ async def run_opinion_orchestrator(
 
     if opinion_pairs:
         print()
-        print(f">>> Opinion完了 → Judgeフェーズへ移行")
+        print(f">>> 意見生成完了 → 判定フェーズへ移行")
         print()
         await run_judge_orchestrator(ticker, opinion_pairs, mode)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python opinion_orchestrator.py <TICKER> [mode] [opinions_per_set]")
-        print("  mode: '買う' or '売る' (デフォルト: 買う)")
+        print("使い方: python opinion_orchestrator.py <銘柄コード> [モード] [意見数]")
+        print("  モード: '買う' or '売る' (デフォルト: 買う)")
         print("例: python opinion_orchestrator.py GOOGL 買う 2")
         sys.exit(1)
 

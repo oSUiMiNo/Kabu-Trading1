@@ -88,7 +88,7 @@ async def run_single_judge(
     mode: str = "buy",
 ) -> AgentResult:
     """1体のjudgeエージェントを実行し、結果テキストをファイルに書き出す"""
-    label = f"Set{set_num} Judge#{judge_num} (opinion {opinion_a_num} vs {opinion_b_num})"
+    label = f"セット{set_num} 判定#{judge_num} (意見{opinion_a_num} vs 意見{opinion_b_num})"
     print(f"[起動] {label}")
 
     prompt = build_judge_prompt(ticker, set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text, judge_num, mode)
@@ -139,7 +139,7 @@ async def run_judge_orchestrator(
     print(f"=== {ticker.upper()} 判定オーケストレーター ===")
     print(f"対象: {total}セット")
     for sn, oa_num, _, ob_num, _ in opinion_pairs:
-        print(f"  Set{sn}: opinion_{oa_num} vs opinion_{ob_num}")
+        print(f"  セット{sn}: 意見{oa_num} vs 意見{ob_num}")
     print()
 
     # 各セットの judge 番号を事前に決定
@@ -161,7 +161,7 @@ async def run_judge_orchestrator(
     # 結果まとめ
     print()
     print("=" * 60)
-    print(f"=== 全{total}件完了 — Judge 結果一覧 ===")
+    print(f"=== 全{total}件完了 — 判定結果一覧 ===")
     print("=" * 60)
 
     total_cost = 0.0
@@ -190,10 +190,10 @@ async def run_judge_orchestrator(
         # 一致/不一致を判定
         if agreement == "AGREED":
             agreed_sets.append(sn)
-            print(f"  Set{sn} Judge#{jn}: ✓ 一致 ({agreed_side})  ${cost:.4f}")
+            print(f"  セット{sn} 判定#{jn}: ✓ 一致 ({agreed_side})  ${cost:.4f}")
         else:
             disagreed_sets.append(sn)
-            print(f"  Set{sn} Judge#{jn}: ✗ 不一致 → このセットのフローは終了  ${cost:.4f}")
+            print(f"  セット{sn} 判定#{jn}: ✗ 不一致 → このセットのフローは終了  ${cost:.4f}")
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
@@ -201,32 +201,32 @@ async def run_judge_orchestrator(
     # --- 不一致セットの処理 ---
     if disagreed_sets:
         print()
-        print(f"【不一致】Set {', '.join(map(str, disagreed_sets))} は opinion が不一致（Final Judgeで考慮されます）")
+        print(f"【不一致】セット {', '.join(map(str, disagreed_sets))} は意見が不一致（最終判定で考慮されます）")
 
-    # --- Phase: Final Judge ---
+    # --- 最終判定フェーズ ---
     if not agreed_sets and not disagreed_sets:
         print()
-        print("【終了】全セットがエラーのため、Final Judge は実行しません")
+        print("【終了】全セットがエラーのため、最終判定は実行しません")
         return
 
     from final_judge_orchestrator import run_final_judge_orchestrator
 
     print()
     if disagreed_sets and agreed_sets:
-        print(f">>> AGREED Set {', '.join(map(str, agreed_sets))} + DISAGREED Set {', '.join(map(str, disagreed_sets))} で Final Judgeフェーズへ移行")
+        print(f">>> 一致セット {', '.join(map(str, agreed_sets))} + 不一致セット {', '.join(map(str, disagreed_sets))} で最終判定フェーズへ移行")
     elif agreed_sets:
-        print(f">>> 全セット一致 → Final Judgeフェーズへ移行")
+        print(f">>> 全セット一致 → 最終判定フェーズへ移行")
     else:
-        print(f">>> 全セット不一致 → Final Judgeフェーズへ移行（DISAGREEDのみ）")
+        print(f">>> 全セット不一致 → 最終判定フェーズへ移行（不一致のみ）")
     print()
     await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python judge_orchestrator.py <TICKER> [set_nums (comma-sep)]")
+        print("使い方: python judge_orchestrator.py <銘柄コード> [セット番号 (カンマ区切り)]")
         print("例: python judge_orchestrator.py GOOGL 1,2,3")
-        print("  各セットの最新 opinion ペアをファイルから読み込んで judge を実行")
+        print("  各セットの最新意見ペアをファイルから読み込んで判定を実行")
         sys.exit(1)
 
     ticker = sys.argv[1]
@@ -250,6 +250,6 @@ if __name__ == "__main__":
             text_b = file_b.read_text(encoding="utf-8")
             pairs.append((sn, num_a, text_a, num_b, text_b))
         else:
-            print(f"  Set{sn}: opinion が2つ未満のためスキップ")
+            print(f"  セット{sn}: 意見が2つ未満のためスキップ")
 
     anyio.run(lambda: run_judge_orchestrator(ticker, pairs))

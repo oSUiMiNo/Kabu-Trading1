@@ -7,7 +7,8 @@
       "Bash(powershell -Command \"Rename-Item -Path ''C:\\\\Users\\\\osuim\\\\Dev\\\\Test_Calude\\\\Kabu-Trading'' -NewName ''Kabu-Trading1''\")",
       "Bash(python:*)",
       "Bash(pushd:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Skill(self-dir_build)"
     ]
   }
 }

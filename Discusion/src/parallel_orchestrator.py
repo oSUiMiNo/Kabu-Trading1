@@ -56,9 +56,9 @@ async def run_parallel(
     print(f"=== {t} レーン型並行オーケストレーター ({num_sets}レーン) ===")
     print(f"=== 議論モード: {mode_label} ===")
     print(f"{'='*70}")
-    print(f"各レーンが独立して「議論 → Opinion → Judge」を実行します")
+    print(f"各レーンが独立して「議論 → 意見生成 → 判定」を実行します")
     for i in range(1, num_sets + 1):
-        print(f"  Lane {i}: {LOGS_DIR / f'{t}_set{i}.md'}")
+        print(f"  レーン{i}: {LOGS_DIR / f'{t}_set{i}.md'}")
     print()
 
     # 全レーンを並行実行
@@ -93,56 +93,56 @@ async def run_parallel(
     for r in lane_results:
         if r is None:
             continue
-        total_cost += r.total_cost
+        total_cost += r.合計コスト
 
-        if r.agreement == "AGREED":
-            agreed_sets.append(r.set_num)
-            print(f"  Lane {r.set_num}: ✓ AGREED ({r.agreed_side})  ${r.total_cost:.4f}")
-        elif r.agreement == "DISAGREED":
-            disagreed_sets.append(r.set_num)
-            print(f"  Lane {r.set_num}: ✗ DISAGREED  ${r.total_cost:.4f}")
+        if r.一致度 == "AGREED":
+            agreed_sets.append(r.セット番号)
+            print(f"  レーン{r.セット番号}: ✓ 一致 ({r.支持側})  ${r.合計コスト:.4f}")
+        elif r.一致度 == "DISAGREED":
+            disagreed_sets.append(r.セット番号)
+            print(f"  レーン{r.セット番号}: ✗ 不一致  ${r.合計コスト:.4f}")
         else:
-            error_sets.append(r.set_num)
-            print(f"  Lane {r.set_num}: ⚠ ERROR  ${r.total_cost:.4f}")
+            error_sets.append(r.セット番号)
+            print(f"  レーン{r.セット番号}: ⚠ エラー  ${r.合計コスト:.4f}")
 
     print(f"\n  レーン合計コスト: ${total_cost:.4f}")
     print("=" * 70)
 
     # --- 結果サマリ ---
     if error_sets:
-        print(f"\n【エラー】Lane {', '.join(map(str, error_sets))} でエラーが発生しました")
+        print(f"\n【エラー】レーン {', '.join(map(str, error_sets))} でエラーが発生しました")
 
     if disagreed_sets:
-        print(f"\n【不一致】Lane {', '.join(map(str, disagreed_sets))} はOpinionが不一致（Final Judgeで考慮されます）")
+        print(f"\n【不一致】レーン {', '.join(map(str, disagreed_sets))} は意見が不一致（最終判定で考慮されます）")
 
-    # --- Final Judge ---
+    # --- 最終判定 ---
     if not agreed_sets and not disagreed_sets:
         print()
-        print("【終了】全レーンがエラーのため、Final Judge は実行しません")
+        print("【終了】全レーンがエラーのため、最終判定は実行しません")
         return
 
     print()
     if disagreed_sets and agreed_sets:
-        print(f">>> AGREED Lane {', '.join(map(str, agreed_sets))} + DISAGREED Lane {', '.join(map(str, disagreed_sets))} で Final Judgeフェーズへ移行")
+        print(f">>> 一致レーン {', '.join(map(str, agreed_sets))} + 不一致レーン {', '.join(map(str, disagreed_sets))} で最終判定フェーズへ移行")
     elif agreed_sets:
-        print(f">>> 全レーン一致 → Final Judgeフェーズへ移行")
+        print(f">>> 全レーン一致 → 最終判定フェーズへ移行")
     else:
-        print(f">>> 全レーン不一致 → Final Judgeフェーズへ移行（DISAGREEDのみ）")
+        print(f">>> 全レーン不一致 → 最終判定フェーズへ移行（不一致のみ）")
     print()
 
-    # 各セットの supported_side を集めて投票集計用に渡す
+    # 各セットの支持側を集めて投票集計用に渡す
     set_sides = {}
     for r in lane_results:
-        if r and r.agreement == "AGREED" and r.agreed_side:
-            set_sides[r.set_num] = r.agreed_side
+        if r and r.一致度 == "AGREED" and r.支持側:
+            set_sides[r.セット番号] = r.支持側
 
     await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python parallel_orchestrator.py <TICKER> [mode] [num_sets] [max_rounds] [opinions_per_set] [initial_prompt]")
-        print("  mode: '買う' or '売る' (デフォルト: 買う)")
+        print("使い方: python parallel_orchestrator.py <銘柄コード> [モード] [セット数] [最大ラウンド数] [意見数] [追加指示]")
+        print("  モード: '買う' or '売る' (デフォルト: 買う)")
         print("例: python parallel_orchestrator.py NVDA 買う 3 6 2 '特にAI市場に注目して'")
         print("例: python parallel_orchestrator.py NVDA 売る 3 6 2")
         sys.exit(1)

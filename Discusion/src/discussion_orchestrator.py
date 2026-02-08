@@ -150,7 +150,7 @@ async def run_discussion(
             agent_file = devils_file
             label = "Devil's Advocate"
 
-        print(f"--- Round {round_num}: {label} ---\n")
+        print(f"--- ラウンド{round_num}: {label} ---\n")
 
         # プロンプト組み立て
         prompt = build_prompt(ticker, role, round_num, log_path, mode)
@@ -167,7 +167,7 @@ async def run_discussion(
             **dbg,
         )
 
-        print(f"\n--- Round {round_num} 完了 ---")
+        print(f"\n--- ラウンド{round_num} 完了 ---")
         if result.cost:
             print(f"コスト: ${result.cost:.4f}")
 
@@ -180,9 +180,9 @@ async def run_discussion(
         # 収束チェック
         current_export = get_last_export(log_path)
         if check_convergence(current_export, prev_export):
-            print(f"=== 収束検出: stance/confidence が前ラウンドと一致 ===")
-            print(f"stance: {current_export.get('stance')}")
-            print(f"confidence: {current_export.get('confidence')}")
+            print(f"=== 収束検出: 立場/確信度 が前ラウンドと一致 ===")
+            print(f"立場: {current_export.get('stance')}")
+            print(f"確信度: {current_export.get('confidence')}")
             break
 
         prev_export = current_export
@@ -190,14 +190,14 @@ async def run_discussion(
     print(f"\n=== オーケストレーション完了 ===")
     final_export = get_last_export(log_path)
     if final_export:
-        print(f"最終stance: {final_export.get('stance', 'N/A')}")
-        print(f"最終confidence: {final_export.get('confidence', 'N/A')}")
+        print(f"最終立場: {final_export.get('stance', 'N/A')}")
+        print(f"最終確信度: {final_export.get('confidence', 'N/A')}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python discussion_orchestrator.py <TICKER> [mode] [max_rounds] [initial_prompt]")
-        print("  mode: '買う' or '売る' (デフォルト: 買う)")
+        print("使い方: python discussion_orchestrator.py <銘柄コード> [モード] [最大ラウンド数] [追加指示]")
+        print("  モード: '買う' or '売る' (デフォルト: 買う)")
         print("例: python discussion_orchestrator.py NVDA 買う 6 '特にAI市場の競合状況に注目して'")
         print("例: python discussion_orchestrator.py NVDA 売る 4")
         sys.exit(1)

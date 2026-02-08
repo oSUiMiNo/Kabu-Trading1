@@ -18,10 +18,10 @@ from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_lo
 @dataclass
 class FinalJudgeResult:
     """Final Judge の実行結果（呼び出し元へ返すシンプルな構造体）"""
-    verdict: str        # "BUY" | "NOT_BUY_WAIT" | "SELL" | "NOT_SELL_HOLD"
-    action_votes: int   # アクション側（BUY/SELL）の票数
-    safe_votes: int     # 安全側（NOT_BUY_WAIT/NOT_SELL_HOLD）の票数
-    log_path: Path      # 生成された final judge ログのパス
+    判定結果: str       # "BUY" | "NOT_BUY_WAIT" | "SELL" | "NOT_SELL_HOLD"
+    賛成票: int         # アクション側（BUY/SELL）の票数
+    反対票: int         # 安全側（NOT_BUY_WAIT/NOT_SELL_HOLD）の票数
+    ログパス: Path      # 生成された final judge ログのパス
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -224,9 +224,9 @@ async def run_final_judge_orchestrator(
     print(f"=== {t} 最終判定オーケストレーター ===")
     print(f"  対象セット: {target_sets_str}")
     if agreed_sets:
-        print(f"    AGREED: {', '.join(f'set{sn}' for sn in agreed_sets)}")
+        print(f"    一致: {', '.join(f'set{sn}' for sn in agreed_sets)}")
     if disagreed_sets:
-        print(f"    DISAGREED: {', '.join(f'set{sn}' for sn in disagreed_sets)}")
+        print(f"    不一致: {', '.join(f'set{sn}' for sn in disagreed_sets)}")
     if set_sides is not None:
         action_label = "BUY" if mode == "buy" else "SELL"
         safe_label = "NOT_BUY_WAIT" if mode == "buy" else "NOT_SELL_HOLD"
@@ -238,7 +238,7 @@ async def run_final_judge_orchestrator(
     prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides)
     agent_file = AGENTS_DIR / "final-judge.md"
 
-    print(f"[起動] Final Judge")
+    print(f"[起動] 最終判定")
     dbg = load_debug_config("final_judge")
     result = await call_agent(
         prompt,
@@ -247,7 +247,7 @@ async def run_final_judge_orchestrator(
         show_tools=False,
         **dbg,
     )
-    print(f"[完了] Final Judge")
+    print(f"[完了] 最終判定")
     if result.cost:
         print(f"  コスト: ${result.cost:.4f}")
 
@@ -260,7 +260,7 @@ async def run_final_judge_orchestrator(
     # 結果表示（result.text からパース）
     print()
     print("=" * 60)
-    print(f"=== Final Judge 結果 ===")
+    print(f"=== 最終判定結果 ===")
     print("=" * 60)
 
     content = result.text if result and result.text else ""
@@ -278,16 +278,16 @@ async def run_final_judge_orchestrator(
     print("=" * 60)
 
     return FinalJudgeResult(
-        verdict=verdict,
-        action_votes=action_votes,
-        safe_votes=safe_votes,
-        log_path=final_path,
+        判定結果=verdict,
+        賛成票=action_votes,
+        反対票=safe_votes,
+        ログパス=final_path,
     )
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python final_judge_orchestrator.py <TICKER>")
+        print("使い方: python final_judge_orchestrator.py <銘柄コード>")
         print("例: python final_judge_orchestrator.py GOOGL")
         sys.exit(1)
 
