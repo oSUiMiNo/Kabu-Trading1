@@ -22,6 +22,13 @@ from discussion_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
 from final_judge_orchestrator import run_final_judge_orchestrator
 
+# セット番号 → 重視テーマ（num_sets >= 2 の場合に割り当て）
+SET_THEMES: dict[int, str] = {
+    1: "ファンダメンタル（事業・決算・バリュエーション）",
+    2: "カタリスト＆リスク（ニュース・イベント・規制・マクロ）",
+    3: "テクニカル＆需給（タイミングとリスク管理）",
+}
+
 
 async def run_parallel(
     ticker: str,
@@ -58,7 +65,9 @@ async def run_parallel(
     print(f"{'='*70}")
     print(f"各レーンが独立して「議論 → 意見生成 → 判定」を実行します")
     for i in range(1, num_sets + 1):
-        print(f"  レーン{i}: {LOGS_DIR / f'{t}_set{i}.md'}")
+        theme = SET_THEMES.get(i) if num_sets >= 2 else None
+        theme_label = f"  【{theme}】" if theme else ""
+        print(f"  レーン{i}: {LOGS_DIR / f'{t}_set{i}.md'}{theme_label}")
     print()
 
     # 全レーンを並行実行
@@ -66,6 +75,7 @@ async def run_parallel(
 
     async def _run_lane(idx: int, set_num: int):
         """1レーンを実行（エラーは内部でキャッチ済み）"""
+        theme = SET_THEMES.get(set_num) if num_sets >= 2 else None
         lane_results[idx] = await run_lane(
             ticker,
             set_num=set_num,
@@ -73,6 +83,7 @@ async def run_parallel(
             initial_prompt=initial_prompt,
             opinions_per_lane=opinions_per_set,
             mode=mode,
+            theme=theme,
         )
 
     async with anyio.create_task_group() as tg:

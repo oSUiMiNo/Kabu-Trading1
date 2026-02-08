@@ -52,6 +52,7 @@ async def run_lane(
     initial_prompt: str | None = None,
     opinions_per_lane: int = 2,
     mode: str = "buy",
+    theme: str | None = None,
 ) -> LaneResult:
     """
     1レーン分のフローを一気通貫で実行する。
@@ -90,6 +91,7 @@ async def run_lane(
             initial_prompt=initial_prompt,
             log_path=log_path,
             mode=mode,
+            theme=theme,
         )
         print(f"[レーン{set_num}] フェーズ1: 議論完了")
 
