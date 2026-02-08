@@ -63,24 +63,19 @@ model: Haiku
 3) setごとに judge から情報を抽出
    - `{TICKER}_setN_judge_*.md` の最大Kを Read → EXPORTから抽出
 4) setごとの結果を揃える（欠損があれば "欠損" として扱う）
-5) 最終判定を決める（ルール固定）
-   - 各setの集約 supported_side を持つ
-     - 買うモード: `BUY / NOT_BUY_WAIT / UNKNOWN`
-     - 売るモード: `SELL / NOT_SELL_HOLD / UNKNOWN`
-   - **重み付け**：
-     - AGREEDセット: 重み **高**（2体のopinionが一致した強い根拠）
-     - DISAGREEDセット: 重み **低**（参考材料として扱う。judgeの supported_side を使うが、信頼度は低い）
-   - **最終 supported_side（機械用）**：
-     - UNKNOWNを除き、AGREEDセットの結論を優先した多数決で決める
-     - AGREEDセットのみで決定できる場合はDISAGREEDセットに左右されない
-     - AGREEDセットがない場合はDISAGREEDセットを参考に判断するが、安全側に倒す
-     - 同数 / 不確実が強い場合 → 安全側に倒す
-       - 買うモード: **NOT_BUY_WAIT**
-       - 売るモード: **NOT_SELL_HOLD**
+5) 最終判定を決める（投票閾値ルール）
+   - 各opinion の supported_side を **1票** として数える
+     - AGREEDセット: 同じ side に **2票**
+     - DISAGREEDセット: 各 side に **1票ずつ**（split）
+   - **オーケストレーターがプロンプトで投票集計と確定判定を提供する** → その判定に従うこと
+   - 投票閾値:
+     - **買うモード**: **全会一致（反対 0票）** の場合のみ BUY。1票でも反対 → NOT_BUY_WAIT
+     - **売るモード**: **SELL票 ≥ 全票数の 2/3（切り上げ）** なら SELL。未満 → NOT_SELL_HOLD
+       - 6票の例: 6-0, 5-1, 4-2 → SELL / 3-3以下 → NOT_SELL_HOLD
    - **overall_agreement**：
      - 全セットAGREEDかつ同じ supported_side → AGREED_STRONG
-     - AGREEDセットが多数決を取れるがDISAGREEDやAGREED内の割れがある → MIXED
-     - AGREEDセットがなくDISAGREEDのみ、またはUNKNOWNが多い → INCOMPLETE
+     - 閾値を超えたがDISAGREEDやAGREED内の割れがある → MIXED
+     - 閾値を超えない → INCOMPLETE
 6) 理由の要約
    - 「最終 supported_side を支持する理由」を set別の why / reasons から **共通点優先**で 3〜6 個
    - set間で割れた場合は「割れてるポイント」を 2〜4 個（推測禁止）

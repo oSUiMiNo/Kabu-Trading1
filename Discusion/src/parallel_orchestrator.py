@@ -130,7 +130,13 @@ async def run_parallel(
         print(f">>> 全レーン不一致 → Final Judgeフェーズへ移行（DISAGREEDのみ）")
     print()
 
-    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets)
+    # 各セットの supported_side を集めて投票集計用に渡す
+    set_sides = {}
+    for r in lane_results:
+        if r and r.agreement == "AGREED" and r.agreed_side:
+            set_sides[r.set_num] = r.agreed_side
+
+    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides)
 
 
 if __name__ == "__main__":

@@ -4,13 +4,24 @@
 各セットの judge 結果を集約し、銘柄ごとに1つの最終結論を出す。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
+import math
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import anyio
 
 from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log
+
+
+@dataclass
+class FinalJudgeResult:
+    """Final Judge の実行結果（呼び出し元へ返すシンプルな構造体）"""
+    verdict: str        # "BUY" | "NOT_BUY_WAIT" | "SELL" | "NOT_SELL_HOLD"
+    action_votes: int   # アクション側（BUY/SELL）の票数
+    safe_votes: int     # 安全側（NOT_BUY_WAIT/NOT_SELL_HOLD）の票数
+    log_path: Path      # 生成された final judge ログのパス
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -32,12 +43,68 @@ def get_next_final_judge_num(ticker: str) -> int:
     return max(nums) + 1 if nums else 1
 
 
+def _is_action_vote(side: str, mode: str) -> bool:
+    """supported_side がアクション側（BUY/SELL）かどうかを判定"""
+    s = side.upper()
+    if mode == "buy":
+        return "BUY" in s and "NOT_BUY" not in s
+    else:
+        return "SELL" in s and "NOT_SELL" not in s
+
+
+def compute_vote_tally(
+    agreed_sets: list[int],
+    disagreed_sets: list[int],
+    set_sides: dict[int, str],
+    mode: str,
+) -> tuple[int, int, int, str]:
+    """
+    投票集計と判定を行う。
+
+    AGREED セット: supported_side に2票
+    DISAGREED セット: 各 side に1票ずつ（split）
+
+    閾値:
+      買うモード: 全会一致のみ BUY
+      売るモード: SELL票 ≥ ceil(全票数 × 2/3) なら SELL
+
+    Returns:
+        (action_votes, safe_votes, total_votes, verdict)
+    """
+    action_votes = 0
+    safe_votes = 0
+
+    for sn in agreed_sets:
+        side = set_sides.get(sn, "")
+        if _is_action_vote(side, mode):
+            action_votes += 2
+        else:
+            safe_votes += 2
+
+    for sn in disagreed_sets:
+        action_votes += 1
+        safe_votes += 1
+
+    total = action_votes + safe_votes
+
+    if mode == "buy":
+        # 全会一致のみ BUY
+        verdict = "BUY" if safe_votes == 0 and total > 0 else "NOT_BUY_WAIT"
+    else:
+        # 2/3 以上で SELL
+        threshold = math.ceil(total * 2 / 3) if total > 0 else 1
+        verdict = "SELL" if action_votes >= threshold else "NOT_SELL_HOLD"
+
+    return action_votes, safe_votes, total, verdict
+
+
 def build_final_judge_prompt(
     ticker: str,
     final_no: int,
     agreed_sets: list[int] | None = None,
     mode: str = "buy",
     disagreed_sets: list[int] | None = None,
+    set_sides: dict[int, str] | None = None,
 ) -> str:
     """final_judgeエージェントに渡すプロンプトを組み立てる"""
     t = ticker.upper()
@@ -75,6 +142,27 @@ def build_final_judge_prompt(
     else:
         mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論です。\n\n"
 
+    # 投票集計（set_sides が渡された場合のみ）
+    vote_section = ""
+    if set_sides is not None:
+        action, safe, total, verdict = compute_vote_tally(
+            agreed_sets, disagreed_sets, set_sides, mode
+        )
+        action_label = "BUY" if mode == "buy" else "SELL"
+        safe_label = "NOT_BUY_WAIT" if mode == "buy" else "NOT_SELL_HOLD"
+        if mode == "buy":
+            rule_desc = "全会一致のみ BUY（1票でも反対 → NOT_BUY_WAIT）"
+        else:
+            rule_desc = f"SELL票 ≥ {math.ceil(total * 2 / 3) if total > 0 else 1}/{total} で SELL（2/3以上）"
+        vote_section = (
+            f"\n"
+            f"【投票集計（オーケストレーター算出・確定値）】\n"
+            f"  {action_label}票: {action} / {safe_label}票: {safe} / 合計: {total}票\n"
+            f"  適用ルール: {rule_desc}\n"
+            f"  → **確定判定: {verdict}**\n"
+            f"  ※ この判定は投票閾値ルールに基づく確定値です。最終判定（supported_side）はこれに従ってください。\n"
+        )
+
     return (
         f"{mode_line}"
         f"銘柄「{t}」について最終判定を行ってください。\n"
@@ -83,7 +171,7 @@ def build_final_judge_prompt(
         f"\n"
         f"【各セットの一致度】\n"
         f"{agreement_info}\n"
-        f"\n"
+        f"{vote_section}\n"
         f"【重要】まず各setの元ログを読んでから、judge/opinionを評価してください。\n"
         f"\n"
         f"元ログ（Analyst vs Devils）:\n"
@@ -103,7 +191,8 @@ async def run_final_judge_orchestrator(
     agreed_sets: list[int] | None = None,
     mode: str = "buy",
     disagreed_sets: list[int] | None = None,
-) -> AgentResult:
+    set_sides: dict[int, str] | None = None,
+) -> FinalJudgeResult:
     """
     最終判定オーケストレーターを実行。
 
@@ -124,16 +213,29 @@ async def run_final_judge_orchestrator(
     all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
     target_sets_str = ", ".join(f"set{sn}" for sn in all_sets)
 
+    # 投票集計
+    if set_sides is not None:
+        action_votes, safe_votes, _total, verdict = compute_vote_tally(
+            agreed_sets, disagreed_sets, set_sides, mode
+        )
+    else:
+        action_votes, safe_votes, verdict = 0, 0, "UNKNOWN"
+
     print(f"=== {t} 最終判定オーケストレーター ===")
     print(f"  対象セット: {target_sets_str}")
     if agreed_sets:
         print(f"    AGREED: {', '.join(f'set{sn}' for sn in agreed_sets)}")
     if disagreed_sets:
         print(f"    DISAGREED: {', '.join(f'set{sn}' for sn in disagreed_sets)}")
+    if set_sides is not None:
+        action_label = "BUY" if mode == "buy" else "SELL"
+        safe_label = "NOT_BUY_WAIT" if mode == "buy" else "NOT_SELL_HOLD"
+        print(f"  投票: {action_label} {action_votes} / {safe_label} {safe_votes} (計{action_votes + safe_votes}票)")
+        print(f"  確定判定: {verdict}")
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
-    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets)
+    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides)
     agent_file = AGENTS_DIR / "final-judge.md"
 
     print(f"[起動] Final Judge")
@@ -175,7 +277,12 @@ async def run_final_judge_orchestrator(
 
     print("=" * 60)
 
-    return result
+    return FinalJudgeResult(
+        verdict=verdict,
+        action_votes=action_votes,
+        safe_votes=safe_votes,
+        log_path=final_path,
+    )
 
 
 if __name__ == "__main__":
