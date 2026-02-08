@@ -32,23 +32,43 @@ def get_next_final_judge_num(ticker: str) -> int:
     return max(nums) + 1 if nums else 1
 
 
-def build_final_judge_prompt(ticker: str, final_no: int, agreed_sets: list[int] | None = None, mode: str = "buy") -> str:
+def build_final_judge_prompt(
+    ticker: str,
+    final_no: int,
+    agreed_sets: list[int] | None = None,
+    mode: str = "buy",
+    disagreed_sets: list[int] | None = None,
+) -> str:
     """final_judgeエージェントに渡すプロンプトを組み立てる"""
     t = ticker.upper()
     output = str(LOGS_DIR / f"{t}_final_judge_{final_no}.md")
 
-    # 対象セットを決定（指定がなければ1〜3全部）
+    # 対象セットを決定（指定がなければ1〜3全部をagreedとして扱う）
     if agreed_sets is None:
         agreed_sets = [1, 2, 3]
+    if disagreed_sets is None:
+        disagreed_sets = []
 
-    # 元ログのリストを作成
+    # 全セット = agreed + disagreed（ソート済み）
+    all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
+
+    # 元ログのリストを作成（一致度ラベル付き）
     source_logs = []
-    for sn in agreed_sets:
-        source_logs.append(f"  set{sn}: {LOGS_DIR / f'{t}_set{sn}.md'}")
+    for sn in all_sets:
+        label = "AGREED" if sn in agreed_sets else "DISAGREED"
+        source_logs.append(f"  set{sn} [{label}]: {LOGS_DIR / f'{t}_set{sn}.md'}")
     source_logs_str = "\n".join(source_logs)
 
     # 対象セット表示
-    target_sets_str = ", ".join(f"set{sn}" for sn in agreed_sets)
+    target_sets_str = ", ".join(f"set{sn}" for sn in all_sets)
+
+    # 一致度情報
+    agreement_info_lines = []
+    if agreed_sets:
+        agreement_info_lines.append(f"  一致(AGREED): {', '.join(f'set{sn}' for sn in agreed_sets)} — 2体のopinionが一致。根拠として重み高。")
+    if disagreed_sets:
+        agreement_info_lines.append(f"  不一致(DISAGREED): {', '.join(f'set{sn}' for sn in disagreed_sets)} — 2体のopinionが不一致。両論を参考材料として扱う。")
+    agreement_info = "\n".join(agreement_info_lines)
 
     if mode == "sell":
         mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
@@ -59,7 +79,10 @@ def build_final_judge_prompt(ticker: str, final_no: int, agreed_sets: list[int] 
         f"{mode_line}"
         f"銘柄「{t}」について最終判定を行ってください。\n"
         f"\n"
-        f"【対象セット】{target_sets_str}（opinionが一致したセットのみ）\n"
+        f"【対象セット】{target_sets_str}（全セット対象）\n"
+        f"\n"
+        f"【各セットの一致度】\n"
+        f"{agreement_info}\n"
         f"\n"
         f"【重要】まず各setの元ログを読んでから、judge/opinionを評価してください。\n"
         f"\n"
@@ -77,13 +100,19 @@ def build_final_judge_prompt(ticker: str, final_no: int, agreed_sets: list[int] 
     )
 
 
-async def run_final_judge_orchestrator(ticker: str, agreed_sets: list[int] | None = None, mode: str = "buy") -> AgentResult:
+async def run_final_judge_orchestrator(
+    ticker: str,
+    agreed_sets: list[int] | None = None,
+    mode: str = "buy",
+    disagreed_sets: list[int] | None = None,
+) -> AgentResult:
     """
     最終判定オーケストレーターを実行。
 
     Args:
         ticker: 銘柄コード
         agreed_sets: opinionが一致したセット番号のリスト（Noneなら全セット対象）
+        disagreed_sets: opinionが不一致だったセット番号のリスト
     """
     t = ticker.upper()
     final_no = get_next_final_judge_num(ticker)
@@ -91,15 +120,22 @@ async def run_final_judge_orchestrator(ticker: str, agreed_sets: list[int] | Non
     # 対象セットを決定
     if agreed_sets is None:
         agreed_sets = [1, 2, 3]
+    if disagreed_sets is None:
+        disagreed_sets = []
 
-    target_sets_str = ", ".join(f"set{sn}" for sn in agreed_sets)
+    all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
+    target_sets_str = ", ".join(f"set{sn}" for sn in all_sets)
 
     print(f"=== {t} 最終判定オーケストレーター ===")
     print(f"  対象セット: {target_sets_str}")
+    if agreed_sets:
+        print(f"    AGREED: {', '.join(f'set{sn}' for sn in agreed_sets)}")
+    if disagreed_sets:
+        print(f"    DISAGREED: {', '.join(f'set{sn}' for sn in disagreed_sets)}")
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
-    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode)
+    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets)
     agent_file = AGENTS_DIR / "final-judge.md"
 
     print(f"[起動] Final Judge")

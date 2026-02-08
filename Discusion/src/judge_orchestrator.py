@@ -190,23 +190,25 @@ async def run_judge_orchestrator(
     # --- 不一致セットの処理 ---
     if disagreed_sets:
         print()
-        print(f"【不一致】Set {', '.join(map(str, disagreed_sets))} は opinion が一致しなかったためフロー終了")
+        print(f"【不一致】Set {', '.join(map(str, disagreed_sets))} は opinion が不一致（Final Judgeで考慮されます）")
 
     # --- Phase: Final Judge ---
-    if not agreed_sets:
+    if not agreed_sets and not disagreed_sets:
         print()
-        print("【終了】全セットが不一致のため、Final Judge は実行しません")
+        print("【終了】全セットがエラーのため、Final Judge は実行しません")
         return
 
     from final_judge_orchestrator import run_final_judge_orchestrator
 
     print()
-    if disagreed_sets:
-        print(f">>> 一致した Set {', '.join(map(str, agreed_sets))} のみで Final Judgeフェーズへ移行")
-    else:
+    if disagreed_sets and agreed_sets:
+        print(f">>> AGREED Set {', '.join(map(str, agreed_sets))} + DISAGREED Set {', '.join(map(str, disagreed_sets))} で Final Judgeフェーズへ移行")
+    elif agreed_sets:
         print(f">>> 全セット一致 → Final Judgeフェーズへ移行")
+    else:
+        print(f">>> 全セット不一致 → Final Judgeフェーズへ移行（DISAGREEDのみ）")
     print()
-    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode)
+    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 
 同一銘柄に対して複数のレーンを並行実行する。
 各レーンは「議論 → Opinion → Judge」のフローを独立して完結させる。
-全レーン完了後、AGREEDレーンのみでFinal Judgeを実行する。
+全レーン完了後、全レーン（AGREED+DISAGREED）でFinal Judgeを実行する。
 
 Before (フェーズ単位バリア同期):
   Phase1(3並列) → 待ち → Phase2 → ...
@@ -11,7 +11,7 @@ Before (フェーズ単位バリア同期):
 After (レーン単位独立実行):
   Lane1: 議論→Opinion→Judge ─┐
   Lane2: 議論→Opinion→Judge ─┼→ Final Judge
-  Lane3: 議論→Opinion→Judge ─┘
+  Lane3: 議論→Opinion→Judge ─┘  (AGREED+DISAGREEDすべて)
 """
 import sys
 from pathlib import Path
@@ -37,7 +37,7 @@ async def run_parallel(
 
     フロー:
       1. Nレーンを並行起動（各レーンは議論→Opinion→Judgeを独立実行）
-      2. 全レーン完了後、AGREEDレーンのみでFinal Judgeを実行
+      2. 全レーン完了後、全レーン（AGREED+DISAGREED）でFinal Judgeを実行
 
     Args:
         ticker: 銘柄コード（例: "NVDA"）
@@ -113,22 +113,24 @@ async def run_parallel(
         print(f"\n【エラー】Lane {', '.join(map(str, error_sets))} でエラーが発生しました")
 
     if disagreed_sets:
-        print(f"\n【不一致】Lane {', '.join(map(str, disagreed_sets))} はOpinionが一致しなかったためフロー終了")
+        print(f"\n【不一致】Lane {', '.join(map(str, disagreed_sets))} はOpinionが不一致（Final Judgeで考慮されます）")
 
     # --- Final Judge ---
-    if not agreed_sets:
+    if not agreed_sets and not disagreed_sets:
         print()
-        print("【終了】全レーンが不一致/エラーのため、Final Judge は実行しません")
+        print("【終了】全レーンがエラーのため、Final Judge は実行しません")
         return
 
     print()
-    if len(agreed_sets) < num_sets:
-        print(f">>> 一致した Lane {', '.join(map(str, agreed_sets))} のみで Final Judgeフェーズへ移行")
-    else:
+    if disagreed_sets and agreed_sets:
+        print(f">>> AGREED Lane {', '.join(map(str, agreed_sets))} + DISAGREED Lane {', '.join(map(str, disagreed_sets))} で Final Judgeフェーズへ移行")
+    elif agreed_sets:
         print(f">>> 全レーン一致 → Final Judgeフェーズへ移行")
+    else:
+        print(f">>> 全レーン不一致 → Final Judgeフェーズへ移行（DISAGREEDのみ）")
     print()
 
-    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode)
+    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets)
 
 
 if __name__ == "__main__":

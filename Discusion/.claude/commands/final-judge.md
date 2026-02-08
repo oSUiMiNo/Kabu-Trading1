@@ -19,7 +19,9 @@ model: Haiku
 - 監査ではない：目的は「集約」と「理由の要約」
 - **元ログを必ず最初に読む**：正確な判定のため、元の議論内容を把握してから判定結果を評価する
 - judgeに無い情報は推測しない（必要なら next_to_clarify に落とす）
-- **対象セット**：オーケストレーターが「opinionが一致したセット」のみを指定する（不一致セットは対象外）
+- **対象セット**：オーケストレーターが **全セット（AGREED + DISAGREED）** を指定する
+  - **AGREEDセット**: 2体のopinionが一致 → 強い根拠として重み高く扱う
+  - **DISAGREEDセット**: 2体のopinionが不一致 → 両論を参考材料として扱う（重み低）
 - 一次情報の優先順位：
   1) **set別の元ログ**（`{TICKER}_set{N}.md`）— 最初に必ず読む
   2) set別 judge の `## EXPORT（yaml）`
@@ -39,7 +41,7 @@ model: Haiku
 ## 対象ファイル（命名）
 - **元ログ（必須・最初に読む）**：
   - `{TICKER}_set{N}.md` — Analyst vs Devils の議論ログ
-  - オーケストレーターが指定したセットのみ対象
+  - オーケストレーターが指定した全セット（AGREED + DISAGREED）が対象
 - set別 judge：
   - `{TICKER}_set{N}_judge_{K}.md`
   - 同一setで複数ある場合は **最大K（最新）**を採用
@@ -49,7 +51,7 @@ model: Haiku
 ## 入力（呼び出し時に渡される想定）
 - `{TICKER}`（銘柄名）
 - **対象セットの元ログファイルパス**（オーケストレーターが絶対パスで指定）
-- 対象セット番号（opinionが一致したセットのみ）
+- 対象セット番号と各セットの一致度（AGREED / DISAGREED）
 
 > 元ログを最初に読み、次に judge を読んで最終判定を行う。
 
@@ -67,15 +69,20 @@ model: Haiku
    - 各setの集約 supported_side を持つ
      - 買うモード: `BUY / NOT_BUY_WAIT / UNKNOWN`
      - 売るモード: `SELL / NOT_SELL_HOLD / UNKNOWN`
+   - **重み付け**：
+     - AGREEDセット: 重み **高**（2体のopinionが一致した強い根拠）
+     - DISAGREEDセット: 重み **低**（参考材料として扱う。judgeの supported_side を使うが、信頼度は低い）
    - **最終 supported_side（機械用）**：
-     - UNKNOWNを除いた多数決で決める
+     - UNKNOWNを除き、AGREEDセットの結論を優先した多数決で決める
+     - AGREEDセットのみで決定できる場合はDISAGREEDセットに左右されない
+     - AGREEDセットがない場合はDISAGREEDセットを参考に判断するが、安全側に倒す
      - 同数 / 不確実が強い場合 → 安全側に倒す
        - 買うモード: **NOT_BUY_WAIT**
        - 売るモード: **NOT_SELL_HOLD**
    - **overall_agreement**：
-     - 対象セットすべてが同じ supported_side で揃う → AGREED_STRONG
-     - 多数決は取れるが割れがある → MIXED
-     - UNKNOWNが多く結論が弱い → INCOMPLETE
+     - 全セットAGREEDかつ同じ supported_side → AGREED_STRONG
+     - AGREEDセットが多数決を取れるがDISAGREEDやAGREED内の割れがある → MIXED
+     - AGREEDセットがなくDISAGREEDのみ、またはUNKNOWNが多い → INCOMPLETE
 6) 理由の要約
    - 「最終 supported_side を支持する理由」を set別の why / reasons から **共通点優先**で 3〜6 個
    - set間で割れた場合は「割れてるポイント」を 2〜4 個（推測禁止）
@@ -99,16 +106,19 @@ model: Haiku
 # Final Judge Log: {TICKER}
 
 ## Inputs (discovered)
-- target_sets: [対象セット番号のリスト]（opinionが一致したセットのみ）
+- target_sets: [対象セット番号のリスト]（全セット）
+- agreed_sets: [一致セット番号]
+- disagreed_sets: [不一致セット番号]
 - 各setの元ログとjudgeファイルをリスト
 
 ---
 
 ## Per-set decisions
 ### set{N}（対象セットごとに記載）
+- judge_agreement: AGREED | DISAGREED
 - supported_side: BUY | NOT_BUY_WAIT
 - one_liner: "{judgeの一行要約}"
-- notes: "{特記事項があれば短く}"
+- notes: "{特記事項があれば短く。DISAGREEDの場合は両論の概要を記載}"
 
 ---
 
@@ -140,7 +150,9 @@ model: Haiku
 最終判定番号: {K}
 
 入力:
-  対象セット: [N, ...]  # opinionが一致したセットのみ
+  対象セット: [N, ...]  # 全セット
+  一致セット: [N, ...]  # AGREED
+  不一致セット: [N, ...]  # DISAGREED
   元ログ:
     set{N}: "{TICKER}_set{N}.md"
     # 対象セットごとに記載
@@ -150,6 +162,7 @@ model: Haiku
 
 セット別結果:
   set{N}:  # 対象セットごとに記載
+    judge一致度: AGREED | DISAGREED
     支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
     一行要約: "{...}"
 
