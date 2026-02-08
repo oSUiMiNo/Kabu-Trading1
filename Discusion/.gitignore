@@ -19,3 +19,6 @@ NUL
 # ログ（.gitkeepのみ追跡）
 logs/*
 !logs/.gitkeep
+ 
+# デバッグ用設定ファイル
+debug_config.yaml
