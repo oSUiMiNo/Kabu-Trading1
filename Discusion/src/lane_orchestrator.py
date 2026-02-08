@@ -140,13 +140,12 @@ async def run_lane(
 
         print(f"[Lane {set_num}] Phase 3: Judge完了")
 
-        # --- 結果解析 ---
-        judge_path = LOGS_DIR / f"{t}_set{set_num}_judge_{judge_num}.md"
+        # --- 結果解析（result.text からパース） ---
+        content = judge_result.text if judge_result and judge_result.text else ""
         agreement = "ERROR"
         agreed_side = None
 
-        if judge_path.exists():
-            content = judge_path.read_text(encoding="utf-8")
+        if content:
             # 日本語フィールド名を優先、フォールバックで英語も対応
             # **AGREED** のようなマークダウン太字にも対応
             m_agree = re.search(r"(?:一致度|agreement):\s*\**(\w+)", content)

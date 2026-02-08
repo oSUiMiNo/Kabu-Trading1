@@ -47,7 +47,6 @@ def build_judge_prompt(
     """judgeエージェントに渡すプロンプトを組み立てる（opinionテキストをインライン埋め込み）"""
     t = ticker.upper()
     source_log = str(LOGS_DIR / f"{t}_set{set_num}.md")
-    output = str(LOGS_DIR / f"{t}_set{set_num}_judge_{judge_num}.md")
 
     if mode == "sell":
         mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
@@ -61,7 +60,6 @@ def build_judge_prompt(
         f"【重要】まず元の議論ログを読んでから、opinionを評価してください。\n"
         f"\n"
         f"元ログ（Analyst vs Devils）: {source_log}\n"
-        f"出力ファイル: {output}\n"
         f"judge_no: {judge_num}\n"
         f"\n"
         f"--- opinion_A (opinion#{opinion_a_num}) ここから ---\n"
@@ -74,7 +72,7 @@ def build_judge_prompt(
         f"\n"
         f"1. 最初に元ログを Read し、議論の内容を把握してください。\n"
         f"2. 上記の opinion_A / opinion_B テキストから supported_side が一致しているか判定してください。\n"
-        f"3. 結果を出力ファイルに新規作成してください。\n"
+        f"3. 結果を **応答テキストとして出力** してください。ファイルの作成は不要です。\n"
         f"Glob による番号採番は不要です（オーケストレーターが決定済み）。"
     )
 
@@ -89,7 +87,7 @@ async def run_single_judge(
     judge_num: int,
     mode: str = "buy",
 ) -> AgentResult:
-    """1体のjudgeエージェントを実行（opinionテキストをインラインで渡す）"""
+    """1体のjudgeエージェントを実行し、結果テキストをファイルに書き出す"""
     label = f"Set{set_num} Judge#{judge_num} (opinion {opinion_a_num} vs {opinion_b_num})"
     print(f"[起動] {label}")
 
@@ -108,6 +106,12 @@ async def run_single_judge(
     print(f"[完了] {label}")
     if result.cost:
         print(f"  コスト: ${result.cost:.4f}")
+
+    # オーケストレーター側でファイル書き出し
+    if result and result.text:
+        judge_path = LOGS_DIR / f"{ticker.upper()}_set{set_num}_judge_{judge_num}.md"
+        judge_path.write_text(result.text, encoding="utf-8")
+        print(f"  ログ書き出し: {judge_path.name}")
 
     return result
 
@@ -169,12 +173,11 @@ async def run_judge_orchestrator(
         cost = r.cost if r and r.cost else 0.0
         total_cost += cost
 
-        # judgeファイルからEXPORTを簡易読み取り（日本語フィールド対応）
-        judge_path = LOGS_DIR / f"{ticker.upper()}_set{sn}_judge_{jn}.md"
+        # result.text からEXPORTを簡易読み取り（日本語フィールド対応）
+        content = r.text if r and r.text else ""
         agreement = "N/A"
         agreed_side = "N/A"
-        if judge_path.exists():
-            content = judge_path.read_text(encoding="utf-8")
+        if content:
             # 日本語フィールド名を優先、フォールバックで英語も対応
             # **AGREED** のようなマークダウン太字にも対応
             m_agree = re.search(r"(?:一致度|agreement):\s*\**(\w+)", content)
