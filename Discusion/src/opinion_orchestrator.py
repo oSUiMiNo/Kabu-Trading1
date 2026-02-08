@@ -55,8 +55,8 @@ async def run_single_opinion(
     mode: str = "buy",
 ) -> AgentResult:
     """1体のopinionエージェントを実行"""
-    label = f"セット{set_num} 意見#{opinion_num}"
-    print(f"[起動] {label}")
+    label = f"意見#{opinion_num}"
+    print(f"[レーン{set_num}] {label} 起動")
 
     prompt = build_opinion_prompt(ticker, set_num, opinion_num, mode)
     agent_file = AGENTS_DIR / "opinion.md"
@@ -70,9 +70,7 @@ async def run_single_opinion(
         **dbg,
     )
 
-    print(f"[完了] {label}")
-    if result.cost:
-        print(f"  コスト: ${result.cost:.4f}")
+    print(f"[レーン{set_num}] {label} 完了")
 
     return result
 
@@ -94,7 +92,7 @@ async def run_opinion_orchestrator(
     set_logs = find_set_logs(ticker)
 
     if not set_logs:
-        print(f"エラー: {ticker.upper()} のセットログが見つかりません（logs/{ticker.upper()}_set*.md）")
+        print(f"エラー: {ticker.upper()} のレーンログが見つかりません（logs/{ticker.upper()}_set*.md）")
         return
 
     # セット番号を抽出
@@ -106,9 +104,8 @@ async def run_opinion_orchestrator(
 
     total = len(set_nums) * opinions_per_set
 
-    print(f"=== {ticker.upper()} 意見オーケストレーター ===")
-    print(f"対象セット: {len(set_nums)}個 ({', '.join(f'set{n}' for n in set_nums)})")
-    print(f"各セット {opinions_per_set}体 × {len(set_nums)}セット = 合計 {total}体")
+    print(f"対象レーン: {len(set_nums)}個 ({', '.join(f'set{n}' for n in set_nums)})")
+    print(f"各レーン {opinions_per_set}体 × {len(set_nums)}レーン = 合計 {total}体")
     print()
 
     # 各セットのopinion番号を固定連番で決定
@@ -177,7 +174,7 @@ async def run_opinion_orchestrator(
             pos_label, neg_label = "売り", "売らない"
         else:
             pos_label, neg_label = "買い", "買わない"
-        print(f"  セット{sn} 意見#{on}: {side}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis})  ${cost:.4f}")
+        print(f"  レーン{sn} 意見#{on}: {side}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis})  ${cost:.4f}")
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)

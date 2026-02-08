@@ -146,7 +146,7 @@ model: claude-haiku-4-5
 
 ```yaml
 銘柄: {TICKER}
-セット: set{N}
+レーン: set{N}
 判定番号: {K}
 
 入力:

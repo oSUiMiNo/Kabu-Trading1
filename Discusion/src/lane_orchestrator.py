@@ -34,14 +34,14 @@ from AgentUtil import AgentResult
 @dataclass
 class LaneResult:
     """1レーンの実行結果"""
-    セット番号: int
+    レーン番号: int
     一致度: str  # "AGREED" | "DISAGREED" | "ERROR"
     支持側: str | None
     合計コスト: float
 
 
 def get_set_log_path(ticker: str, set_num: int) -> Path:
-    """セット番号付きのログパスを返す"""
+    """レーン番号付きのログパスを返す"""
     return LOGS_DIR / f"{ticker.upper()}_set{set_num}.md"
 
 
@@ -58,14 +58,14 @@ async def run_lane(
     1レーン分のフローを一気通貫で実行する。
 
     処理フロー:
-      1. run_discussion()         → 議論ログ生成
+      1. run_discussion()         → 議論ログ
       2. run_single_opinion() ×N → Opinion生成（並列）
       3. run_single_judge()      → 一致判定
       4. LaneResult を返す
 
     Args:
         ticker: 銘柄コード（例: "NVDA"）
-        set_num: セット番号（1, 2, 3, ...）
+        set_num: レーン番号（1, 2, 3, ...）
         max_rounds: 議論の最大ラウンド数
         initial_prompt: 初回Analystへの追加指示（省略可）
         opinions_per_lane: このレーンで生成するOpinion数（デフォルト: 2）
@@ -84,7 +84,7 @@ async def run_lane(
 
     try:
         # --- フェーズ1: 議論 ---
-        print(f"\n[レーン{set_num}] フェーズ1: 議論開始")
+        print(f"\n[レーン{set_num}] 議論 開始")
         await run_discussion(
             ticker,
             max_rounds=max_rounds,
@@ -93,10 +93,10 @@ async def run_lane(
             mode=mode,
             theme=theme,
         )
-        print(f"[レーン{set_num}] フェーズ1: 議論完了")
+        print(f"[レーン{set_num}] 議論 完了")
 
         # --- フェーズ2: 意見生成 ---
-        print(f"\n[レーン{set_num}] フェーズ2: 意見生成開始 ({opinions_per_lane}体)")
+        print(f"\n[レーン{set_num}] 意見 ({opinions_per_lane}体) 開始")
 
         # opinion番号は固定連番（ファイルを作成しないので競合なし）
         opinion_nums = [1 + i for i in range(opinions_per_lane)]
@@ -116,10 +116,10 @@ async def run_lane(
             if r and r.cost:
                 total_cost += r.cost
 
-        print(f"[レーン{set_num}] フェーズ2: 意見生成完了")
+        print(f"[レーン{set_num}] 意見 完了")
 
         # --- フェーズ3: 判定 ---
-        print(f"\n[レーン{set_num}] フェーズ3: 判定開始")
+        print(f"\n[レーン{set_num}] 判定 開始")
 
         # opinion テキストを取得して judge に渡す
         opinion_a_text = opinion_results[0].text if opinion_results[0] and opinion_results[0].text else ""
@@ -140,7 +140,7 @@ async def run_lane(
         if judge_result and judge_result.cost:
             total_cost += judge_result.cost
 
-        print(f"[レーン{set_num}] フェーズ3: 判定完了")
+        print(f"[レーン{set_num}] 判定 完了")
 
         # --- 結果解析（result.text からパース） ---
         content = judge_result.text if judge_result and judge_result.text else ""
@@ -167,7 +167,7 @@ async def run_lane(
         print(f"{'='*60}")
 
         return LaneResult(
-            セット番号=set_num,
+            レーン番号=set_num,
             一致度=agreement,
             支持側=agreed_side,
             合計コスト=total_cost,
@@ -176,7 +176,7 @@ async def run_lane(
     except Exception as e:
         print(f"\n[レーン{set_num}] エラー発生: {e}")
         return LaneResult(
-            セット番号=set_num,
+            レーン番号=set_num,
             一致度="ERROR",
             支持側=None,
             合計コスト=total_cost,
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 3:
-        print("使い方: python lane_orchestrator.py <銘柄コード> <セット番号> [モード] [最大ラウンド数] [意見数] [追加指示]")
+        print("使い方: python lane_orchestrator.py <銘柄コード> <レーン番号> [モード] [最大ラウンド数] [意見数] [追加指示]")
         print("  モード: '買う' or '売る' (デフォルト: 買う)")
         print("例: python lane_orchestrator.py NVDA 1 買う 6 2 '特にAI市場に注目して'")
         sys.exit(1)

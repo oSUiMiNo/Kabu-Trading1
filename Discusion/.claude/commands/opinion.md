@@ -113,7 +113,7 @@ model: claude-haiku-4-5
 
 ## メタデータ
 - 銘柄: {TICKER}
-- セット: set{N}
+- レーン: set{N}
 - 意見番号: {K}
 - 入力ログ: {銘柄名_setN.md}
 - 評価対象ラウンド: {例: Round 1-2}

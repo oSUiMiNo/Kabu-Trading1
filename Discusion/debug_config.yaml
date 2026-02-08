@@ -10,21 +10,21 @@ debug_prompt: |
 
 # 議論
 discussion:
-  show_options: false
-  show_prompt: true
+  show_options: true
+  show_prompt: false
   show_response: false
 # 監査
 opinion:
-  show_options: false
+  show_options: true
   show_prompt: false
   show_response: false
 # 監査ダブルチェックの判定
 judge:
-  show_options: false
+  show_options: true
   show_prompt: false
   show_response: false
 # 最終ジャッジ
 final_judge:
-  show_options: false
+  show_options: true
   show_prompt: false
   show_response: false

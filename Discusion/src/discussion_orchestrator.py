@@ -74,7 +74,7 @@ def _theme_directive(theme: str | None) -> str:
         return ""
     return (
         f"【重視テーマ: {theme}】\n"
-        f"このセットでは上記テーマを特に重視して分析してください。\n"
+        f"このレーンでは上記テーマを特に重視して分析してください。\n"
         f"ただし他の領域も必要に応じて考察対象に含めてください。\n\n"
     )
 
@@ -147,11 +147,9 @@ async def run_discussion(
     start_round = get_last_round(log_path) + 1
     prev_export = get_last_export(log_path)
 
-    print(f"=== {ticker.upper()} 銘柄評価オーケストレーター ===")
-    print(f"ログ: {log_path}")
-    print(f"開始ラウンド: {start_round}")
-    print(f"最大ラウンド: {start_round + max_rounds - 1}")
-    print()
+    # ログパスからレーン番号を抽出（表示用）
+    _lane_match = re.search(r"_set(\d+)\.md$", log_path.name)
+    lane_label = f"レーン{_lane_match.group(1)}" if _lane_match else log_path.stem
 
     for i in range(max_rounds):
         round_num = start_round + i
@@ -166,7 +164,7 @@ async def run_discussion(
             agent_file = devils_file
             label = "Devil's Advocate"
 
-        print(f"--- ラウンド{round_num}: {label} ---\n")
+        print(f"---{lane_label} ラウンド{round_num}: {label} {'-' * 30}")
 
         # プロンプト組み立て
         prompt = build_prompt(ticker, role, round_num, log_path, mode, theme)
@@ -183,15 +181,13 @@ async def run_discussion(
             **dbg,
         )
 
-        print(f"\n--- ラウンド{round_num} 完了 ---")
+        print(f"---{lane_label} ラウンド{round_num} 完了 {'-' * 30}")
         if result.cost:
             print(f"コスト: ${result.cost:.4f}")
 
         # オーケストレーター側でログに追記
         saved = save_result_log(result, log_path, append=True)
-        if saved:
-            print(f"ログ追記: {saved.name}")
-        print()
+        
 
         # 収束チェック
         current_export = get_last_export(log_path)
@@ -203,7 +199,6 @@ async def run_discussion(
 
         prev_export = current_export
 
-    print(f"\n=== オーケストレーション完了 ===")
     final_export = get_last_export(log_path)
     if final_export:
         print(f"最終立場: {final_export.get('stance', 'N/A')}")

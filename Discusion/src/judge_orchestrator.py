@@ -1,9 +1,9 @@
 """
 判定オーケストレーター
 
-各セットの opinion ペア（A, B）を judge サブエージェントに渡し、
+各レーンの opinion ペア（A, B）を judge サブエージェントに渡し、
 一致/不一致を判定させる。
-3セット分を並行実行する。
+3レーン分を並行実行する。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
 import re
@@ -88,8 +88,8 @@ async def run_single_judge(
     mode: str = "buy",
 ) -> AgentResult:
     """1体のjudgeエージェントを実行し、結果テキストをファイルに書き出す"""
-    label = f"セット{set_num} 判定#{judge_num} (意見{opinion_a_num} vs 意見{opinion_b_num})"
-    print(f"[起動] {label}")
+    label = f"判定#{judge_num} (意見{opinion_a_num} vs 意見{opinion_b_num})"
+    print(f"[レーン{set_num}] {label} 起動")
 
     prompt = build_judge_prompt(ticker, set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text, judge_num, mode)
     agent_file = AGENTS_DIR / "judge.md"
@@ -103,7 +103,7 @@ async def run_single_judge(
         **dbg,
     )
 
-    print(f"[完了] {label}")
+    print(f"[レーン{set_num}] {label} 完了")
     if result.cost:
         print(f"  コスト: ${result.cost:.4f}")
 
@@ -111,7 +111,7 @@ async def run_single_judge(
     judge_path = LOGS_DIR / f"{ticker.upper()}_set{set_num}_judge_{judge_num}.md"
     saved = save_result_log(result, judge_path)
     if saved:
-        print(f"  ログ書き出し: {saved.name}")
+        print(f"  ログ: {saved.name}")
 
     return result
 
@@ -137,12 +137,12 @@ async def run_judge_orchestrator(
     total = len(opinion_pairs)
 
     print(f"=== {ticker.upper()} 判定オーケストレーター ===")
-    print(f"対象: {total}セット")
+    print(f"対象: {total}レーン")
     for sn, oa_num, _, ob_num, _ in opinion_pairs:
-        print(f"  セット{sn}: 意見{oa_num} vs 意見{ob_num}")
+        print(f"  レーン{sn}: 意見{oa_num} vs 意見{ob_num}")
     print()
 
-    # 各セットの judge 番号を事前に決定
+    # 各レーンの judge 番号を事前に決定
     tasks = []
     for sn, oa_num, oa_text, ob_num, ob_text in opinion_pairs:
         jn = get_next_judge_num(ticker, sn)
@@ -165,8 +165,8 @@ async def run_judge_orchestrator(
     print("=" * 60)
 
     total_cost = 0.0
-    agreed_sets = []  # AGREEDのセットを記録
-    disagreed_sets = []  # DISAGREEDのセットを記録
+    agreed_sets = []  # AGREEDのレーンを記録
+    disagreed_sets = []  # DISAGREEDのレーンを記録
 
     for idx, (sn, _oa_num, _oa_text, _ob_num, _ob_text, jn) in enumerate(tasks):
         r = results[idx]
@@ -190,43 +190,43 @@ async def run_judge_orchestrator(
         # 一致/不一致を判定
         if agreement == "AGREED":
             agreed_sets.append(sn)
-            print(f"  セット{sn} 判定#{jn}: ✓ 一致 ({agreed_side})  ${cost:.4f}")
+            print(f"  レーン{sn} 判定#{jn}: ✓ 一致 ({agreed_side})  ${cost:.4f}")
         else:
             disagreed_sets.append(sn)
-            print(f"  セット{sn} 判定#{jn}: ✗ 不一致 → このセットのフローは終了  ${cost:.4f}")
+            print(f"  レーン{sn} 判定#{jn}: ✗ 不一致 → このレーンのフローは終了  ${cost:.4f}")
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
 
-    # --- 不一致セットの処理 ---
+    # --- 不一致レーンの処理 ---
     if disagreed_sets:
         print()
-        print(f"【不一致】セット {', '.join(map(str, disagreed_sets))} は意見が不一致（最終判定で考慮されます）")
+        print(f"【不一致】レーン {', '.join(map(str, disagreed_sets))} は意見が不一致（最終判定で考慮されます）")
 
     # --- 最終判定フェーズ ---
     if not agreed_sets and not disagreed_sets:
         print()
-        print("【終了】全セットがエラーのため、最終判定は実行しません")
+        print("【終了】全レーンがエラーのため、最終判定は実行しません")
         return
 
     from final_judge_orchestrator import run_final_judge_orchestrator
 
     print()
     if disagreed_sets and agreed_sets:
-        print(f">>> 一致セット {', '.join(map(str, agreed_sets))} + 不一致セット {', '.join(map(str, disagreed_sets))} で最終判定フェーズへ移行")
+        print(f">>> 一致レーン {', '.join(map(str, agreed_sets))} + 不一致レーン {', '.join(map(str, disagreed_sets))} で最終判定フェーズへ移行")
     elif agreed_sets:
-        print(f">>> 全セット一致 → 最終判定フェーズへ移行")
+        print(f">>> 全レーン一致 → 最終判定フェーズへ移行")
     else:
-        print(f">>> 全セット不一致 → 最終判定フェーズへ移行（不一致のみ）")
+        print(f">>> 全レーン不一致 → 最終判定フェーズへ移行（不一致のみ）")
     print()
     await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("使い方: python judge_orchestrator.py <銘柄コード> [セット番号 (カンマ区切り)]")
+        print("使い方: python judge_orchestrator.py <銘柄コード> [レーン番号 (カンマ区切り)]")
         print("例: python judge_orchestrator.py GOOGL 1,2,3")
-        print("  各セットの最新意見ペアをファイルから読み込んで判定を実行")
+        print("  各レーンの最新意見ペアをファイルから読み込んで判定を実行")
         sys.exit(1)
 
     ticker = sys.argv[1]
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     else:
         set_nums = [1, 2, 3]
 
-    # 各セットの opinion ファイルを検出してテキストを読み込む
+    # 各レーンの opinion ファイルを検出してテキストを読み込む
     pairs = []
     for sn in set_nums:
         pattern = f"{ticker.upper()}_set{sn}_opinion_*.md"
@@ -250,6 +250,6 @@ if __name__ == "__main__":
             text_b = file_b.read_text(encoding="utf-8")
             pairs.append((sn, num_a, text_a, num_b, text_b))
         else:
-            print(f"  セット{sn}: 意見が2つ未満のためスキップ")
+            print(f"  レーン{sn}: 意見が2つ未満のためスキップ")
 
     anyio.run(lambda: run_judge_orchestrator(ticker, pairs))

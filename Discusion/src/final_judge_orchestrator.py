@@ -1,7 +1,7 @@
 """
 最終判定オーケストレーター
 
-各セットの judge 結果を集約し、銘柄ごとに1つの最終結論を出す。
+各レーンの judge 結果を集約し、銘柄ごとに1つの最終結論を出す。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
 import math
@@ -61,8 +61,8 @@ def compute_vote_tally(
     """
     投票集計と判定を行う。
 
-    AGREED セット: supported_side に2票
-    DISAGREED セット: 各 side に1票ずつ（split）
+    AGREED レーン: supported_side に2票
+    DISAGREED レーン: 各 side に1票ずつ（split）
 
     閾値:
       買うモード: 全会一致のみ BUY
@@ -110,13 +110,13 @@ def build_final_judge_prompt(
     t = ticker.upper()
     output = str(LOGS_DIR / f"{t}_final_judge_{final_no}.md")
 
-    # 対象セットを決定（指定がなければ1〜3全部をagreedとして扱う）
+    # 対象レーンを決定（指定がなければ1〜3全部をagreedとして扱う）
     if agreed_sets is None:
         agreed_sets = [1, 2, 3]
     if disagreed_sets is None:
         disagreed_sets = []
 
-    # 全セット = agreed + disagreed（ソート済み）
+    # 全レーン = agreed + disagreed（ソート済み）
     all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
 
     # 元ログのリストを作成（一致度ラベル付き）
@@ -126,7 +126,7 @@ def build_final_judge_prompt(
         source_logs.append(f"  set{sn} [{label}]: {LOGS_DIR / f'{t}_set{sn}.md'}")
     source_logs_str = "\n".join(source_logs)
 
-    # 対象セット表示
+    # 対象レーン表示
     target_sets_str = ", ".join(f"set{sn}" for sn in all_sets)
 
     # 一致度情報
@@ -167,9 +167,9 @@ def build_final_judge_prompt(
         f"{mode_line}"
         f"銘柄「{t}」について最終判定を行ってください。\n"
         f"\n"
-        f"【対象セット】{target_sets_str}（全セット対象）\n"
+        f"【対象レーン】{target_sets_str}（全レーン対象）\n"
         f"\n"
-        f"【各セットの一致度】\n"
+        f"【各レーンの一致度】\n"
         f"{agreement_info}\n"
         f"{vote_section}\n"
         f"【重要】まず各setの元ログを読んでから、judge/opinionを評価してください。\n"
@@ -179,9 +179,9 @@ def build_final_judge_prompt(
         f"\n"
         f"対象フォルダ: {LOGS_DIR}\n"
         f"\n"
-        f"1. 最初に対象セットの元ログを読み、議論の内容を把握してください。\n"
-        f"2. 次に対象セットの `{t}_set*_judge_*.md` を読み、各setの判定結果を確認してください。\n"
-        f"3. 各setの結果を集約して最終判定を**テキスト応答として出力**してください。\n"
+        f"1. 最初に対象レーンの元ログを読み、議論の内容を把握してください。\n"
+        f"2. 次に対象レーンの `{t}_set*_judge_*.md` を読み、各レーンの判定結果を確認してください。\n"
+        f"3. 各レーンの結果を集約して最終判定を**テキスト応答として出力**してください。\n"
         f"   ファイルへの書き込みは不要です。採番もオーケストレーターが決定済みです。"
     )
 
@@ -198,13 +198,13 @@ async def run_final_judge_orchestrator(
 
     Args:
         ticker: 銘柄コード
-        agreed_sets: opinionが一致したセット番号のリスト（Noneなら全セット対象）
-        disagreed_sets: opinionが不一致だったセット番号のリスト
+        agreed_sets: opinionが一致したレーン番号のリスト（Noneなら全レーン対象）
+        disagreed_sets: opinionが不一致だったレーン番号のリスト
     """
     t = ticker.upper()
     final_no = get_next_final_judge_num(ticker)
 
-    # 対象セットを決定
+    # 対象レーンを決定
     if agreed_sets is None:
         agreed_sets = [1, 2, 3]
     if disagreed_sets is None:
@@ -222,7 +222,7 @@ async def run_final_judge_orchestrator(
         action_votes, safe_votes, verdict = 0, 0, "UNKNOWN"
 
     print(f"=== {t} 最終判定オーケストレーター ===")
-    print(f"  対象セット: {target_sets_str}")
+    print(f"  対象レーン: {target_sets_str}")
     if agreed_sets:
         print(f"    一致: {', '.join(f'set{sn}' for sn in agreed_sets)}")
     if disagreed_sets:
@@ -238,7 +238,7 @@ async def run_final_judge_orchestrator(
     prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides)
     agent_file = AGENTS_DIR / "final-judge.md"
 
-    print(f"[起動] 最終判定")
+    print(f"[全レーン] 最終判定 起動")
     dbg = load_debug_config("final_judge")
     result = await call_agent(
         prompt,
@@ -247,7 +247,7 @@ async def run_final_judge_orchestrator(
         show_tools=False,
         **dbg,
     )
-    print(f"[完了] 最終判定")
+    print(f"[全レーン] 最終判定 完了")
     if result.cost:
         print(f"  コスト: ${result.cost:.4f}")
 

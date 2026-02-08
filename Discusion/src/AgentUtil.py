@@ -303,8 +303,6 @@ async def call_agent(
         cost = extract_cost(response)
         if cost:
             result.cost = cost
-            if show_cost:
-                print(f"\n(コスト: ${cost:.4f})")
 
     result.text = "\n".join(text_parts)
 
