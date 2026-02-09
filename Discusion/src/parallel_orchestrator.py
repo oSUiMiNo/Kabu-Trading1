@@ -38,6 +38,7 @@ async def run_parallel(
     initial_prompt: str | None = None,
     opinions_per_set: int = 2,
     mode: str = "buy",
+    horizon: str = "mid",
 ):
     """
     同一銘柄に対して複数レーンを並行実行し、
@@ -59,10 +60,12 @@ async def run_parallel(
 
     t = ticker.upper()
 
+    from discussion_orchestrator import _HORIZON_LABELS
     mode_label = "売る/売らない" if mode == "sell" else "買う/買わない"
+    horizon_label = _HORIZON_LABELS.get(horizon, horizon)
     print(f"{'='*70}")
     print(f"=== {t} {num_sets}レーン ===")
-    print(f"=== 議論モード: {mode_label} ===")
+    print(f"=== 議論モード: {mode_label} / 投資期間: {horizon_label} ===")
     print(f"{'='*70}")
     for i in range(1, num_sets + 1):
         theme = SET_THEMES.get(i) if num_sets >= 2 else None
@@ -84,6 +87,7 @@ async def run_parallel(
             opinions_per_lane=opinions_per_set,
             mode=mode,
             theme=theme,
+            horizon=horizon,
         )
 
     async with anyio.create_task_group() as tg:
@@ -151,17 +155,26 @@ async def run_parallel(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("使い方: python parallel_orchestrator.py <銘柄コード> [モード] [レーン数] [最大ラウンド数] [意見数] [追加指示]")
+    _horizon_map = {"短期": "short", "中期": "mid", "長期": "long",
+                    "short": "short", "mid": "mid", "long": "long"}
+
+    if len(sys.argv) < 3 or sys.argv[2] not in _horizon_map:
+        print("使い方: python parallel_orchestrator.py <銘柄コード> <投資期間> [モード] [レーン数] [最大ラウンド数] [意見数] [追加指示]")
+        print()
+        print("  投資期間（必須）: '短期' / '中期' / '長期'")
         print("  モード: '買う' or '売る' (デフォルト: 買う)")
+        if len(sys.argv) >= 2 and (len(sys.argv) < 3 or sys.argv[2] not in _horizon_map):
+            print()
+            print(f"⚠ 投資期間が指定されていません。銘柄の直後に '短期' '中期' '長期' のいずれかを指定してください。")
         sys.exit(1)
 
     ticker = sys.argv[1]
+    horizon = _horizon_map[sys.argv[2]]
     _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
-    mode = _mode_map.get(sys.argv[2], "buy") if len(sys.argv) > 2 else "buy"
-    num_sets = int(sys.argv[3]) if len(sys.argv) > 3 else 3
-    max_rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 6
-    opinions_per_set = int(sys.argv[5]) if len(sys.argv) > 5 else 2
-    initial_prompt = sys.argv[6] if len(sys.argv) > 6 else None
+    mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
+    num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else 3
+    max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else 6
+    opinions_per_set = int(sys.argv[6]) if len(sys.argv) > 6 else 2
+    initial_prompt = sys.argv[7] if len(sys.argv) > 7 else None
 
-    anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt, opinions_per_set, mode))
+    anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt, opinions_per_set, mode, horizon))

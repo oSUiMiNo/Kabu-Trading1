@@ -68,6 +68,19 @@ def _mode_directive(mode: str) -> str:
     return "【議論モード: 買う】この銘柄を「買うべきか・買わないべきか」で議論してください。\n\n"
 
 
+_HORIZON_LABELS: dict[str, str] = {
+    "short": "短期（数日〜数週間）",
+    "mid": "中期（数週間〜数ヶ月）",
+    "long": "長期（半年以上）",
+}
+
+
+def _horizon_directive(horizon: str) -> str:
+    """投資期間をプロンプト先頭に挿入する指示行を返す"""
+    label = _HORIZON_LABELS.get(horizon, horizon)
+    return f"【投資期間: {label}】この期間を前提にリスク・リターンを評価してください。\n\n"
+
+
 def _theme_directive(theme: str | None) -> str:
     """重視テーマをプロンプトに挿入する指示行を返す"""
     if not theme:
@@ -79,16 +92,18 @@ def _theme_directive(theme: str | None) -> str:
     )
 
 
-def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None) -> str:
+def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None, horizon: str = "mid") -> str:
     """各エージェントに渡すプロンプトを組み立てる"""
     log_abs = str(log_path)
     directive = _mode_directive(mode)
+    horizon_dir = _horizon_directive(horizon)
     theme_dir = _theme_directive(theme)
 
     if role == "analyst":
         if round_num == 1:
             return (
                 f"{directive}"
+                f"{horizon_dir}"
                 f"{theme_dir}"
                 f"銘柄「{ticker.upper()}」の初回分析を行ってください。\n"
                 f"ログファイル（参照用）: {log_abs}\n"
@@ -98,6 +113,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
         else:
             return (
                 f"{directive}"
+                f"{horizon_dir}"
                 f"{theme_dir}"
                 f"銘柄「{ticker.upper()}」の分析を続けてください。\n"
                 f"ログファイル（参照用）: {log_abs}\n"
@@ -107,6 +123,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
     else:  # devils-advocate
         return (
             f"{directive}"
+            f"{horizon_dir}"
             f"{theme_dir}"
             f"銘柄「{ticker.upper()}」のログを読み、最新のAnalystのstanceの反対側に立ってください。\n"
             f"ログファイル（参照用）: {log_abs}\n"
@@ -122,6 +139,7 @@ async def run_discussion(
     log_path: Path | None = None,
     mode: str = "buy",
     theme: str | None = None,
+    horizon: str = "mid",
 ):
     """
     オーケストレーターのメインループ。
@@ -167,7 +185,7 @@ async def run_discussion(
         print(f"---{lane_label} ラウンド{round_num}: {label} {'-' * 30}")
 
         # プロンプト組み立て
-        prompt = build_prompt(ticker, role, round_num, log_path, mode, theme)
+        prompt = build_prompt(ticker, role, round_num, log_path, mode, theme, horizon)
         if initial_prompt and round_num == start_round and role == "analyst":
             prompt = f"{initial_prompt}\n\n{prompt}"
 
