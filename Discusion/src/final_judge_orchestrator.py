@@ -12,7 +12,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log
+from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log, side_ja
 
 
 @dataclass
@@ -228,10 +228,10 @@ async def run_final_judge_orchestrator(
     if disagreed_sets:
         print(f"    不一致: {', '.join(f'set{sn}' for sn in disagreed_sets)}")
     if set_sides is not None:
-        action_label = "BUY" if mode == "buy" else "SELL"
-        safe_label = "NOT_BUY_WAIT" if mode == "buy" else "NOT_SELL_HOLD"
-        print(f"  投票: {action_label} {action_votes} / {safe_label} {safe_votes} (計{action_votes + safe_votes}票)")
-        print(f"  確定判定: {verdict}")
+        action_ja = side_ja("BUY") if mode == "buy" else side_ja("SELL")
+        safe_ja = side_ja("NOT_BUY_WAIT") if mode == "buy" else side_ja("NOT_SELL_HOLD")
+        print(f"  投票: {action_ja} {action_votes} / {safe_ja} {safe_votes} (計{action_votes + safe_votes}票)")
+        print(f"  確定判定: {side_ja(verdict)}")
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
@@ -270,7 +270,7 @@ async def run_final_judge_orchestrator(
         m_agree = re.search(r"(?:総合一致度|overall_agreement):\s*(\S+)", content)
         side = m_side.group(1) if m_side else "N/A"
         agree = m_agree.group(1) if m_agree else "N/A"
-        print(f"  最終判定: {side}")
+        print(f"  最終判定: {side_ja(side)}")
         print(f"  一致度: {agree}")
     else:
         print(f"  応答テキストが空です")

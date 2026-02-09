@@ -13,7 +13,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult, load_debug_config
+from AgentUtil import call_agent, AgentResult, load_debug_config, side_ja
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -174,7 +174,7 @@ async def run_opinion_orchestrator(
             pos_label, neg_label = "売り", "売らない"
         else:
             pos_label, neg_label = "買い", "買わない"
-        print(f"  レーン{sn} 意見#{on}: {side}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis})  ${cost:.4f}")
+        print(f"  レーン{sn} 意見#{on}: {side_ja(side)}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis})  ${cost:.4f}")
 
     print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)

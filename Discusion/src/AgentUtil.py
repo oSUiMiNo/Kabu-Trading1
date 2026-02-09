@@ -23,6 +23,27 @@ from claude_agent_sdk import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# 判定結果の英語→日本語マッピング（コンソール表示用）
+_SIDE_JA: dict[str, str] = {
+    "BUY": "買い",
+    "NOT_BUY_WAIT": "買わない（様子見）",
+    "SELL": "売り",
+    "NOT_SELL_HOLD": "売らない（保有継続）",
+}
+
+
+def side_ja(side: str) -> str:
+    """supported_side 等の英語判定値を日本語表示に変換する"""
+    # **太字マーカー** を除去してからマッチ
+    clean = side.strip("*").strip()
+    ja = _SIDE_JA.get(clean)
+    if ja is None:
+        return side  # 未知の値はそのまま
+    # 元のマーカーを保持
+    if side.startswith("**") and side.endswith("**"):
+        return f"**{ja}**"
+    return ja
 DEBUG_CONFIG_PATH = PROJECT_ROOT / "debug_config.yaml"
 
 

@@ -20,6 +20,7 @@ import anyio
 
 from discussion_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
+from AgentUtil import side_ja
 from final_judge_orchestrator import run_final_judge_orchestrator
 
 # レーン番号 → 重視テーマ（num_sets >= 2 の場合に割り当て）
@@ -107,7 +108,7 @@ async def run_parallel(
 
         if r.一致度 == "AGREED":
             agreed_sets.append(r.レーン番号)
-            print(f"  レーン{r.レーン番号}: ✓ 一致 ({r.支持側})  ${r.合計コスト:.4f}")
+            print(f"  レーン{r.レーン番号}: ✓ 一致 ({side_ja(r.支持側)})  ${r.合計コスト:.4f}")
         elif r.一致度 == "DISAGREED":
             disagreed_sets.append(r.レーン番号)
             print(f"  レーン{r.レーン番号}: ✗ 不一致  ${r.合計コスト:.4f}")

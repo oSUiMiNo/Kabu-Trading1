@@ -12,7 +12,7 @@ from pathlib import Path
 
 import anyio
 
-from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log
+from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log, side_ja
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -190,7 +190,7 @@ async def run_judge_orchestrator(
         # 一致/不一致を判定
         if agreement == "AGREED":
             agreed_sets.append(sn)
-            print(f"  レーン{sn} 判定#{jn}: ✓ 一致 ({agreed_side})  ${cost:.4f}")
+            print(f"  レーン{sn} 判定#{jn}: ✓ 一致 ({side_ja(agreed_side)})  ${cost:.4f}")
         else:
             disagreed_sets.append(sn)
             print(f"  レーン{sn} 判定#{jn}: ✗ 不一致 → このレーンのフローは終了  ${cost:.4f}")

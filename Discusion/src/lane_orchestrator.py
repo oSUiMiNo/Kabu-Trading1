@@ -28,7 +28,7 @@ from judge_orchestrator import (
     run_single_judge,
     get_next_judge_num,
 )
-from AgentUtil import AgentResult
+from AgentUtil import AgentResult, side_ja
 
 
 @dataclass
@@ -162,7 +162,7 @@ async def run_lane(
         print(f"=== レーン{set_num} 完了 ===")
         print(f"  結果: {agreement}")
         if agreed_side:
-            print(f"  支持側: {agreed_side}")
+            print(f"  支持側: {side_ja(agreed_side)}")
         print(f"  コスト: ${total_cost:.4f}")
         print(f"{'='*60}")
 
