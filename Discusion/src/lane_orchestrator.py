@@ -40,9 +40,10 @@ class LaneResult:
     合計コスト: float
 
 
-def get_set_log_path(ticker: str, set_num: int) -> Path:
+def get_set_log_path(ticker: str, set_num: int, session_dir: Path | None = None) -> Path:
     """レーン番号付きのログパスを返す"""
-    return LOGS_DIR / f"{ticker.upper()}_set{set_num}.md"
+    base = session_dir if session_dir else LOGS_DIR
+    return base / f"{ticker.upper()}_set{set_num}.md"
 
 
 async def run_lane(
@@ -54,6 +55,7 @@ async def run_lane(
     mode: str = "buy",
     theme: str | None = None,
     horizon: str = "mid",
+    session_dir: Path | None = None,
 ) -> LaneResult:
     """
     1レーン分のフローを一気通貫で実行する。
@@ -76,7 +78,7 @@ async def run_lane(
         LaneResult: レーンの実行結果
     """
     t = ticker.upper()
-    log_path = get_set_log_path(ticker, set_num)
+    log_path = get_set_log_path(ticker, set_num, session_dir)
     total_cost = 0.0
 
     print(f"\n{'='*60}")
@@ -107,7 +109,7 @@ async def run_lane(
         opinion_results: list[AgentResult] = [None] * opinions_per_lane
 
         async def _run_opinion(idx: int, opinion_num: int):
-            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode)
+            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode, session_dir=session_dir)
 
         async with anyio.create_task_group() as tg:
             for idx, on in enumerate(opinion_nums):
@@ -127,7 +129,7 @@ async def run_lane(
         opinion_a_text = opinion_results[0].text if opinion_results[0] and opinion_results[0].text else ""
         opinion_b_text = opinion_results[1].text if opinion_results[1] and opinion_results[1].text else ""
 
-        judge_num = get_next_judge_num(ticker, set_num)
+        judge_num = get_next_judge_num(ticker, set_num, session_dir)
         judge_result = await run_single_judge(
             ticker,
             set_num,
@@ -137,6 +139,7 @@ async def run_lane(
             opinion_b_text,
             judge_num,
             mode,
+            session_dir=session_dir,
         )
 
         if judge_result and judge_result.cost:

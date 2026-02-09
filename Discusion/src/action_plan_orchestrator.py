@@ -24,10 +24,11 @@ AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
-def get_next_action_plan_num(ticker: str) -> int:
+def get_next_action_plan_num(ticker: str, session_dir: Path | None = None) -> int:
     """既存の action_plan ファイルから次の番号を返す"""
+    base = session_dir if session_dir else LOGS_DIR
     pattern = f"{ticker.upper()}_action_plan_*.md"
-    existing = list(LOGS_DIR.glob(pattern))
+    existing = list(base.glob(pattern))
     if not existing:
         return 1
     nums = []
@@ -38,6 +39,24 @@ def get_next_action_plan_num(ticker: str) -> int:
     return max(nums) + 1 if nums else 1
 
 
+def _read_final_judge_log(final_log_path: Path) -> str:
+    """最終判定ログを読んで返す"""
+    if final_log_path.exists():
+        return final_log_path.read_text(encoding="utf-8")
+    return ""
+
+
+def _read_latest_judge_for_plan(ticker: str, set_num: int, session_dir: Path | None = None) -> str:
+    """指定レーンの最新 judge ファイルを読んで返す"""
+    base = session_dir if session_dir else LOGS_DIR
+    t = ticker.upper()
+    pattern = f"{t}_set{set_num}_judge_*.md"
+    existing = sorted(base.glob(pattern))
+    if not existing:
+        return ""
+    return existing[-1].read_text(encoding="utf-8")
+
+
 def build_action_plan_prompt(
     ticker: str,
     plan_no: int,
@@ -46,8 +65,9 @@ def build_action_plan_prompt(
     final_judge_result: FinalJudgeResult,
     agreed_sets: list[int],
     disagreed_sets: list[int],
+    session_dir: Path | None = None,
 ) -> str:
-    """action-planner エージェントに渡すプロンプトを組み立てる"""
+    """action-planner エージェントに渡すプロンプトを組み立てる（ファイル内容インライン埋め込み）"""
     t = ticker.upper()
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -61,14 +81,23 @@ def build_action_plan_prompt(
     verdict = final_judge_result.判定結果
     final_log = final_judge_result.ログパス
 
-    # 参照ファイルリスト
+    # 最終判定ログの内容をインラインで埋め込む
+    final_judge_content = _read_final_judge_log(final_log)
+
+    # 各レーンの judge 内容をインライン埋め込み
     all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
-    ref_files = []
-    ref_files.append(f"  - 最終判定: {final_log}")
+    judge_sections = []
     for sn in all_sets:
         label = "AGREED" if sn in agreed_sets else "DISAGREED"
-        ref_files.append(f"  - レーン{sn} [{label}]: judge/opinion は logs/ 内の {t}_set{sn}_judge_*.md / {t}_set{sn}_opinion_*.md を参照")
-    ref_files_str = "\n".join(ref_files)
+        judge_content = _read_latest_judge_for_plan(ticker, sn, session_dir)
+        section = f"--- レーン{sn} [{label}] judge ここから ---\n"
+        if judge_content:
+            section += judge_content
+        else:
+            section += "（judge ファイルなし）"
+        section += f"\n--- レーン{sn} judge ここまで ---"
+        judge_sections.append(section)
+    judge_inline = "\n\n".join(judge_sections)
 
     return (
         f"銘柄「{t}」のアクションプランを作成してください。\n"
@@ -83,17 +112,16 @@ def build_action_plan_prompt(
         f"【最終判定】\n"
         f"  判定結果: {verdict}\n"
         f"  賛成票: {final_judge_result.賛成票} / 反対票: {final_judge_result.反対票}\n"
-        f"  最終判定ログ: {final_log}\n"
         f"\n"
-        f"【参照ファイル】\n"
-        f"{ref_files_str}\n"
+        f"--- 最終判定ログ（{final_log.name}）ここから ---\n"
+        f"{final_judge_content if final_judge_content else '（最終判定ログの読み込みに失敗）'}\n"
+        f"--- 最終判定ログ ここまで ---\n"
         f"\n"
-        f"対象フォルダ: {LOGS_DIR}\n"
+        f"【各レーンの判定ログ】\n"
+        f"{judge_inline}\n"
         f"\n"
-        f"1. まず最終判定ログ（{final_log.name}）を読んでください。\n"
-        f"2. 次に各レーンの judge/opinion を読んでください。\n"
-        f"3. 上記を踏まえてアクションプランを**テキスト応答として出力**してください。\n"
-        f"   ファイルへの書き込みは不要です。採番もオーケストレーターが決定済みです（プラン番号: {plan_no}）。"
+        f"上記の内容を踏まえてアクションプランを**テキスト応答として出力**してください。\n"
+        f"ファイルへの書き込みは不要です。採番もオーケストレーターが決定済みです（プラン番号: {plan_no}）。"
     )
 
 
@@ -104,6 +132,7 @@ async def run_action_plan_orchestrator(
     final_judge_result: FinalJudgeResult | None = None,
     agreed_sets: list[int] | None = None,
     disagreed_sets: list[int] | None = None,
+    session_dir: Path | None = None,
 ) -> None:
     """
     アクションプラン オーケストレーターを実行。
@@ -127,7 +156,7 @@ async def run_action_plan_orchestrator(
     if disagreed_sets is None:
         disagreed_sets = []
 
-    plan_no = get_next_action_plan_num(ticker)
+    plan_no = get_next_action_plan_num(ticker, session_dir)
 
     print(f"=== {t} アクションプラン オーケストレーター ===")
     print(f"  出力: {t}_action_plan_{plan_no}.md")
@@ -136,6 +165,7 @@ async def run_action_plan_orchestrator(
     prompt = build_action_plan_prompt(
         ticker, plan_no, mode, horizon,
         final_judge_result, agreed_sets, disagreed_sets,
+        session_dir,
     )
     agent_file = AGENTS_DIR / "action-planner.md"
 
@@ -153,7 +183,8 @@ async def run_action_plan_orchestrator(
         print(f"  コスト: ${result.cost:.4f}")
 
     # ログファイルに書き出し
-    plan_path = LOGS_DIR / f"{t}_action_plan_{plan_no}.md"
+    base = session_dir if session_dir else LOGS_DIR
+    plan_path = base / f"{t}_action_plan_{plan_no}.md"
     saved = save_result_log(result, plan_path)
     if saved:
         print(f"  ログ書き出し: {saved.name}")

@@ -27,9 +27,10 @@ def find_set_logs(ticker: str) -> list[Path]:
     return [p for p in all_files if "_opinion_" not in p.name]
 
 
-def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str = "buy") -> str:
+def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str = "buy", session_dir: Path | None = None) -> str:
     """opinionエージェントに渡すプロンプトを組み立てる"""
-    log_abs = str(LOGS_DIR / f"{ticker.upper()}_set{set_num}.md")
+    base = session_dir if session_dir else LOGS_DIR
+    log_abs = (base / f"{ticker.upper()}_set{set_num}.md").as_posix()
 
     if mode == "sell":
         mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論ログです。\n\n"
@@ -53,12 +54,13 @@ async def run_single_opinion(
     set_num: int,
     opinion_num: int,
     mode: str = "buy",
+    session_dir: Path | None = None,
 ) -> AgentResult:
     """1体のopinionエージェントを実行"""
     label = f"意見#{opinion_num}"
     print(f"[レーン{set_num}] {label} 起動")
 
-    prompt = build_opinion_prompt(ticker, set_num, opinion_num, mode)
+    prompt = build_opinion_prompt(ticker, set_num, opinion_num, mode, session_dir)
     agent_file = AGENTS_DIR / "opinion.md"
 
     dbg = load_debug_config("opinion")

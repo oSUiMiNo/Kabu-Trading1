@@ -29,10 +29,11 @@ AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
-def get_next_final_judge_num(ticker: str) -> int:
+def get_next_final_judge_num(ticker: str, session_dir: Path | None = None) -> int:
     """既存のfinal_judgeファイルから次の番号を返す"""
+    base = session_dir if session_dir else LOGS_DIR
     pattern = f"{ticker.upper()}_final_judge_*.md"
-    existing = list(LOGS_DIR.glob(pattern))
+    existing = list(base.glob(pattern))
     if not existing:
         return 1
     nums = []
@@ -98,6 +99,36 @@ def compute_vote_tally(
     return action_votes, safe_votes, total, verdict
 
 
+def _read_latest_judge(ticker: str, set_num: int, session_dir: Path | None = None) -> str:
+    """指定レーンの最新 judge ファイルを読んで返す（無ければ空文字）"""
+    base = session_dir if session_dir else LOGS_DIR
+    t = ticker.upper()
+    pattern = f"{t}_set{set_num}_judge_*.md"
+    existing = sorted(base.glob(pattern))
+    if not existing:
+        return ""
+    latest = existing[-1]
+    return latest.read_text(encoding="utf-8")
+
+
+def _read_discussion_export(ticker: str, set_num: int, session_dir: Path | None = None) -> str:
+    """議論ログから暫定結論・EXPORT 付近を抽出する（全文は大きすぎるため）"""
+    base = session_dir if session_dir else LOGS_DIR
+    t = ticker.upper()
+    log_path = base / f"{t}_set{set_num}.md"
+    if not log_path.exists():
+        return ""
+    content = log_path.read_text(encoding="utf-8")
+    # 最後の「暫定結論」以降を抽出（EXPORT 含む）
+    idx = content.rfind("暫定結論")
+    if idx != -1:
+        # 少し前から取る（セクション見出し含む）
+        start = max(0, content.rfind("\n#", 0, idx))
+        return content[start:].strip()
+    # 見つからなければ末尾 3000 文字
+    return content[-3000:].strip() if len(content) > 3000 else content
+
+
 def build_final_judge_prompt(
     ticker: str,
     final_no: int,
@@ -105,10 +136,10 @@ def build_final_judge_prompt(
     mode: str = "buy",
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
+    session_dir: Path | None = None,
 ) -> str:
-    """final_judgeエージェントに渡すプロンプトを組み立てる"""
+    """final_judgeエージェントに渡すプロンプトを組み立てる（ファイル内容インライン埋め込み）"""
     t = ticker.upper()
-    output = str(LOGS_DIR / f"{t}_final_judge_{final_no}.md")
 
     # 対象レーンを決定（指定がなければ1〜3全部をagreedとして扱う）
     if agreed_sets is None:
@@ -118,13 +149,6 @@ def build_final_judge_prompt(
 
     # 全レーン = agreed + disagreed（ソート済み）
     all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
-
-    # 元ログのリストを作成（一致度ラベル付き）
-    source_logs = []
-    for sn in all_sets:
-        label = "AGREED" if sn in agreed_sets else "DISAGREED"
-        source_logs.append(f"  set{sn} [{label}]: {LOGS_DIR / f'{t}_set{sn}.md'}")
-    source_logs_str = "\n".join(source_logs)
 
     # 対象レーン表示
     target_sets_str = ", ".join(f"set{sn}" for sn in all_sets)
@@ -163,6 +187,25 @@ def build_final_judge_prompt(
             f"  ※ この判定は投票閾値ルールに基づく確定値です。最終判定（supported_side）はこれに従ってください。\n"
         )
 
+    # 各レーンの judge 内容と議論結論をインライン埋め込み
+    inline_sections = []
+    for sn in all_sets:
+        label = "AGREED" if sn in agreed_sets else "DISAGREED"
+        judge_content = _read_latest_judge(ticker, sn, session_dir)
+        discussion_export = _read_discussion_export(ticker, sn, session_dir)
+
+        section = f"--- set{sn} [{label}] ここから ---\n"
+        if discussion_export:
+            section += f"【議論ログ（暫定結論抜粋）】\n{discussion_export}\n\n"
+        if judge_content:
+            section += f"【judge 判定ログ】\n{judge_content}\n"
+        else:
+            section += "【judge 判定ログ】\n（judge ファイルが見つかりません）\n"
+        section += f"--- set{sn} ここまで ---"
+        inline_sections.append(section)
+
+    inline_content = "\n\n".join(inline_sections)
+
     return (
         f"{mode_line}"
         f"銘柄「{t}」について最終判定を行ってください。\n"
@@ -172,17 +215,13 @@ def build_final_judge_prompt(
         f"【各レーンの一致度】\n"
         f"{agreement_info}\n"
         f"{vote_section}\n"
-        f"【重要】まず各setの元ログを読んでから、judge/opinionを評価してください。\n"
+        f"以下に各レーンの判定結果と議論の結論をインラインで提供します。\n"
+        f"これらの内容をもとに最終判定を行ってください。\n"
         f"\n"
-        f"元ログ（Analyst vs Devils）:\n"
-        f"{source_logs_str}\n"
+        f"{inline_content}\n"
         f"\n"
-        f"対象フォルダ: {LOGS_DIR}\n"
-        f"\n"
-        f"1. 最初に対象レーンの元ログを読み、議論の内容を把握してください。\n"
-        f"2. 次に対象レーンの `{t}_set*_judge_*.md` を読み、各レーンの判定結果を確認してください。\n"
-        f"3. 各レーンの結果を集約して最終判定を**テキスト応答として出力**してください。\n"
-        f"   ファイルへの書き込みは不要です。採番もオーケストレーターが決定済みです。"
+        f"上記の内容を集約して最終判定を**テキスト応答として出力**してください。\n"
+        f"ファイルへの書き込みは不要です。採番もオーケストレーターが決定済みです。"
     )
 
 
@@ -192,6 +231,7 @@ async def run_final_judge_orchestrator(
     mode: str = "buy",
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
+    session_dir: Path | None = None,
 ) -> FinalJudgeResult:
     """
     最終判定オーケストレーターを実行。
@@ -202,7 +242,7 @@ async def run_final_judge_orchestrator(
         disagreed_sets: opinionが不一致だったレーン番号のリスト
     """
     t = ticker.upper()
-    final_no = get_next_final_judge_num(ticker)
+    final_no = get_next_final_judge_num(ticker, session_dir)
 
     # 対象レーンを決定
     if agreed_sets is None:
@@ -235,7 +275,7 @@ async def run_final_judge_orchestrator(
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
-    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides)
+    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, session_dir)
     agent_file = AGENTS_DIR / "final-judge.md"
 
     print(f"[全レーン] 最終判定 起動")
@@ -252,7 +292,8 @@ async def run_final_judge_orchestrator(
         print(f"  コスト: ${result.cost:.4f}")
 
     # オーケストレーター側でログファイルに書き出し
-    final_path = LOGS_DIR / f"{t}_final_judge_{final_no}.md"
+    base = session_dir if session_dir else LOGS_DIR
+    final_path = base / f"{t}_final_judge_{final_no}.md"
     saved = save_result_log(result, final_path)
     if saved:
         print(f"  ログ書き出し: {saved.name}")

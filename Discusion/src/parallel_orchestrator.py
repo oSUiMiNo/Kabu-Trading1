@@ -14,6 +14,7 @@ After (レーン単位独立実行):
   Lane3: 議論→Opinion→Judge ─┘  (AGREED+DISAGREEDすべて)
 """
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import anyio
@@ -58,6 +59,11 @@ async def run_parallel(
     """
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # セッションディレクトリ（YYMMDD_HHmm）を作成
+    session_name = datetime.now().strftime("%y%m%d_%H%M")
+    session_dir = LOGS_DIR / session_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+
     t = ticker.upper()
 
     from discussion_orchestrator import _HORIZON_LABELS
@@ -66,6 +72,7 @@ async def run_parallel(
     print(f"{'='*70}")
     print(f"=== {t} {num_sets}レーン ===")
     print(f"=== 議論モード: {mode_label} / 投資期間: {horizon_label} ===")
+    print(f"=== セッション: {session_name} ===")
     print(f"{'='*70}")
     for i in range(1, num_sets + 1):
         theme = SET_THEMES.get(i) if num_sets >= 2 else None
@@ -88,6 +95,7 @@ async def run_parallel(
             mode=mode,
             theme=theme,
             horizon=horizon,
+            session_dir=session_dir,
         )
 
     async with anyio.create_task_group() as tg:
@@ -151,7 +159,7 @@ async def run_parallel(
         if r and r.一致度 == "AGREED" and r.支持側:
             set_sides[r.レーン番号] = r.支持側
 
-    final_result = await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides)
+    final_result = await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides, session_dir=session_dir)
 
     # アクションプラン生成
     from action_plan_orchestrator import run_action_plan_orchestrator
@@ -162,6 +170,7 @@ async def run_parallel(
         ticker, mode=mode, horizon=horizon,
         final_judge_result=final_result,
         agreed_sets=agreed_sets, disagreed_sets=disagreed_sets,
+        session_dir=session_dir,
     )
 
 

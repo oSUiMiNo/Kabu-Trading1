@@ -94,7 +94,7 @@ def _theme_directive(theme: str | None) -> str:
 
 def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None, horizon: str = "mid") -> str:
     """各エージェントに渡すプロンプトを組み立てる"""
-    log_abs = str(log_path)
+    log_abs = log_path.as_posix()
     directive = _mode_directive(mode)
     horizon_dir = _horizon_directive(horizon)
     theme_dir = _theme_directive(theme)
