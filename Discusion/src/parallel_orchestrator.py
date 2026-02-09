@@ -10,7 +10,7 @@ Before (フェーズ単位バリア同期):
 
 After (レーン単位独立実行):
   Lane1: 議論→Opinion→Judge ─┐
-  Lane2: 議論→Opinion→Judge ─┼→ Final Judge
+  Lane2: 議論→Opinion→Judge ─┼→ Final Judge → Action Plan
   Lane3: 議論→Opinion→Judge ─┘  (AGREED+DISAGREEDすべて)
 """
 import sys
@@ -151,7 +151,18 @@ async def run_parallel(
         if r and r.一致度 == "AGREED" and r.支持側:
             set_sides[r.レーン番号] = r.支持側
 
-    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides)
+    final_result = await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides)
+
+    # アクションプラン生成
+    from action_plan_orchestrator import run_action_plan_orchestrator
+    print()
+    print(">>> アクションプラン生成へ")
+    print()
+    await run_action_plan_orchestrator(
+        ticker, mode=mode, horizon=horizon,
+        final_judge_result=final_result,
+        agreed_sets=agreed_sets, disagreed_sets=disagreed_sets,
+    )
 
 
 if __name__ == "__main__":
