@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(self-dir_build)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(.venvScriptspython.exe test_e2e.py)",
+      "Bash(del \"C:\\\\Users\\\\osuim\\\\Dev\\\\Investment\\\\Planning\\\\src\\\\test_e2e.py\")",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(ls:*)",
+      "Bash(git filter-repo:*)",
+      "Bash(pip install:*)",
+      "Bash(export PATH=\"$PATH:C:/Users/osuim/AppData/Roaming/Python/Python314/Scripts\")",
+      "Bash(\"C:/Users/osuim/AppData/Roaming/Python/Python314/Scripts/git-filter-repo.exe\" --version)",
+      "Bash(git clone:*)",
+      "Bash(\"C:/Users/osuim/AppData/Roaming/Python/Python314/Scripts/git-filter-repo.exe\" --to-subdirectory-filter Discusion/)",
+      "Bash(\"C:/Users/osuim/AppData/Roaming/Python/Python314/Scripts/git-filter-repo.exe\" --to-subdirectory-filter Discusion/ --force)",
+      "Bash(git ls-tree:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(git symbolic-ref:*)",
+      "Bash(git reset:*)"
+    ]
+  }
+}

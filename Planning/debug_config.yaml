@@ -1,0 +1,11 @@
+# plan フェーズのデバッグ表示設定
+plan:
+  show_options: false
+  show_prompt: false
+  show_response: false
+
+# price_fetch フェーズのデバッグ表示設定
+price_fetch:
+  show_options: false
+  show_prompt: false
+  show_response: false
