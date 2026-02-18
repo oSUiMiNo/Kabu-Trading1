@@ -44,27 +44,41 @@ class ParsedJudgment:
     raw_text: str                       # ログ全文（エージェントに渡す用）
 
 
-def find_session_logs(session_dir: Path) -> dict[str, Path | None]:
-    """
-    セッションディレクトリから対象ログファイルを探索する。
+@dataclass
+class SessionLogs:
+    """指定銘柄のログファイル一式"""
+    final_judge: Path | None = None
+    set_files: list[Path] = field(default_factory=list)
+    judge_files: list[Path] = field(default_factory=list)
 
-    Discussion のログは以下のいずれかの形式:
-    - セッションディレクトリ: logs/YYMMDD_HHMM/{TICKER}_final_judge_{N}.md
-    - フラットディレクトリ: logs/{TICKER}_final_judge_{N}.md
 
-    Returns:
-        {"final_judge": Path | None}
-        final_judge は最大番号（最新）のファイルを返す。
+def find_session_logs(session_dir: Path, ticker: str) -> SessionLogs:
     """
-    result: dict[str, Path | None] = {"final_judge": None}
+    セッションディレクトリから指定銘柄のログファイルを探索する。
+
+    対象ファイル（7件）:
+    - {TICKER}_set1.md, _set2.md, _set3.md  → set_files（議論ログ）
+    - {TICKER}_set{N}_judge_{K}.md           → judge_files（判定）
+    - {TICKER}_final_judge_{K}.md            → final_judge（最大番号を採用）
+    """
+    result = SessionLogs()
+    t = ticker.upper()
 
     if not session_dir.exists():
         return result
 
-    # final_judge ファイルを探索（最大番号を採用）
-    final_judges = sorted(session_dir.glob("*_final_judge_*.md"))
+    final_judges = sorted(session_dir.glob(f"{t}_final_judge_*.md"))
     if final_judges:
-        result["final_judge"] = final_judges[-1]
+        result.final_judge = final_judges[-1]
+
+    result.set_files = sorted(
+        p for p in session_dir.glob(f"{t}_set*.md")
+        if re.search(r"_set\d+\.md$", p.name)
+    )
+
+    result.judge_files = sorted(
+        p for p in session_dir.glob(f"{t}_set*_judge_*.md")
+    )
 
     return result
 

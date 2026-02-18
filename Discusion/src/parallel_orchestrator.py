@@ -159,19 +159,7 @@ async def run_parallel(
         if r and r.一致度 == "AGREED" and r.支持側:
             set_sides[r.レーン番号] = r.支持側
 
-    final_result = await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides, session_dir=session_dir)
-
-    # アクションプラン生成
-    from action_plan_orchestrator import run_action_plan_orchestrator
-    print()
-    print(">>> アクションプラン生成へ")
-    print()
-    await run_action_plan_orchestrator(
-        ticker, mode=mode, horizon=horizon,
-        final_judge_result=final_result,
-        agreed_sets=agreed_sets, disagreed_sets=disagreed_sets,
-        session_dir=session_dir,
-    )
+    await run_final_judge_orchestrator(ticker, agreed_sets, mode=mode, disagreed_sets=disagreed_sets, set_sides=set_sides, session_dir=session_dir)
 
 
 if __name__ == "__main__":

@@ -41,8 +41,7 @@ flowchart TD
     end
 
     J1 & J2 & J3 --> FJ["最終判定\nFinal Judge: 全レーン投票集計\n→ BUY / NOT_BUY_WAIT 等"]
-    FJ --> AP["アクションプラン\nAction Planner: 日時付き行動案"]
-    AP --> OUT["logs/ に一式出力"]
+    FJ --> OUT["logs/ に一式出力"]
 
     style LANES fill:transparent,stroke:#666
     style L1 fill:transparent,stroke:#999
@@ -50,7 +49,6 @@ flowchart TD
     style L3 fill:transparent,stroke:#999
     style START fill:#e8e8e8,stroke:#333,color:#000
     style FJ fill:#e8e8e8,stroke:#333,color:#000
-    style AP fill:#e8e8e8,stroke:#333,color:#000
     style OUT fill:#e8e8e8,stroke:#333,color:#000
 ```
 
@@ -72,7 +70,7 @@ flowchart TD
 
 ---
 
-## サブエージェント（6体）
+## サブエージェント（5体）
 
 | エージェント | ファイル | 役割 |
 |-------------|----------|------|
@@ -81,7 +79,6 @@ flowchart TD
 | Opinion | `opinion.md` | 議論ログを読み BUY/NOT_BUY を 0-100 で採点 + 軽量監査 |
 | Judge | `judge.md` | 2つの Opinion の supported_side が一致か不一致か判定 |
 | Final Judge | `final-judge.md` | 全レーンの投票を集約し最終結論を出す |
-| Action Planner | `action-planner.md` | 最終判定を日時付き行動案に変換 |
 
 全エージェントが `stock-log-protocol` スキル（ログの ID 体系・フォーマット共通ルール）を遵守する。
 
@@ -115,7 +112,7 @@ python src/parallel_orchestrator.py AMZN 中期
 python src/parallel_orchestrator.py NVDA 長期 売る 2 4
 ```
 
-出力は `logs/{YYMMDD_HHMM}/` に議論ログ・意見・判定・最終判定・アクションプランが一式生成される。
+出力は `logs/{YYMMDD_HHMM}/` に議論ログ・判定・最終判定が一式生成される。
 
 ---
 
@@ -130,9 +127,8 @@ Discusion/
 │   ├── opinion_orchestrator.py    #   意見生成
 │   ├── judge_orchestrator.py      #   一致判定
 │   ├── final_judge_orchestrator.py#   最終判定
-│   ├── action_plan_orchestrator.py#   行動計画
 │   └── AgentUtil.py               #   SDK ユーティリティ
-├── .claude/commands/              # サブエージェント定義（6体）
+├── .claude/commands/              # サブエージェント定義（5体）
 ├── .claude/skills/                # stock-log-protocol（ログ共通ルール）
 ├── logs/                          # 実行結果の出力先
 ├── MyDocs/                        # 理解用ドキュメント

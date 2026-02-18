@@ -28,7 +28,7 @@ import anyio
 import yaml
 
 from AgentUtil import call_agent, load_debug_config
-from log_parser import find_session_logs, parse_final_judge
+from log_parser import SessionLogs, find_session_logs, parse_final_judge
 from plan_calc import (
     Horizon, Market, Confidence,
     check_freshness, check_price_deviation, calc_confidence, calc_allocation,
@@ -173,7 +173,11 @@ async def _fetch_current_price(ticker: str, market: Market) -> float | None:
 # commentary 生成（エージェント呼び出し）
 # ═══════════════════════════════════════════════════════
 
-def build_commentary_prompt(spec: PlanSpec, raw_judge_text: str) -> str:
+def build_commentary_prompt(
+    spec: PlanSpec,
+    raw_judge_text: str,
+    additional_file_paths: list[Path] | None = None,
+) -> str:
     """
     plan-generator エージェントに渡すプロンプトを組み立てる。
 
@@ -182,8 +186,20 @@ def build_commentary_prompt(spec: PlanSpec, raw_judge_text: str) -> str:
     - monitoring_hint.reason を生成
     - execution_notes に状況に応じた注記を追加
     - 全ての数値はオーケストレーター算出済み。エージェントは数値を変更しない。
+    - 追加ファイル（議論ログ・意見書・判定・アクションプラン）を Read で参照して commentary を補強
     """
     yaml_str = build_yaml(spec)
+
+    additional_files_section = ""
+    if additional_file_paths:
+        paths_text = "\n".join(f"  - {p}" for p in additional_file_paths)
+        additional_files_section = (
+            f"\n"
+            f"【参照可能な追加ファイル（必要に応じて Read で読んでください）】\n"
+            f"Discussion プロジェクトが出力した議論・判定ログです。\n"
+            f"議論ログ（set*.md）は大きいため必要な部分だけ読めば十分です。\n"
+            f"{paths_text}\n"
+        )
 
     return (
         f"以下の PlanSpec（機械算出済み）に対して、テキスト応答として commentary フィールドを生成してください。\n"
@@ -195,13 +211,15 @@ def build_commentary_prompt(spec: PlanSpec, raw_judge_text: str) -> str:
         f"--- ここから ---\n"
         f"{raw_judge_text}\n"
         f"--- ここまで ---\n"
+        f"{additional_files_section}"
         f"\n"
         f"【あなたの作業】\n"
         f"1. 銘柄「{spec.ticker}」に関する最新ニュースや市場状況をWeb検索で確認\n"
-        f"2. decision_basis の各項目に why_it_matters（結論の決め手になった理由を日本語1文。最新情報があれば言及）を付与\n"
-        f"3. monitoring_hint.reason を生成（投票状況・confidence・freshness + 直近イベントを踏まえた1文）\n"
-        f"4. execution_notes に追加すべき注記があれば追加（価格ズレ警告、鮮度警告、市況注記など）\n"
-        f"5. 結果を YAML 形式で出力。数値フィールドは一切変更しないこと。\n"
+        f"2. 追加ファイルがある場合は Read で参照し、根拠の詳細や議論の文脈を把握する\n"
+        f"3. decision_basis の各項目に why_it_matters（結論の決め手になった理由を日本語1文。最新情報があれば言及）を付与\n"
+        f"4. monitoring_hint.reason を生成（投票状況・confidence・freshness + 直近イベントを踏まえた1文）\n"
+        f"5. execution_notes に追加すべき注記があれば追加（価格ズレ警告、鮮度警告、市況注記など）\n"
+        f"6. 結果を YAML 形式で出力。数値フィールドは一切変更しないこと。\n"
         f"\n"
         f"出力は YAML ブロック（```yaml ... ```）のみ。説明文は不要。\n"
     )
@@ -296,16 +314,25 @@ async def run_plan_orchestrator(
 
     # --- 1. ログ解析 ---
     session_path = Path(session_dir)
-    logs = find_session_logs(session_path)
-    if not logs["final_judge"]:
+    logs = find_session_logs(session_path, ticker)
+    if not logs.final_judge:
         print(f"  エラー: {session_path} に final_judge ログが見つかりません")
         return None
 
-    print(f"  ログ: {logs['final_judge'].name}")
-    judgment = parse_final_judge(logs["final_judge"])
+    print(f"  ログ: {logs.final_judge.name}")
+    judgment = parse_final_judge(logs.final_judge)
     print(f"  判定: {judgment.decision}（raw: {judgment.decision_raw}）")
     print(f"  投票: for={judgment.vote_for}, against={judgment.vote_against}")
     print(f"  一致度: {judgment.overall_agreement}")
+
+    additional_file_paths: list[Path] = [
+        *logs.set_files,
+        *logs.judge_files,
+    ]
+    if additional_file_paths:
+        print(f"  追加ファイル: {len(additional_file_paths)} 件")
+        for p in additional_file_paths:
+            print(f"    - {p.name}")
     print()
 
     # --- 1.5 価格取得（current_price 未指定時）---
@@ -410,7 +437,7 @@ async def run_plan_orchestrator(
 
     # --- 7. エージェント呼び出し（commentary 生成） ---
     print(f">>> commentary 生成（plan-generator エージェント）")
-    prompt = build_commentary_prompt(spec, judgment.raw_text)
+    prompt = build_commentary_prompt(spec, judgment.raw_text, additional_file_paths)
     agent_file = AGENTS_DIR / "plan-generator.md"
 
     dbg = load_debug_config("plan")

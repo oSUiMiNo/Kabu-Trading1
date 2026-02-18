@@ -33,10 +33,15 @@ model: claude-haiku-4-5
 
 ## 入力
 
-プロンプトとして以下の2つが渡される：
+プロンプトとして以下が渡される：
 
 1. **PlanSpec（YAML）**: オーケストレーターが確定した全フィールド
-2. **最終判定ログ**: Discussion プロジェクトの final_judge テキスト
+2. **最終判定ログ**: Discussion プロジェクトの final_judge テキスト（プロンプトに直接埋め込み）
+3. **参照可能な追加ファイル（任意）**: 対象銘柄の以下のファイルパスが提示される場合がある
+   - `{TICKER}_set{N}.md` — 議論ログ（3,000-4,000行。必要な部分だけ Read で参照）
+   - `{TICKER}_set{N}_judge_{K}.md` — 各セットの判定（一致度・理由）
+
+追加ファイルは `Read` ツールで読み込む。議論ログは大きいため、why_it_matters の根拠確認など必要な場面にのみ参照すること。
 
 ---
 
@@ -48,6 +53,10 @@ model: claude-haiku-4-5
 4. `monitoring_hint.reason` は `confidence`、`freshness.status`、`data_checks.status` を踏まえて記述
 5. `BLOCK_REEVALUATE` / `STALE_REEVALUATE` の場合は、`execution_plan.notes` に警告文を含める
 6. 出力は日本語で記述
+7. **追加ファイルの利用方針**:
+   - `set*.md`（議論ログ）は巨大なため、根拠の詳細確認時のみ Read で参照する
+   - `judge_*.md` は `why_it_matters` の補強に活用してよい
+   - ファイルパスが提示されない場合は最終判定ログのみで生成する
 
 ---
 
