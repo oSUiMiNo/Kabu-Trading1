@@ -2,11 +2,11 @@
 
 ```mermaid
 flowchart LR
-    in((銘柄<br>in))
+    in((Discussion<br>ログ一式<br>in))
 
     in --> LP["ログ解析<br>(log_parser)"]
 
-    LP --> |"判定・投票・根拠"| PC{"現在価格<br>指定あり？"}
+    LP --> |"判定・投票・根拠<br>+ 関連ログのパス"| PC{"現在価格<br>指定あり？"}
 
     PC --> |No| PF[/"🌐 price-fetcher<br>Web検索で株価取得"/]
     PC --> |Yes| CALC
@@ -21,7 +21,7 @@ flowchart LR
 
     CALC --> PS["PlanSpec 組立<br>(plan_spec)"]
 
-    PS --> |"数値確定済み YAML +<br>最終判定ログ"| PG[/"🌐 plan-generator<br>commentary 生成<br>(Web検索で最新情報補強)"/]
+    PS --> |"数値確定済み YAML +<br>ログ一式"| PG[/"🌐 plan-generator<br>commentary 生成<br>(Web検索で最新情報補強)"/]
 
     PG --> |"why_it_matters<br>reason / notes"| MG["commentary 反映"]
 

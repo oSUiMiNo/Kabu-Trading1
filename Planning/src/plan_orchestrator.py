@@ -1,7 +1,7 @@
 """
 Plan オーケストレーター
 
-Discussion プロジェクトの最終判定ログを受け取り、
+Discussion プロジェクトのログ一式（議論・判定・最終判定）を受け取り、
 決定論的な計算ですべての数値を確定させた上で、
 エージェントに commentary フィールド (decision_basis の why_it_matters,
 monitoring_hint の reason, execution_notes) を生成させ、
@@ -207,7 +207,7 @@ def build_commentary_prompt(
         f"【PlanSpec（確定済み数値）】\n"
         f"```yaml\n{yaml_str}```\n"
         f"\n"
-        f"【最終判定ログ（参照用）】\n"
+        f"【最終判定ログ（プロンプト埋め込み分）】\n"
         f"--- ここから ---\n"
         f"{raw_judge_text}\n"
         f"--- ここまで ---\n"
