@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(self-dir_build)",
+      "Bash(git -C \"C:/Users/osuim/Dev/Investment/Discusion/src\" rev-parse --show-toplevel)",
+      "Bash(git fetch:*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "mcp__plugin_supabase_supabase__list_projects",
+      "mcp__plugin_supabase_supabase__list_tables",
+      "mcp__plugin_supabase_supabase__execute_sql",
+      "mcp__plugin_supabase_supabase__list_extensions",
+      "mcp__plugin_supabase_supabase__apply_migration",
+      "mcp__plugin_supabase_supabase__get_advisors",
+      "Bash(.venv/Scripts/uv pip install:*)",
+      "Bash(uv add:*)"
+    ]
+  }
+}
