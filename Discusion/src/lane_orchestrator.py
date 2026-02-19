@@ -11,7 +11,8 @@
   4. LaneResult を返す
 """
 import re
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import anyio
@@ -38,6 +39,7 @@ class LaneResult:
     一致度: str  # "AGREED" | "DISAGREED" | "ERROR"
     支持側: str | None
     合計コスト: float
+    db_data: dict = field(default_factory=dict)
 
 
 def get_set_log_path(ticker: str, set_num: int, session_dir: Path | None = None) -> Path:
@@ -64,18 +66,7 @@ async def run_lane(
       1. run_discussion()         → 議論ログ
       2. run_single_opinion() ×N → Opinion生成（並列）
       3. run_single_judge()      → 一致判定
-      4. LaneResult を返す
-
-    Args:
-        ticker: 銘柄コード（例: "NVDA"）
-        set_num: レーン番号（1, 2, 3, ...）
-        max_rounds: 議論の最大ラウンド数
-        initial_prompt: 初回Analystへの追加指示（省略可）
-        opinions_per_lane: このレーンで生成するOpinion数（デフォルト: 2）
-        mode: 議論モード（"buy" = 買う/買わない、"sell" = 売る/売らない）
-
-    Returns:
-        LaneResult: レーンの実行結果
+      4. LaneResult を返す（DB書き込みは呼び出し元が行う）
     """
     t = ticker.upper()
     log_path = get_set_log_path(ticker, set_num, session_dir)
@@ -102,10 +93,7 @@ async def run_lane(
         # --- フェーズ2: 意見生成 ---
         print(f"\n[レーン{set_num}] 意見 ({opinions_per_lane}体) 開始")
 
-        # opinion番号は固定連番（ファイルを作成しないので競合なし）
         opinion_nums = [1 + i for i in range(opinions_per_lane)]
-
-        # 並列実行
         opinion_results: list[AgentResult] = [None] * opinions_per_lane
 
         async def _run_opinion(idx: int, opinion_num: int):
@@ -115,7 +103,6 @@ async def run_lane(
             for idx, on in enumerate(opinion_nums):
                 tg.start_soon(_run_opinion, idx, on)
 
-        # opinionコスト集計
         for r in opinion_results:
             if r and r.cost:
                 total_cost += r.cost
@@ -125,7 +112,6 @@ async def run_lane(
         # --- フェーズ3: 判定 ---
         print(f"\n[レーン{set_num}] 判定 開始")
 
-        # opinion テキストを取得して judge に渡す
         opinion_a_text = opinion_results[0].text if opinion_results[0] and opinion_results[0].text else ""
         opinion_b_text = opinion_results[1].text if opinion_results[1] and opinion_results[1].text else ""
 
@@ -147,20 +133,30 @@ async def run_lane(
 
         print(f"[レーン{set_num}] 判定 完了")
 
-        # --- 結果解析（result.text からパース） ---
+        # --- 結果解析 ---
         content = judge_result.text if judge_result and judge_result.text else ""
         agreement = "ERROR"
         agreed_side = None
 
         if content:
-            # 日本語フィールド名を優先、フォールバックで英語も対応
-            # **AGREED** のようなマークダウン太字にも対応
             m_agree = re.search(r"(?:一致度|agreement):\s*\**(\w+)", content)
             if m_agree:
                 agreement = m_agree.group(1)
             m_side = re.search(r"(?:一致支持側|agreed_supported_side):\s*\**(\S+?)(?:\*|$|\s)", content)
             if m_side:
                 agreed_side = m_side.group(1)
+
+        # DB用データを構築（書き込みは parallel_orchestrator が行う）
+        _final_export = get_last_export(log_path)
+        _discussion_md = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+        lane_db_data = {
+            "theme": theme,
+            "discussion_md": _discussion_md,
+            "final_stance": _final_export.get("stance") if _final_export else None,
+            "agreement": agreement,
+            "agreed_side": agreed_side,
+            "judge_md": content,
+        }
 
         # レーン完了表示
         print(f"\n{'='*60}")
@@ -176,6 +172,7 @@ async def run_lane(
             一致度=agreement,
             支持側=agreed_side,
             合計コスト=total_cost,
+            db_data=lane_db_data,
         )
 
     except Exception as e:

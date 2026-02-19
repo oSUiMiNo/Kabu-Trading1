@@ -4,10 +4,11 @@
 各レーンの judge 結果を集約し、銘柄ごとに1つの最終結論を出す。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
+import json
 import math
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import anyio
@@ -22,6 +23,7 @@ class FinalJudgeResult:
     賛成票: int         # アクション側（BUY/SELL）の票数
     反対票: int         # 安全側（NOT_BUY_WAIT/NOT_SELL_HOLD）の票数
     ログパス: Path      # 生成された final judge ログのパス
+    db_data: dict = field(default_factory=dict)
 
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -314,15 +316,31 @@ async def run_final_judge_orchestrator(
         print(f"  最終判定: {side_ja(side)}")
         print(f"  一致度: {agree}")
     else:
+        side = "N/A"
+        agree = "N/A"
         print(f"  応答テキストが空です")
 
     print("=" * 60)
+
+    # DB用データを構築（書き込みは parallel_orchestrator が行う）
+    fj_db_data = {
+        "action_votes": action_votes,
+        "safe_votes": safe_votes,
+        "overall_agreement": agree,
+        "lane_results": {
+            "agreed_sets": agreed_sets,
+            "disagreed_sets": disagreed_sets,
+            "set_sides": set_sides or {},
+        },
+        "markdown": content,
+    }
 
     return FinalJudgeResult(
         判定結果=verdict,
         賛成票=action_votes,
         反対票=safe_votes,
         ログパス=final_path,
+        db_data=fj_db_data,
     )
 
 

@@ -37,7 +37,16 @@
       "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\":*)",
       "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\":*)",
       "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" -c:*)",
-      "Bash(git -C /c/Users/osuim/Dev/Investment/Planning/src rev-parse:*)"
+      "Bash(git -C /c/Users/osuim/Dev/Investment/Planning/src rev-parse:*)",
+      "Bash(Discusion/.venv/Scripts/python.exe -m py_compile shared/supabase_client.py)",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" -m py_compile \"C:/Users/osuim/Dev/Investment/shared/supabase_client.py\")",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" -m py_compile \"C:/Users/osuim/Dev/Investment/Discusion/src/parallel_orchestrator.py\")",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" -m py_compile \"C:/Users/osuim/Dev/Investment/Discusion/src/lane_orchestrator.py\")",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" -m py_compile \"C:/Users/osuim/Dev/Investment/Discusion/src/final_judge_orchestrator.py\")",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\" -m py_compile:*)",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" -c \":*)",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\" -c:*)",
+      "WebSearch"
     ]
   }
 }

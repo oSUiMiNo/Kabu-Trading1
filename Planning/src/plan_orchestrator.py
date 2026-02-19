@@ -27,6 +27,12 @@ from pathlib import Path
 import anyio
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
+from supabase_client import (
+    safe_db, get_portfolio_config, get_holding,
+    get_latest_session, update_session,
+)
+
 from AgentUtil import call_agent, load_debug_config
 from log_parser import SessionLogs, find_session_logs, parse_final_judge
 from plan_calc import (
@@ -462,6 +468,24 @@ async def run_plan_orchestrator(
     print(f"  パス: {output_path}")
     print(f"{'='*60}")
 
+    # --- 10. DB 書き込み（sessions.plan JSONB に格納） ---
+    _db_session = safe_db(get_latest_session, spec.ticker)
+    _db_session_id = _db_session["id"] if _db_session else None
+    if _db_session_id:
+        plan_data = {
+            "plan_id": spec.plan_id,
+            "decision_final": spec.decision_final,
+            "vote_for": spec.vote_for,
+            "vote_against": spec.vote_against,
+            "confidence": spec.confidence,
+            "freshness_status": spec.freshness_status,
+            "data_checks_status": spec.data_checks_status,
+            "allocation_jpy": spec.allocation_jpy,
+            "quantity": spec.quantity,
+            "yaml_full": build_yaml(spec),
+        }
+        safe_db(update_session, _db_session_id, plan=plan_data)
+
     return output_path
 
 
@@ -480,34 +504,65 @@ def _parse_optional_float(argv: list[str], idx: int) -> float | None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 6:
-        print("使い方: python plan_orchestrator.py <銘柄> <セッションDir> <予算(円)> <リスク上限> <期間> [現在価格] [基準価格] [保有株数] [平均取得単価] [現金]")
+    if len(sys.argv) < 4:
+        print("使い方: python plan_orchestrator.py <銘柄> <セッションDir> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格] [保有株数] [平均取得単価] [現金]")
         print()
-        print("  期間: '短期' / '中期' / '長期'")
+        print("  期間（必須）: '短期' / '中期' / '長期'")
+        print("  予算・リスク上限・保有株数等は省略時に Supabase DB から自動取得")
         print("  リスク上限: 円（例: 50000）または %（例: 5%）")
         print("  現在価格: 省略または '-' → Web検索で自動取得")
         print("  基準価格: 省略または '-' → 現在価格と同値（ズレ0%）")
         print()
         print("例:")
-        print("  python plan_orchestrator.py 楽天 \"C:\\...\\Discusion\\logs\" 5000000 50000 中期")
-        print("  python plan_orchestrator.py 楽天 \"C:\\...\\Discusion\\logs\" 5000000 50000 中期 950 930")
-        print("  python plan_orchestrator.py NVDA \"C:\\...\\logs\\260210\" 5000000 5% 長期 - 135")
+        print("  python plan_orchestrator.py NVDA \"C:\\...\\logs\\260210\" 長期")
+        print("  python plan_orchestrator.py 楽天 \"C:\\...\\Discusion\\logs\" 中期 5000000 50000")
+        print("  python plan_orchestrator.py NVDA \"C:\\...\\logs\\260210\" 長期 5000000 5% - 135")
         sys.exit(1)
 
-    if sys.argv[5] not in _HORIZON_MAP:
-        print(f"エラー: 期間 '{sys.argv[5]}' は無効です。'短期' / '中期' / '長期' のいずれかを指定してください。")
+    if sys.argv[3] not in _HORIZON_MAP:
+        print(f"エラー: 期間 '{sys.argv[3]}' は無効です。'短期' / '中期' / '長期' のいずれかを指定してください。")
         sys.exit(1)
 
     ticker = sys.argv[1]
     session_dir = sys.argv[2]
-    budget = int(sys.argv[3])
-    risk_limit = sys.argv[4]
-    horizon = _HORIZON_MAP[sys.argv[5]]
+    horizon = _HORIZON_MAP[sys.argv[3]]
+
+    # DB からデフォルト値を取得（CLI 引数で上書き可能）
+    _db_config = safe_db(get_portfolio_config) or {}
+    _db_holding = safe_db(get_holding, ticker) or {}
+
+    def _cli_or_db_int(idx: int, db_key: str, db_src: dict = _db_config) -> int:
+        if len(sys.argv) > idx and sys.argv[idx] != "-":
+            return int(sys.argv[idx])
+        val = db_src.get(db_key)
+        return int(val) if val is not None else 0
+
+    def _cli_or_db_float(idx: int, db_key: str, db_src: dict = _db_config) -> float:
+        if len(sys.argv) > idx and sys.argv[idx] != "-":
+            return float(sys.argv[idx])
+        val = db_src.get(db_key)
+        return float(val) if val is not None else 0.0
+
+    budget = _cli_or_db_int(4, "total_budget_jpy")
+    if len(sys.argv) > 5 and sys.argv[5] != "-":
+        risk_limit = sys.argv[5]
+    elif _db_config.get("risk_limit_pct") is not None:
+        risk_limit = f"{_db_config['risk_limit_pct']}%"
+    else:
+        risk_limit = "5%"
     current_price = _parse_optional_float(sys.argv, 6)
     anchor_price = _parse_optional_float(sys.argv, 7)
-    shares_held = int(sys.argv[8]) if len(sys.argv) > 8 else 0
-    avg_cost = float(sys.argv[9]) if len(sys.argv) > 9 else 0.0
-    cash = int(sys.argv[10]) if len(sys.argv) > 10 else 0
+    shares_held = _cli_or_db_int(8, "shares", _db_holding)
+    avg_cost = _cli_or_db_float(9, "avg_cost", _db_holding)
+    cash = _cli_or_db_int(10, "cash_jpy")
+
+    if budget == 0:
+        print("エラー: 予算が 0 です。CLI 引数または Supabase の portfolio_config を設定してください。")
+        sys.exit(1)
+
+    print(f"[設定] 予算={budget:,}円 リスク上限={risk_limit} 保有={shares_held}株 平均取得={avg_cost} 現金={cash:,}円")
+    if _db_config:
+        print(f"  (DB フォールバック有効)")
 
     anyio.run(lambda: run_plan_orchestrator(
         ticker, session_dir, budget, risk_limit, horizon,

@@ -5,15 +5,21 @@ Discussion / Planning 両プロジェクトから利用する。
 .env.local（プロジェクトルート）から認証情報を読み込み、
 テーブルごとのヘルパー関数を提供する。
 
+テーブル構成:
+  sessions         … 1実行=1行。lanes/final_judge/plan/monitor を JSONB で格納
+  portfolio_config … 投資設定（シングルトン）
+  holdings         … 保有銘柄
+
 使い方（各オーケストレーターから）:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "shared"))
-    from supabase_client import get_portfolio_config, get_holding, ...
+    from supabase_client import safe_db, create_session, update_session, ...
 """
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -22,6 +28,15 @@ from postgrest import SyncPostgrestClient
 
 _client: SyncPostgrestClient | None = None
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def safe_db(fn, *args, **kwargs):
+    """DB 呼び出しの安全ラッパー。失敗時は警告出力のみで None を返す。"""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        print(f"  [DB警告] {e}")
+        return None
 
 
 def get_client() -> SyncPostgrestClient:
@@ -101,21 +116,17 @@ def upsert_holding(ticker: str, **fields) -> dict:
     return resp.data[0] if resp.data else {}
 
 
-# ── sessions ─────────────────────────────────────────────
+# ── sessions（統合テーブル） ─────────────────────────────
 
-def create_session(
-    ticker: str, mode: str, horizon: str,
-    num_lanes: int, session_dir: str,
-) -> dict:
+def create_session(ticker: str, mode: str, horizon: str) -> dict:
+    """セッション作成。horizon は DB カラム span にマッピングされる。"""
     resp = (
         get_client()
         .from_("sessions")
         .insert({
             "ticker": ticker.upper(),
             "mode": mode,
-            "horizon": horizon,
-            "num_lanes": num_lanes,
-            "session_dir": session_dir,
+            "span": horizon,
             "status": "running",
         })
         .execute()
@@ -124,91 +135,32 @@ def create_session(
 
 
 def update_session(session_id: int, **fields) -> dict:
+    """セッション更新。jsonb カラム (lanes, final_judge, plan, monitor) は dict で渡す。"""
+    payload = {}
+    for k, v in fields.items():
+        if isinstance(v, dict):
+            payload[k] = json.dumps(v, ensure_ascii=False)
+        else:
+            payload[k] = v
     resp = (
         get_client()
         .from_("sessions")
-        .update(fields)
+        .update(payload)
         .eq("id", session_id)
         .execute()
     )
     return resp.data[0] if resp.data else {}
 
 
-def find_session_by_dir(session_dir: str) -> dict | None:
+def get_latest_session(ticker: str) -> dict | None:
+    """指定銘柄の最新セッションを取得。"""
     resp = (
         get_client()
         .from_("sessions")
         .select("*")
-        .eq("session_dir", session_dir)
+        .eq("ticker", ticker.upper())
+        .order("created_at", desc=True)
+        .limit(1)
         .execute()
     )
     return resp.data[0] if resp.data else None
-
-
-# ── discussion_logs ──────────────────────────────────────
-
-def insert_discussion_log(
-    session_id: int, ticker: str, lane_num: int, **fields,
-) -> dict:
-    row = {
-        "session_id": session_id,
-        "ticker": ticker.upper(),
-        "lane_num": lane_num,
-        **fields,
-    }
-    resp = get_client().from_("discussion_logs").insert(row).execute()
-    return resp.data[0]
-
-
-# ── judge_logs ───────────────────────────────────────────
-
-def insert_judge_log(
-    session_id: int, ticker: str, lane_num: int,
-    judge_num: int, agreement: str, **fields,
-) -> dict:
-    row = {
-        "session_id": session_id,
-        "ticker": ticker.upper(),
-        "lane_num": lane_num,
-        "judge_num": judge_num,
-        "agreement": agreement,
-        **fields,
-    }
-    resp = get_client().from_("judge_logs").insert(row).execute()
-    return resp.data[0]
-
-
-# ── final_judge_logs ─────────────────────────────────────
-
-def insert_final_judge_log(
-    session_id: int, ticker: str, verdict: str, **fields,
-) -> dict:
-    row = {
-        "session_id": session_id,
-        "ticker": ticker.upper(),
-        "verdict": verdict,
-        **fields,
-    }
-    resp = get_client().from_("final_judge_logs").insert(row).execute()
-    return resp.data[0]
-
-
-# ── plan_specs ───────────────────────────────────────────
-
-def insert_plan_spec(
-    ticker: str, plan_id: str, decision_final: str,
-    horizon: str, yaml_full: str,
-    session_id: int | None = None, **fields,
-) -> dict:
-    row = {
-        "ticker": ticker.upper(),
-        "plan_id": plan_id,
-        "decision_final": decision_final,
-        "horizon": horizon,
-        "yaml_full": yaml_full,
-        **fields,
-    }
-    if session_id is not None:
-        row["session_id"] = session_id
-    resp = get_client().from_("plan_specs").insert(row).execute()
-    return resp.data[0]
