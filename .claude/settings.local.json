@@ -46,7 +46,14 @@
       "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\" -m py_compile:*)",
       "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" -c \":*)",
       "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\" -c:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(uv sync:*)",
+      "Bash(/c/Users/osuim/Dev/Investment/Monitor/src/.venv/Scripts/python.exe:*)",
+      "Bash(CLAUDECODE= .venv/Scripts/python.exe:*)",
+      "Bash(/c/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(uv add:*)",
+      "Bash(git -C /c/Users/osuim/Dev/Investment/Monitor/src rev-parse --show-toplevel)"
     ]
   }
 }

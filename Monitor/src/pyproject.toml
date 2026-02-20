@@ -1,0 +1,12 @@
+[project]
+name = "monitor"
+version = "0.1.0"
+description = "投資プラン監視ツール"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk==0.1.31",
+    "anyio",
+    "pyyaml",
+    "python-dotenv",
+    "postgrest",
+]

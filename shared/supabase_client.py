@@ -164,3 +164,30 @@ def get_latest_session(ticker: str) -> dict | None:
         .execute()
     )
     return resp.data[0] if resp.data else None
+
+
+def get_latest_session_with_plan(ticker: str) -> dict | None:
+    """指定銘柄で plan が存在する最新の completed セッションを取得。"""
+    resp = (
+        get_client()
+        .from_("sessions")
+        .select("*")
+        .eq("ticker", ticker.upper())
+        .eq("status", "completed")
+        .not_.is_("plan", "null")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+# ── watchlist ─────────────────────────────────────────
+
+def list_watchlist(active_only: bool = True) -> list[dict]:
+    """監視対象の銘柄一覧を取得。"""
+    q = get_client().from_("watchlist").select("*")
+    if active_only:
+        q = q.eq("active", True)
+    resp = q.order("created_at").execute()
+    return resp.data
