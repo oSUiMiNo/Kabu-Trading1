@@ -73,7 +73,8 @@
       "Bash(powershell.exe -NoProfile -Command 'Get-ItemProperty \"\"HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\*\"\" | Where-Object { Write-Host $_.DisplayName $_.InstallLocation }')",
       "Bash(powershell.exe -NoProfile -Command 'Get-ItemProperty \"\"HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\*\"\" -ErrorAction SilentlyContinue | Select DisplayName, InstallLocation | ConvertTo-Json')",
       "Bash(python3:*)",
-      "Bash(powershell.exe -NoProfile -Command 'refreshenv; gh --version')"
+      "Bash(powershell.exe -NoProfile -Command 'refreshenv; gh --version')",
+      "Bash(echo:*)"
     ]
   }
 }

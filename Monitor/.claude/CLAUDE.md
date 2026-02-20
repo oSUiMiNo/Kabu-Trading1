@@ -14,9 +14,9 @@ watchlist に登録された銘柄について、既存の投資プランの前�
 ## 実行方法
 
 ```bash
-python src/ng_dispatch.py                    # 監視 → NG銘柄は自動でDiscussion再議論
+python src/ng_dispatch.py                    # 監視 → NG銘柄は自動でDiscussion→Planning
 python src/ng_dispatch.py --ticker NVDA      # 特定銘柄のみ
-python src/ng_dispatch.py --monitor-only     # 監視のみ（Discussion起動しない）
+python src/ng_dispatch.py --monitor-only     # 監視のみ（Discussion/Planning起動しない）
 python src/monitor_orchestrator.py           # 監視のみ（単体実行）
 ```
 
@@ -25,7 +25,7 @@ python src/monitor_orchestrator.py           # 監視のみ（単体実行）
 
 | ファイル | 役割 |
 |----------|------|
-| src/ng_dispatch.py | パイプライン（Monitor → Discussion） |
+| src/ng_dispatch.py | パイプライン（Monitor → Discussion → Planning） |
 | src/monitor_orchestrator.py | 監視オーケストレーター |
 | src/AgentUtil.py | Claude Agent SDK ユーティリティ（Discussionからコピー） |
 | .claude/commands/monitor-checker.md | 監視チェック用サブエージェント定義 |

@@ -1,13 +1,13 @@
 """
-NG ディスパッチャー（Monitor → Discussion パイプライン）
+NG ディスパッチャー（Monitor → Discussion → Planning パイプライン）
 
 Monitor を実行し、NG 判定が出た銘柄に対して
-Discussion（parallel_orchestrator）を自動起動する。
+Discussion（再議論）→ Planning（プラン再生成）を自動起動する。
 
 Usage:
-    python ng_dispatch.py              # watchlist 全銘柄を監視 → NG銘柄を再議論
+    python ng_dispatch.py              # watchlist 全銘柄を監視 → NG銘柄を再議論+再プラン
     python ng_dispatch.py --ticker NVDA # 特定銘柄のみ
-    python ng_dispatch.py --monitor-only # 監視のみ（Discussion は起動しない）
+    python ng_dispatch.py --monitor-only # 監視のみ（Discussion/Planning は起動しない）
 """
 import subprocess
 import sys
@@ -18,58 +18,51 @@ import anyio
 from monitor_orchestrator import run_monitor
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DISCUSSION_DIR = PROJECT_ROOT / "Discusion" / "src"
-DISCUSSION_VENV_PYTHON = DISCUSSION_DIR / ".venv" / "Scripts" / "python.exe"
-DISCUSSION_VENV_PYTHON_UNIX = DISCUSSION_DIR / ".venv" / "bin" / "python"
+PIPELINE_SCRIPT = PROJECT_ROOT / "discuss_and_plan.py"
 
 SPAN_TO_CLI = {"short": "short", "mid": "mid", "long": "long"}
 MODE_TO_CLI = {"buy": "buy", "sell": "sell"}
 
 
-def _get_python() -> str:
-    """Discussion の venv の Python パスを返す。"""
-    if DISCUSSION_VENV_PYTHON.exists():
-        return str(DISCUSSION_VENV_PYTHON)
-    if DISCUSSION_VENV_PYTHON_UNIX.exists():
-        return str(DISCUSSION_VENV_PYTHON_UNIX)
-    return "python"
-
-
-def run_discussion(ticker: str, span: str, mode: str) -> int:
+def run_discuss_and_plan(ticker: str, span: str, mode: str) -> int:
     """
-    Discussion の parallel_orchestrator を subprocess で起動する。
+    discuss_and_plan.py（Discussion → Planning パイプライン）を subprocess で起動する。
 
     Returns:
         プロセスの exit code（0=正常）
     """
-    python = _get_python()
-    script = str(DISCUSSION_DIR / "parallel_orchestrator.py")
-    cmd = [python, script, ticker, SPAN_TO_CLI.get(span, "mid"), MODE_TO_CLI.get(mode, "buy")]
+    cmd = [
+        sys.executable,
+        str(PIPELINE_SCRIPT),
+        ticker,
+        SPAN_TO_CLI.get(span, "mid"),
+        MODE_TO_CLI.get(mode, "buy"),
+    ]
 
-    print(f"  [{ticker}] Discussion 起動: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(DISCUSSION_DIR))
+    print(f"  [{ticker}] Discussion → Planning 起動: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
 
 
 async def run_pipeline(target_ticker: str | None = None, monitor_only: bool = False):
-    """Monitor → Discussion パイプライン。"""
+    """Monitor → Discussion → Planning パイプライン。"""
     summary = await run_monitor(target_ticker)
 
     if not summary.ng_tickers:
         print()
-        print("NG 銘柄なし。Discussion は起動しません。")
+        print("NG 銘柄なし。Discussion/Planning は起動しません。")
         return
 
     print()
     print(f"{'='*60}")
-    print(f"=== NG 検出: {len(summary.ng_tickers)} 銘柄 → Discussion 起動 ===")
+    print(f"=== NG 検出: {len(summary.ng_tickers)} 銘柄 → Discussion → Planning 起動 ===")
     print(f"{'='*60}")
     for ng in summary.ng_tickers:
         print(f"  - {ng['ticker']} (mode={ng['mode']}, span={ng['span']})")
 
     if monitor_only:
         print()
-        print("--monitor-only: Discussion は起動しません。")
+        print("--monitor-only: Discussion/Planning は起動しません。")
         return
 
     print()
@@ -79,14 +72,14 @@ async def run_pipeline(target_ticker: str | None = None, monitor_only: bool = Fa
         mode = ng["mode"]
 
         print(f"{'='*60}")
-        print(f"=== [{ticker}] Discussion 再議論開始 ===")
+        print(f"=== [{ticker}] Discussion → Planning 開始 ===")
         print(f"{'='*60}")
 
-        exit_code = run_discussion(ticker, span, mode)
+        exit_code = run_discuss_and_plan(ticker, span, mode)
         if exit_code == 0:
-            print(f"  [{ticker}] Discussion 完了")
+            print(f"  [{ticker}] Discussion → Planning 完了")
         else:
-            print(f"  [{ticker}] Discussion エラー (exit code: {exit_code})")
+            print(f"  [{ticker}] Discussion → Planning エラー (exit code: {exit_code})")
         print()
 
     print(f"{'='*60}")
