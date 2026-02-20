@@ -24,14 +24,13 @@ from final_judge_orchestrator import run_final_judge_orchestrator
 
 SET_THEMES: dict[int, str] = {
     1: "ファンダメンタル（事業・決算・バリュエーション）",
-    2: "カタリスト＆リスク（ニュース・イベント・規制・マクロ）",
-    3: "テクニカル＆需給（タイミングとリスク管理）",
+    2: "カタリスト＆リスク（ニュース・イベント・規制・マクロ＆テクニカル・需給）",
 }
 
 
 async def run_parallel(
     ticker: str,
-    num_sets: int = 3,
+    num_sets: int = 2,
     max_rounds: int = 6,
     initial_prompt: str | None = None,
     opinions_per_set: int = 2,
@@ -184,7 +183,7 @@ if __name__ == "__main__":
     horizon = _horizon_map[sys.argv[2]]
     _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
-    num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else 3
+    num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else 2
     max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else 6
     opinions_per_set = int(sys.argv[6]) if len(sys.argv) > 6 else 2
     initial_prompt = sys.argv[7] if len(sys.argv) > 7 else None

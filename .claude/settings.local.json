@@ -74,7 +74,12 @@
       "Bash(powershell.exe -NoProfile -Command 'Get-ItemProperty \"\"HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\*\"\" -ErrorAction SilentlyContinue | Select DisplayName, InstallLocation | ConvertTo-Json')",
       "Bash(python3:*)",
       "Bash(powershell.exe -NoProfile -Command 'refreshenv; gh --version')",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(claude --model haiku --print:*)",
+      "Bash(CLAUDECODE= claude --model haiku --print \"say just the word hello\")",
+      "Bash(CLAUDECODE= claude --model claude-haiku-4-5 --print \"say just the word hello\")",
+      "Bash(CLAUDECODE= claude --model claude-haiku-4-5 --print --verbose \"say just: hello\")",
+      "Bash(CLAUDECODE= claude --model claude-haiku-4-5 --output-format json --print \"say: hi\")"
     ]
   }
 }
