@@ -184,10 +184,12 @@ def get_latest_session_with_plan(ticker: str) -> dict | None:
 
 # ── watchlist ─────────────────────────────────────────
 
-def list_watchlist(active_only: bool = True) -> list[dict]:
-    """監視対象の銘柄一覧を取得。"""
+def list_watchlist(active_only: bool = True, market: str | None = None) -> list[dict]:
+    """監視対象の銘柄一覧を取得。market='US'/'JP' で市場フィルタ。"""
     q = get_client().from_("watchlist").select("*")
     if active_only:
         q = q.eq("active", True)
+    if market:
+        q = q.eq("market", market.upper())
     resp = q.order("created_at").execute()
     return resp.data

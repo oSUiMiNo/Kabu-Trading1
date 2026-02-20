@@ -5,9 +5,11 @@ Monitor を実行し、NG 判定が出た銘柄に対して
 Discussion（再議論）→ Planning（プラン再生成）を自動起動する。
 
 Usage:
-    python ng_dispatch.py              # watchlist 全銘柄を監視 → NG銘柄を再議論+再プラン
-    python ng_dispatch.py --ticker NVDA # 特定銘柄のみ
-    python ng_dispatch.py --monitor-only # 監視のみ（Discussion/Planning は起動しない）
+    python ng_dispatch.py                  # watchlist 全銘柄を監視 → NG銘柄を再議論+再プラン
+    python ng_dispatch.py --market US      # 米国株のみ
+    python ng_dispatch.py --market JP      # 日本株のみ
+    python ng_dispatch.py --ticker NVDA    # 特定銘柄のみ
+    python ng_dispatch.py --monitor-only   # 監視のみ（Discussion/Planning は起動しない）
 """
 import subprocess
 import sys
@@ -44,9 +46,13 @@ def run_discuss_and_plan(ticker: str, span: str, mode: str) -> int:
     return result.returncode
 
 
-async def run_pipeline(target_ticker: str | None = None, monitor_only: bool = False):
+async def run_pipeline(
+    target_ticker: str | None = None,
+    monitor_only: bool = False,
+    market: str | None = None,
+):
     """Monitor → Discussion → Planning パイプライン。"""
-    summary = await run_monitor(target_ticker)
+    summary = await run_monitor(target_ticker, market=market)
 
     if not summary.ng_tickers:
         print()
@@ -90,12 +96,16 @@ async def run_pipeline(target_ticker: str | None = None, monitor_only: bool = Fa
 if __name__ == "__main__":
     target = None
     monitor_only = False
+    _market = None
 
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         if args[i] == "--ticker" and i + 1 < len(args):
             target = args[i + 1]
+            i += 2
+        elif args[i] == "--market" and i + 1 < len(args):
+            _market = args[i + 1].upper()
             i += 2
         elif args[i] == "--monitor-only":
             monitor_only = True
@@ -104,4 +114,4 @@ if __name__ == "__main__":
             target = args[i]
             i += 1
 
-    anyio.run(lambda: run_pipeline(target, monitor_only))
+    anyio.run(lambda: run_pipeline(target, monitor_only, _market))

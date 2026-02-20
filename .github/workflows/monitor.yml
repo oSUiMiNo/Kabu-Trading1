@@ -2,18 +2,28 @@ name: Monitor
 
 on:
   schedule:
-    # JST 7:00 = UTC 22:00 前日 (米国市場閉場後、東京寄付き2h前)
-    - cron: '0 22 * * 0-4'
-    # JST 16:30 = UTC 7:30 (東京市場閉場後、決算発表ピーク)
-    - cron: '30 7 * * 1-5'
+    # 日本株 10:10 JST = UTC 1:10 (月-金)
+    - cron: '10 1 * * 1-5'
+    # 日本株 16:00 JST = UTC 7:00 (月-金)
+    - cron: '0 7 * * 1-5'
+    # 米国株 0:00 JST = UTC 15:00 前日 (日-木 = JST月-金)
+    - cron: '0 15 * * 0-4'
+    # 米国株 6:30 JST = UTC 21:30 前日 (日-木 = JST月-金)
+    - cron: '30 21 * * 0-4'
+    # 週末 10:00 JST = UTC 1:00 (土日: 全銘柄一括)
+    - cron: '0 1 * * 0,6'
   workflow_dispatch:
     inputs:
+      market:
+        description: '市場フィルタ（US / JP / 空欄=全銘柄）'
+        required: false
+        type: string
       ticker:
         description: '特定銘柄のみチェック（空欄=全銘柄）'
         required: false
         type: string
       monitor_only:
-        description: '監視のみ（NG時にDiscussionを起動しない）'
+        description: '監視のみ（NG時にDiscussion/Planningを起動しない）'
         required: false
         type: boolean
         default: false
@@ -41,7 +51,32 @@ jobs:
         working-directory: Discusion/src
         run: uv sync
 
-      - name: Run Monitor → Discussion pipeline
+      - name: Install Planning dependencies
+        working-directory: Planning/src
+        run: uv sync
+
+      - name: Determine market from schedule
+        id: market
+        run: |
+          if [ -n "${{ inputs.market }}" ]; then
+            echo "value=${{ inputs.market }}" >> "$GITHUB_OUTPUT"
+          else
+            DOW_UTC=$(date -u +%u)  # 1=Mon ... 7=Sun
+            HOUR_UTC=$(date -u +%H)
+            # 土日(6,7) は全銘柄一括（market フィルタなし）
+            if [ "$DOW_UTC" = "6" ] || [ "$DOW_UTC" = "7" ]; then
+              echo "value=" >> "$GITHUB_OUTPUT"
+            # 平日: UTC 1:10, 7:00 → JP / UTC 15:00, 21:30 → US
+            elif [ "$HOUR_UTC" = "01" ] || [ "$HOUR_UTC" = "07" ]; then
+              echo "value=JP" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR_UTC" = "15" ] || [ "$HOUR_UTC" = "21" ]; then
+              echo "value=US" >> "$GITHUB_OUTPUT"
+            else
+              echo "value=" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Run Monitor → Discussion → Planning pipeline
         working-directory: Monitor/src
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -49,6 +84,10 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           ARGS=""
+          MARKET="${{ steps.market.outputs.value }}"
+          if [ -n "$MARKET" ]; then
+            ARGS="$ARGS --market $MARKET"
+          fi
           if [ -n "${{ inputs.ticker }}" ]; then
             ARGS="$ARGS --ticker ${{ inputs.ticker }}"
           fi

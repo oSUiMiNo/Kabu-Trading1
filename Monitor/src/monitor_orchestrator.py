@@ -5,8 +5,10 @@ watchlist テーブルの active 銘柄について、
 最新プランの前提が現在の市場状況で維持されているかをチェックする。
 
 Usage:
-    python monitor_orchestrator.py              # watchlist 全銘柄
-    python monitor_orchestrator.py --ticker NVDA # 特定銘柄のみ
+    python monitor_orchestrator.py                     # watchlist 全銘柄
+    python monitor_orchestrator.py --ticker NVDA        # 特定銘柄のみ
+    python monitor_orchestrator.py --market US          # 米国株のみ
+    python monitor_orchestrator.py --market JP          # 日本株のみ
 """
 import json
 import re
@@ -209,13 +211,17 @@ class MonitorSummary:
     total_cost: float = 0.0
 
 
-async def run_monitor(target_ticker: str | None = None) -> MonitorSummary:
-    """watchlist の全 active 銘柄をチェックする。"""
+async def run_monitor(
+    target_ticker: str | None = None,
+    market: str | None = None,
+) -> MonitorSummary:
+    """watchlist の active 銘柄をチェックする。market='US'/'JP' で市場フィルタ。"""
     now = datetime.now(JST)
     summary = MonitorSummary()
 
+    market_label = f" [{market}]" if market else ""
     print(f"{'='*60}")
-    print(f"=== Monitor オーケストレーター ===")
+    print(f"=== Monitor オーケストレーター{market_label} ===")
     print(f"=== {now.strftime('%Y-%m-%d %H:%M %Z')} ===")
     print(f"{'='*60}")
 
@@ -223,12 +229,12 @@ async def run_monitor(target_ticker: str | None = None) -> MonitorSummary:
         tickers = [target_ticker.upper()]
         print(f"  対象: {tickers[0]}（指定銘柄）")
     else:
-        watchlist = safe_db(list_watchlist, active_only=True)
+        watchlist = safe_db(list_watchlist, active_only=True, market=market)
         if not watchlist:
-            print("  watchlist に active な銘柄がありません。終了します。")
+            print(f"  watchlist に active な銘柄がありません{market_label}。終了します。")
             return summary
         tickers = [w["ticker"] for w in watchlist]
-        print(f"  対象: {len(tickers)} 銘柄")
+        print(f"  対象: {len(tickers)} 銘柄{market_label}")
         for t in tickers:
             print(f"    - {t}")
 
@@ -264,10 +270,18 @@ async def run_monitor(target_ticker: str | None = None) -> MonitorSummary:
 
 if __name__ == "__main__":
     target = None
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--ticker" and len(sys.argv) > 2:
-            target = sys.argv[2]
+    _market = None
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--ticker" and i + 1 < len(args):
+            target = args[i + 1]
+            i += 2
+        elif args[i] == "--market" and i + 1 < len(args):
+            _market = args[i + 1].upper()
+            i += 2
         else:
-            target = sys.argv[1]
+            target = args[i]
+            i += 1
 
-    anyio.run(lambda: run_monitor(target))
+    anyio.run(lambda: run_monitor(target, _market))
