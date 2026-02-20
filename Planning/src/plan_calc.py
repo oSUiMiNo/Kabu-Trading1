@@ -3,9 +3,12 @@
 
 youken.md セクション5 の固定ルールを Python で実装する。
 LLM は使わない。全て確定的な計算のみ。
+
+投資パラメータは Supabase portfolio_config テーブルから読み込む。
+DB値が取得できない場合はデフォルト値にフォールバックする。
 """
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
@@ -32,65 +35,115 @@ class Market(Enum):
 
 
 # ═══════════════════════════════════════════════════════
-# 定数テーブル（youken.md セクション5 からの直接転写）
+# コードに残す定数（市場ルール・数学的閾値）
 # ═══════════════════════════════════════════════════════
 
-# 5.1 価格ズレ許容幅（アンカー価格比）
-DEVIATION_OK_PCT: dict[Horizon, float] = {
-    Horizon.SHORT: 3.0,
-    Horizon.MID: 5.0,
-    Horizon.LONG: 7.0,
-}
-DEVIATION_BLOCK_PCT: float = 10.0
-
-# 5.2 ログの最大許容経過時間（鮮度）
-MAX_LOG_AGE_DAYS: dict[Horizon, int] = {
-    Horizon.SHORT: 2,
-    Horizon.MID: 7,
-    Horizon.LONG: 30,
-}
-
-# 5.3 損切り幅（期間別デフォルト）
-STOP_LOSS_PCT: dict[Horizon, float] = {
-    Horizon.SHORT: -4.0,
-    Horizon.MID: -8.0,
-    Horizon.LONG: -15.0,
-}
-STOP_LOSS_CAP_PCT: float = -20.0
-
-# 5.4 予算配分の基本ルール
-MAX_ALLOCATION_PCT: float = 10.0
-MAX_ALLOCATION_HIGH_PCT: float = 15.0  # confidence=HIGH のみ
-MIN_ALLOCATION_PCT: float = 2.0
-CASH_MIN_PCT: float = 25.0
-
-# 5.5 票差 → confidence
-# p = vote_for / (vote_for + vote_against)
+# 5.5 票差 → confidence（数学的閾値）
 CONFIDENCE_THRESHOLDS: list[tuple[float, Confidence]] = [
-    (5 / 6, Confidence.HIGH),  # p >= 5/6 ≈ 0.8333（例: 6-0, 5-1）
-    (2 / 3, Confidence.MED),   # 2/3 <= p < 5/6（例: 4-2）
-    (0.0, Confidence.LOW),     # p < 2/3（例: 3-2）
+    (5 / 6, Confidence.HIGH),
+    (2 / 3, Confidence.MED),
+    (0.0, Confidence.LOW),
 ]
 
-# 5.6 confidence → 配分倍率
-CONFIDENCE_MULTIPLIER: dict[Confidence, float] = {
-    Confidence.HIGH: 1.0,
-    Confidence.MED: 0.6,
-    Confidence.LOW: 0.3,
-}
-
-# 5.7 ロットサイズ
+# 5.7 ロットサイズ（取引所ルール）
 LOT_SIZE: dict[Market, int] = {
     Market.JP: 100,
     Market.US: 1,
 }
 
-# 7.2 monitoring intensity
+# 7.2 monitoring intensity（confidence→ラベル）
 MONITORING_INTENSITY: dict[Confidence, str] = {
     Confidence.HIGH: "STRONG",
     Confidence.MED: "NORMAL",
     Confidence.LOW: "LIGHT",
 }
+
+
+# ═══════════════════════════════════════════════════════
+# PlanConfig: DB由来の投資パラメータ
+# ═══════════════════════════════════════════════════════
+
+_HORIZON_KEY = {"short": Horizon.SHORT, "mid": Horizon.MID, "long": Horizon.LONG}
+_CONFIDENCE_KEY = {"high": Confidence.HIGH, "med": Confidence.MED, "low": Confidence.LOW}
+
+@dataclass
+class PlanConfig:
+    """portfolio_config テーブルから読み込む投資パラメータ。"""
+
+    deviation_ok_pct: dict[Horizon, float] = field(default_factory=lambda: {
+        Horizon.SHORT: 3.0, Horizon.MID: 5.0, Horizon.LONG: 7.0,
+    })
+    deviation_block_pct: float = 10.0
+
+    max_log_age_days: dict[Horizon, int] = field(default_factory=lambda: {
+        Horizon.SHORT: 2, Horizon.MID: 7, Horizon.LONG: 30,
+    })
+
+    stop_loss_pct: dict[Horizon, float] = field(default_factory=lambda: {
+        Horizon.SHORT: -4.0, Horizon.MID: -8.0, Horizon.LONG: -15.0,
+    })
+
+    max_allocation_pct: dict[Confidence, float] = field(default_factory=lambda: {
+        Confidence.HIGH: 15.0, Confidence.MED: 10.0, Confidence.LOW: 5.0,
+    })
+
+
+
+DEFAULT_CONFIG = PlanConfig()
+
+
+def _parse_horizon_jsonb(raw: dict | None, default: dict[Horizon, float | int]) -> dict[Horizon, float | int]:
+    """DB の JSONB {"short": x, "mid": y, "long": z} を dict[Horizon, ...] に変換。"""
+    if not raw or not isinstance(raw, dict):
+        return dict(default)
+    result = {}
+    for key, horizon in _HORIZON_KEY.items():
+        val = raw.get(key)
+        result[horizon] = type(list(default.values())[0])(val) if val is not None else default[horizon]
+    return result
+
+
+
+def _parse_confidence_jsonb(raw: dict | None, default: dict[Confidence, float]) -> dict[Confidence, float]:
+    """DB の JSONB {"high": x, "med": y, "low": z} を dict[Confidence, ...] に変換。"""
+    if not raw or not isinstance(raw, dict):
+        return dict(default)
+    result = {}
+    for key, conf in _CONFIDENCE_KEY.items():
+        val = raw.get(key)
+        result[conf] = float(val) if val is not None else default[conf]
+    return result
+
+
+def load_plan_config(db_config: dict | None) -> PlanConfig:
+    """portfolio_config テーブルの行（dict）から PlanConfig を生成する。
+
+    DB値が null / 欠損の場合はデフォルト値にフォールバックする。
+    """
+    if not db_config:
+        return PlanConfig()
+
+    defaults = DEFAULT_CONFIG
+
+    def _num(key: str, fallback: float) -> float:
+        val = db_config.get(key)
+        return float(val) if val is not None else fallback
+
+    return PlanConfig(
+        deviation_ok_pct=_parse_horizon_jsonb(
+            db_config.get("deviation_ok_pct"), defaults.deviation_ok_pct,
+        ),
+        deviation_block_pct=_num("deviation_block_pct", defaults.deviation_block_pct),
+        max_log_age_days=_parse_horizon_jsonb(
+            db_config.get("max_log_age_days"), defaults.max_log_age_days,
+        ),
+        stop_loss_pct=_parse_horizon_jsonb(
+            db_config.get("stop_loss_pct"), defaults.stop_loss_pct,
+        ),
+        max_allocation_pct=_parse_confidence_jsonb(
+            db_config.get("max_allocation_pct"), defaults.max_allocation_pct,
+        ),
+    )
 
 
 # ═══════════════════════════════════════════════════════
@@ -105,14 +158,14 @@ class FreshnessResult:
     status: str  # "OK" | "STALE_REEVALUATE"
 
 
-def check_freshness(log_date: datetime, now: datetime, horizon: Horizon) -> FreshnessResult:
-    """
-    ログ鮮度チェック（youken 5.2）
-
-    log_date から now までの経過日数が MAX_LOG_AGE_DAYS を超えていれば STALE_REEVALUATE。
-    """
+def check_freshness(
+    log_date: datetime, now: datetime, horizon: Horizon,
+    config: PlanConfig | None = None,
+) -> FreshnessResult:
+    """ログ鮮度チェック（youken 5.2）"""
+    cfg = config or DEFAULT_CONFIG
     age = (now - log_date).days
-    max_days = MAX_LOG_AGE_DAYS[horizon]
+    max_days = cfg.max_log_age_days[horizon]
     status = "OK" if age <= max_days else "STALE_REEVALUATE"
     return FreshnessResult(log_age_days=age, max_allowed_days=max_days, status=status)
 
@@ -129,37 +182,29 @@ class DeviationResult:
 
 
 def check_price_deviation(
-    current_price: float, anchor_price: float, horizon: Horizon
+    current_price: float, anchor_price: float, horizon: Horizon,
+    config: PlanConfig | None = None,
 ) -> DeviationResult:
-    """
-    価格ズレ判定（youken 5.1）
-
-    abs(current_price - anchor_price) / anchor_price * 100 を price_deviation_pct とする。
-    ±10%超 → BLOCK_REEVALUATE（停止→再評価要求）。
-    """
+    """価格ズレ判定（youken 5.1）"""
+    cfg = config or DEFAULT_CONFIG
     if anchor_price <= 0:
         deviation = 0.0
     else:
         deviation = abs(current_price - anchor_price) / anchor_price * 100
-    ok_pct = DEVIATION_OK_PCT[horizon]
-    status = "BLOCK_REEVALUATE" if deviation > DEVIATION_BLOCK_PCT else "OK"
+    ok_pct = cfg.deviation_ok_pct[horizon]
+    status = "BLOCK_REEVALUATE" if deviation > cfg.deviation_block_pct else "OK"
     return DeviationResult(
         anchor_price=anchor_price,
         current_price=current_price,
         price_deviation_pct=round(deviation, 2),
         deviation_ok_pct=ok_pct,
-        deviation_block_pct=DEVIATION_BLOCK_PCT,
+        deviation_block_pct=cfg.deviation_block_pct,
         status=status,
     )
 
 
 def calc_confidence(vote_for: int, vote_against: int) -> tuple[float, Confidence]:
-    """
-    票差 → confidence（youken 5.5）
-
-    p = vote_for / (vote_for + vote_against)
-    HIGH: p >= 0.83, MED: 0.67 <= p < 0.83, LOW: p < 0.67
-    """
+    """票差 → confidence（youken 5.5）"""
     total = vote_for + vote_against
     if total == 0:
         return 0.0, Confidence.LOW
@@ -174,7 +219,6 @@ def calc_confidence(vote_for: int, vote_against: int) -> tuple[float, Confidence
 class AllocationResult:
     """配分・株数計算結果"""
     budget_total_jpy: int
-    cash_reserved_jpy: int
     allocation_pct: float
     allocation_jpy: int
     market: Market
@@ -189,35 +233,15 @@ def calc_allocation(
     current_price: float,
     market: Market,
     risk_limit_jpy: int | None = None,
+    config: PlanConfig | None = None,
 ) -> AllocationResult:
-    """
-    配分・株数計算（youken 5.4, 5.6, 5.7）
+    """配分・株数計算（youken 5.4, 5.6, 5.7）"""
+    cfg = config or DEFAULT_CONFIG
 
-    1. cash_reserved = budget * CASH_MIN_PCT / 100
-    2. investable = budget - cash_reserved
-    3. max_pct を confidence で決定
-    4. allocation_pct = max_pct * confidence_multiplier
-    5. allocation_jpy = min(investable, budget * allocation_pct / 100)
-    6. risk_limit による制限（あれば）
-    7. shares = floor(allocation_jpy / current_price)
-    8. lot_size でフロア: shares = floor(shares / lot_size) * lot_size
-    9. shares == 0 なら NOT_EXECUTABLE_DUE_TO_LOT
-    """
-    cash_reserved = int(budget_total_jpy * CASH_MIN_PCT / 100)
-    investable = budget_total_jpy - cash_reserved
-
-    max_pct = MAX_ALLOCATION_HIGH_PCT if confidence == Confidence.HIGH else MAX_ALLOCATION_PCT
-    multiplier = CONFIDENCE_MULTIPLIER[confidence]
-    alloc_pct = max_pct * multiplier
-
-    # min_pct 下限チェック
-    if alloc_pct < MIN_ALLOCATION_PCT:
-        alloc_pct = MIN_ALLOCATION_PCT
+    alloc_pct = cfg.max_allocation_pct[confidence]
 
     alloc_jpy = int(budget_total_jpy * alloc_pct / 100)
-    alloc_jpy = min(alloc_jpy, investable)
 
-    # risk_limit 制限
     if risk_limit_jpy is not None:
         alloc_jpy = min(alloc_jpy, risk_limit_jpy)
 
@@ -233,7 +257,6 @@ def calc_allocation(
 
     return AllocationResult(
         budget_total_jpy=budget_total_jpy,
-        cash_reserved_jpy=cash_reserved,
         allocation_pct=round(alloc_pct, 2),
         allocation_jpy=alloc_jpy,
         market=market,

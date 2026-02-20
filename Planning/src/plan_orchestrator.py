@@ -8,16 +8,16 @@ monitoring_hint の reason, execution_notes) を生成させ、
 PlanSpec YAML を出力する。
 
 Usage:
-    python plan_orchestrator.py <銘柄> <セッションDir> <予算(円)> <リスク上限> <期間> [現在価格] [基準価格] [保有株数] [平均取得単価] [現金]
+    python plan_orchestrator.py <銘柄> <セッションDir> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格]
 
     現在価格を省略すると price-fetcher エージェントがWeb検索で自動取得する。
     基準価格を省略すると現在価格と同値（ズレ0%）になる。
     "-" を指定しても省略扱い。
 
 例:
-    python plan_orchestrator.py 楽天 "C:\\...\\Discusion\\logs" 5000000 50000 中期
-    python plan_orchestrator.py 楽天 "C:\\...\\Discusion\\logs" 5000000 50000 中期 950 930
-    python plan_orchestrator.py NVDA "C:\\...\\logs\\260210_1200" 5000000 5% 長期 - 135
+    python plan_orchestrator.py 楽天 "C:\\...\\Discusion\\logs" 中期
+    python plan_orchestrator.py 楽天 "C:\\...\\Discusion\\logs" 中期 5000000 50000
+    python plan_orchestrator.py NVDA "C:\\...\\logs\\260210_1200" 長期 5000000 5% - 135
 """
 import re
 import sys
@@ -29,18 +29,16 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
-    safe_db, get_portfolio_config, get_holding,
+    safe_db, get_portfolio_config,
     get_latest_session, update_session,
 )
 
 from AgentUtil import call_agent, load_debug_config
 from log_parser import SessionLogs, find_session_logs, parse_final_judge
 from plan_calc import (
-    Horizon, Market, Confidence,
+    Horizon, Market, Confidence, PlanConfig,
     check_freshness, check_price_deviation, calc_confidence, calc_allocation,
-    STOP_LOSS_PCT, STOP_LOSS_CAP_PCT, CONFIDENCE_MULTIPLIER,
-    MAX_ALLOCATION_PCT, MAX_ALLOCATION_HIGH_PCT, MIN_ALLOCATION_PCT, CASH_MIN_PCT,
-    MONITORING_INTENSITY,
+    load_plan_config, MONITORING_INTENSITY,
 )
 from plan_spec import PlanSpec, generate_plan_id, build_yaml, save_plan_spec
 
@@ -289,9 +287,7 @@ async def run_plan_orchestrator(
     horizon: str,
     current_price: float | None = None,
     anchor_price: float | None = None,
-    shares_held: int = 0,
-    avg_cost: float = 0.0,
-    cash: int = 0,
+    config: PlanConfig | None = None,
 ) -> Path | None:
     """
     Plan オーケストレーターのメイン関数。
@@ -312,6 +308,7 @@ async def run_plan_orchestrator(
     h = Horizon[horizon]
     market = detect_market(ticker)
     risk_jpy = parse_risk_limit(risk_limit, budget_total_jpy)
+    cfg = config or PlanConfig()
 
     print(f"{'='*60}")
     print(f"=== Plan オーケストレーター: {t} ===")
@@ -359,11 +356,11 @@ async def run_plan_orchestrator(
     print()
 
     # --- 2. 鮮度チェック ---
-    freshness = check_freshness(judgment.log_date, now, h)
+    freshness = check_freshness(judgment.log_date, now, h, config=cfg)
     print(f"  鮮度: {freshness.status}（{freshness.log_age_days}日 / 上限{freshness.max_allowed_days}日）")
 
     # --- 3. 価格ズレ判定 ---
-    deviation = check_price_deviation(current_price, anchor_price, h)
+    deviation = check_price_deviation(current_price, anchor_price, h, config=cfg)
     print(f"  価格ズレ: {deviation.price_deviation_pct}%（許容{deviation.deviation_ok_pct}% / ブロック{deviation.deviation_block_pct}%）→ {deviation.status}")
 
     # --- 4. confidence ---
@@ -371,7 +368,7 @@ async def run_plan_orchestrator(
     print(f"  confidence: {confidence.value}（p={p}）")
 
     # --- 5. 配分計算 ---
-    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy)
+    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy, config=cfg)
     print(f"  配分: {allocation.allocation_pct}% = {allocation.allocation_jpy:,}円")
     print(f"  株数: {allocation.quantity}（{allocation.market.value} lot={allocation.lot_size}）→ {allocation.status}")
     print()
@@ -410,16 +407,11 @@ async def run_plan_orchestrator(
         deviation_block_pct=deviation.deviation_block_pct,
         data_checks_status=deviation.status,
         # risk_defaults
-        stop_loss_pct=STOP_LOSS_PCT[h],
-        stop_loss_cap_pct=STOP_LOSS_CAP_PCT,
+        stop_loss_pct=cfg.stop_loss_pct[h],
         # allocation_policy
-        max_pct=MAX_ALLOCATION_HIGH_PCT if confidence == Confidence.HIGH else MAX_ALLOCATION_PCT,
-        min_pct=MIN_ALLOCATION_PCT,
-        cash_min_pct=CASH_MIN_PCT,
-        confidence_multiplier=CONFIDENCE_MULTIPLIER[confidence],
+        max_pct=cfg.max_allocation_pct[confidence],
         # portfolio_plan
         budget_total_jpy=allocation.budget_total_jpy,
-        cash_reserved_jpy=allocation.cash_reserved_jpy,
         allocation_pct=allocation.allocation_pct,
         allocation_jpy=allocation.allocation_jpy,
         market=market.value,
@@ -505,10 +497,11 @@ def _parse_optional_float(argv: list[str], idx: int) -> float | None:
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print("使い方: python plan_orchestrator.py <銘柄> <セッションDir> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格] [保有株数] [平均取得単価] [現金]")
+        print("使い方: python plan_orchestrator.py <銘柄> <セッションDir> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格]")
         print()
         print("  期間（必須）: '短期' / '中期' / '長期'")
-        print("  予算・リスク上限・保有株数等は省略時に Supabase DB から自動取得")
+        print("  予算・リスク上限は省略時に Supabase DB から自動取得")
+        print("  保有株数・平均取得単価は holdings テーブルから自動取得")
         print("  リスク上限: 円（例: 50000）または %（例: 5%）")
         print("  現在価格: 省略または '-' → Web検索で自動取得")
         print("  基準価格: 省略または '-' → 現在価格と同値（ズレ0%）")
@@ -529,8 +522,6 @@ if __name__ == "__main__":
 
     # DB からデフォルト値を取得（CLI 引数で上書き可能）
     _db_config = safe_db(get_portfolio_config) or {}
-    _db_holding = safe_db(get_holding, ticker) or {}
-
     def _cli_or_db_int(idx: int, db_key: str, db_src: dict = _db_config) -> int:
         if len(sys.argv) > idx and sys.argv[idx] != "-":
             return int(sys.argv[idx])
@@ -552,19 +543,19 @@ if __name__ == "__main__":
         risk_limit = "5%"
     current_price = _parse_optional_float(sys.argv, 6)
     anchor_price = _parse_optional_float(sys.argv, 7)
-    shares_held = _cli_or_db_int(8, "shares", _db_holding)
-    avg_cost = _cli_or_db_float(9, "avg_cost", _db_holding)
-    cash = _cli_or_db_int(10, "cash_jpy")
 
     if budget == 0:
         print("エラー: 予算が 0 です。CLI 引数または Supabase の portfolio_config を設定してください。")
         sys.exit(1)
 
-    print(f"[設定] 予算={budget:,}円 リスク上限={risk_limit} 保有={shares_held}株 平均取得={avg_cost} 現金={cash:,}円")
+    plan_config = load_plan_config(_db_config)
+
+    print(f"[設定] 予算={budget:,}円 リスク上限={risk_limit}")
     if _db_config:
         print(f"  (DB フォールバック有効)")
 
     anyio.run(lambda: run_plan_orchestrator(
         ticker, session_dir, budget, risk_limit, horizon,
-        current_price, anchor_price, shares_held, avg_cost, cash,
+        current_price, anchor_price,
+        config=plan_config,
     ))

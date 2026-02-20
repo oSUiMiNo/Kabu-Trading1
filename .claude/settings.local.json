@@ -86,7 +86,11 @@
       "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" --version)",
       "Bash(git status:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\" -m py_compile \"C:/Users/osuim/Dev/Investment/Planning/src/plan_calc.py\")",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\" -m py_compile \"C:/Users/osuim/Dev/Investment/Planning/src/plan_orchestrator.py\")",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Planning/src/.venv/Scripts/python.exe\" -m py_compile \"C:/Users/osuim/Dev/Investment/Planning/src/plan_spec.py\")",
+      "Bash(grep:*)"
     ]
   }
 }

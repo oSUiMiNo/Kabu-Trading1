@@ -44,17 +44,12 @@ class PlanSpec:
 
     # risk_defaults ブロック
     stop_loss_pct: float = 0.0
-    stop_loss_cap_pct: float = -20.0
 
     # allocation_policy ブロック
     max_pct: float = 10.0
-    min_pct: float = 2.0
-    cash_min_pct: float = 25.0
-    confidence_multiplier: float = 1.0
 
     # portfolio_plan ブロック
     budget_total_jpy: int = 0
-    cash_reserved_jpy: int = 0
     allocation_pct: float = 0.0
     allocation_jpy: int = 0
     market: str = "JP"
@@ -144,17 +139,12 @@ def build_yaml(spec: PlanSpec) -> str:
         )),
         ("risk_defaults", _ordered_dict(
             ("stop_loss_pct", spec.stop_loss_pct),
-            ("stop_loss_cap_pct", spec.stop_loss_cap_pct),
         )),
         ("allocation_policy", _ordered_dict(
             ("max_pct", spec.max_pct),
-            ("min_pct", spec.min_pct),
-            ("cash_min_pct", spec.cash_min_pct),
-            ("confidence_multiplier", spec.confidence_multiplier),
         )),
         ("portfolio_plan", _ordered_dict(
             ("budget_total_jpy", spec.budget_total_jpy),
-            ("cash_reserved_jpy", spec.cash_reserved_jpy),
             ("allocation_pct", spec.allocation_pct),
             ("allocation_jpy", spec.allocation_jpy),
             ("instrument_lot", _ordered_dict(
