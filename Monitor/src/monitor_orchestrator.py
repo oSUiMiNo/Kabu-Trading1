@@ -5,10 +5,11 @@ watchlist テーブルの active 銘柄について、
 最新プランの前提が現在の市場状況で維持されているかをチェックする。
 
 Usage:
-    python monitor_orchestrator.py                     # watchlist 全銘柄
-    python monitor_orchestrator.py --ticker NVDA        # 特定銘柄のみ
-    python monitor_orchestrator.py --market US          # 米国株のみ
-    python monitor_orchestrator.py --market JP          # 日本株のみ
+    python monitor_orchestrator.py                          # watchlist 全銘柄
+    python monitor_orchestrator.py --ticker NVDA             # 特定銘柄のみ
+    python monitor_orchestrator.py --market US               # 米国株のみ
+    python monitor_orchestrator.py --market JP               # 日本株のみ
+    python monitor_orchestrator.py --skip-span long          # 長期銘柄をスキップ
 """
 import json
 import re
@@ -214,14 +215,21 @@ class MonitorSummary:
 async def run_monitor(
     target_ticker: str | None = None,
     market: str | None = None,
+    skip_spans: set[str] | None = None,
 ) -> MonitorSummary:
-    """watchlist の active 銘柄をチェックする。market='US'/'JP' で市場フィルタ。"""
+    """watchlist の active 銘柄をチェックする。
+
+    Args:
+        market: 'US'/'JP' で市場フィルタ。
+        skip_spans: スキップする投資期間の集合（例: {'long'}）。
+    """
     now = datetime.now(JST)
     summary = MonitorSummary()
 
     market_label = f" [{market}]" if market else ""
+    skip_label = f" (skip: {','.join(skip_spans)})" if skip_spans else ""
     print(f"{'='*60}")
-    print(f"=== Monitor オーケストレーター{market_label} ===")
+    print(f"=== Monitor オーケストレーター{market_label}{skip_label} ===")
     print(f"=== {now.strftime('%Y-%m-%d %H:%M %Z')} ===")
     print(f"{'='*60}")
 
@@ -242,6 +250,14 @@ async def run_monitor(
 
     for ticker in tickers:
         session = safe_db(get_latest_session_with_plan, ticker)
+
+        if skip_spans and session:
+            span = session.get("span", "mid")
+            if span in skip_spans:
+                print(f"  [{ticker}] スキップ: {span} は対象外")
+                print()
+                continue
+
         result = await check_one_ticker(ticker)
         if result:
             summary.results[ticker] = result
@@ -271,6 +287,7 @@ async def run_monitor(
 if __name__ == "__main__":
     target = None
     _market = None
+    _skip_spans: set[str] = set()
     args = sys.argv[1:]
     i = 0
     while i < len(args):
@@ -280,8 +297,11 @@ if __name__ == "__main__":
         elif args[i] == "--market" and i + 1 < len(args):
             _market = args[i + 1].upper()
             i += 2
+        elif args[i] == "--skip-span" and i + 1 < len(args):
+            _skip_spans.add(args[i + 1].lower())
+            i += 2
         else:
             target = args[i]
             i += 1
 
-    anyio.run(lambda: run_monitor(target, _market))
+    anyio.run(lambda: run_monitor(target, _market, _skip_spans or None))

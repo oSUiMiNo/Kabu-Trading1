@@ -79,7 +79,14 @@
       "Bash(CLAUDECODE= claude --model haiku --print \"say just the word hello\")",
       "Bash(CLAUDECODE= claude --model claude-haiku-4-5 --print \"say just the word hello\")",
       "Bash(CLAUDECODE= claude --model claude-haiku-4-5 --print --verbose \"say just: hello\")",
-      "Bash(CLAUDECODE= claude --model claude-haiku-4-5 --output-format json --print \"say: hi\")"
+      "Bash(CLAUDECODE= claude --model claude-haiku-4-5 --output-format json --print \"say: hi\")",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:claudelog.com)",
+      "WebFetch(domain:docs.claude.com)",
+      "Bash(\"C:/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe\" --version)",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

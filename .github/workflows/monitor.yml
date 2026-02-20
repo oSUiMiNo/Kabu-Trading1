@@ -55,25 +55,31 @@ jobs:
         working-directory: Planning/src
         run: uv sync
 
-      - name: Determine market from schedule
-        id: market
+      - name: Determine market and frequency from schedule
+        id: schedule
         run: |
+          DOW_UTC=$(date -u +%u)  # 1=Mon ... 7=Sun
+          HOUR_UTC=$(date -u +%H)
+          MIN_UTC=$(date -u +%M)
+
+          # market 判定
           if [ -n "${{ inputs.market }}" ]; then
-            echo "value=${{ inputs.market }}" >> "$GITHUB_OUTPUT"
+            echo "market=${{ inputs.market }}" >> "$GITHUB_OUTPUT"
+          elif [ "$DOW_UTC" = "6" ] || [ "$DOW_UTC" = "7" ]; then
+            echo "market=" >> "$GITHUB_OUTPUT"
+          elif [ "$HOUR_UTC" = "01" ] || [ "$HOUR_UTC" = "07" ]; then
+            echo "market=JP" >> "$GITHUB_OUTPUT"
+          elif [ "$HOUR_UTC" = "15" ] || [ "$HOUR_UTC" = "21" ]; then
+            echo "market=US" >> "$GITHUB_OUTPUT"
           else
-            DOW_UTC=$(date -u +%u)  # 1=Mon ... 7=Sun
-            HOUR_UTC=$(date -u +%H)
-            # 土日(6,7) は全銘柄一括（market フィルタなし）
-            if [ "$DOW_UTC" = "6" ] || [ "$DOW_UTC" = "7" ]; then
-              echo "value=" >> "$GITHUB_OUTPUT"
-            # 平日: UTC 1:10, 7:00 → JP / UTC 15:00, 21:30 → US
-            elif [ "$HOUR_UTC" = "01" ] || [ "$HOUR_UTC" = "07" ]; then
-              echo "value=JP" >> "$GITHUB_OUTPUT"
-            elif [ "$HOUR_UTC" = "15" ] || [ "$HOUR_UTC" = "21" ]; then
-              echo "value=US" >> "$GITHUB_OUTPUT"
-            else
-              echo "value=" >> "$GITHUB_OUTPUT"
-            fi
+            echo "market=" >> "$GITHUB_OUTPUT"
+          fi
+
+          # 2回目の実行（JP 16:00=UTC 07:00, US 6:30=UTC 21:30）は長期をスキップ
+          if [ "$HOUR_UTC" = "07" ] || [ "$HOUR_UTC" = "21" ]; then
+            echo "skip_span=long" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip_span=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run Monitor → Discussion → Planning pipeline
@@ -84,9 +90,13 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           ARGS=""
-          MARKET="${{ steps.market.outputs.value }}"
+          MARKET="${{ steps.schedule.outputs.market }}"
+          SKIP="${{ steps.schedule.outputs.skip_span }}"
           if [ -n "$MARKET" ]; then
             ARGS="$ARGS --market $MARKET"
+          fi
+          if [ -n "$SKIP" ]; then
+            ARGS="$ARGS --skip-span $SKIP"
           fi
           if [ -n "${{ inputs.ticker }}" ]; then
             ARGS="$ARGS --ticker ${{ inputs.ticker }}"

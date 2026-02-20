@@ -5,11 +5,12 @@ Monitor を実行し、NG 判定が出た銘柄に対して
 Discussion（再議論）→ Planning（プラン再生成）を自動起動する。
 
 Usage:
-    python ng_dispatch.py                  # watchlist 全銘柄を監視 → NG銘柄を再議論+再プラン
-    python ng_dispatch.py --market US      # 米国株のみ
-    python ng_dispatch.py --market JP      # 日本株のみ
-    python ng_dispatch.py --ticker NVDA    # 特定銘柄のみ
-    python ng_dispatch.py --monitor-only   # 監視のみ（Discussion/Planning は起動しない）
+    python ng_dispatch.py                       # watchlist 全銘柄を監視 → NG銘柄を再議論+再プラン
+    python ng_dispatch.py --market US           # 米国株のみ
+    python ng_dispatch.py --market JP           # 日本株のみ
+    python ng_dispatch.py --skip-span long      # 長期銘柄をスキップ
+    python ng_dispatch.py --ticker NVDA         # 特定銘柄のみ
+    python ng_dispatch.py --monitor-only        # 監視のみ（Discussion/Planning は起動しない）
 """
 import subprocess
 import sys
@@ -50,9 +51,10 @@ async def run_pipeline(
     target_ticker: str | None = None,
     monitor_only: bool = False,
     market: str | None = None,
+    skip_spans: set[str] | None = None,
 ):
     """Monitor → Discussion → Planning パイプライン。"""
-    summary = await run_monitor(target_ticker, market=market)
+    summary = await run_monitor(target_ticker, market=market, skip_spans=skip_spans)
 
     if not summary.ng_tickers:
         print()
@@ -97,6 +99,7 @@ if __name__ == "__main__":
     target = None
     monitor_only = False
     _market = None
+    _skip_spans: set[str] = set()
 
     args = sys.argv[1:]
     i = 0
@@ -107,6 +110,9 @@ if __name__ == "__main__":
         elif args[i] == "--market" and i + 1 < len(args):
             _market = args[i + 1].upper()
             i += 2
+        elif args[i] == "--skip-span" and i + 1 < len(args):
+            _skip_spans.add(args[i + 1].lower())
+            i += 2
         elif args[i] == "--monitor-only":
             monitor_only = True
             i += 1
@@ -114,4 +120,4 @@ if __name__ == "__main__":
             target = args[i]
             i += 1
 
-    anyio.run(lambda: run_pipeline(target, monitor_only, _market))
+    anyio.run(lambda: run_pipeline(target, monitor_only, _market, _skip_spans or None))

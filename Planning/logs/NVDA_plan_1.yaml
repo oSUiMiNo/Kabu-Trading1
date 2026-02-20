@@ -1,0 +1,72 @@
+ticker: NVDA
+plan_id: 20260220-NVDA-001
+decision:
+  final: NO_BUY
+  vote:
+    for: 1
+    against: 3
+  horizon: MID
+  p: 0.25
+  confidence: LOW
+  decision_basis:
+  - fact_id: ''
+    source_id: ''
+    why_it_matters: Goldman Sachs は過去3年の下振れ率68%という実績不信により、FY27上振れ期待$67.6B の確度が脆く、Feb
+      25決算でのリセットリスク（下値50%以上）が決定打。
+  - fact_id: ''
+    source_id: ''
+    why_it_matters: Meta 2月17日発表は既知のサクセッションプラン定時発表であり、株価反応+2.1%（淡々）で市場織り込み済みを証明。カタリスト性が低い。
+  - fact_id: ''
+    source_id: ''
+    why_it_matters: AMD MI500 のサンプル配布は2027年予定（Q2 mid 5月末ではなく）であり、6月決算での競争脅威定量化は遅延・不確実化。待機判定の根拠が揺らぐ可能性。
+  - fact_id: ''
+    source_id: ''
+    why_it_matters: Hyperscaler AI Capex $600B は2026年の「年率ペース」であり、2H での成長鈍化・配分転換が自然。需要加速の永続性が脆く、ガイダンス据え置き時の下値非対称性が高い。
+  - fact_id: ''
+    source_id: ''
+    why_it_matters: Set2 での不一致（BUY vs NOT_BUY_WAIT）は Feb 25決算のイベント性解釈に起因。goldman revision
+      wave (Analyst 60-70% vs Devil 既織込) 、対中規制リスク時間軸 (近期 vs 中期) で根拠が相反。
+freshness:
+  log_age_days: 0
+  max_allowed_days: 7
+  status: OK
+data_checks:
+  anchor_price: 180.41
+  current_price: 180.41
+  price_deviation_pct: 0.0
+  deviation_ok_pct: 5.0
+  deviation_block_pct: 10.0
+  status: OK
+risk_defaults:
+  stop_loss_pct: -8.0
+  stop_loss_cap_pct: -20.0
+allocation_policy:
+  max_pct: 10.0
+  min_pct: 2.0
+  cash_min_pct: 25.0
+  confidence_multiplier: 0.3
+portfolio_plan:
+  budget_total_jpy: 1000000
+  cash_reserved_jpy: 250000
+  allocation_pct: 3.0
+  allocation_jpy: 30000
+  instrument_lot:
+    market: US
+    lot_size: 1
+    lot_policy: FLOOR_TO_LOT
+  quantity: 166
+  status: OK
+execution_plan:
+  order_style: ONE_SHOT
+  entry_rule: NEXT_BUSINESS_DAY_OPEN
+  notes:
+  - 自動発注はしない。通知とプラン提示のみ。
+  - 【重要警告】set1 での AMD MI500 根拠は実装スケジュール（2027年本格化）で損傷。6月決算での脅威定量化シナリオの確度が低下。
+  - 【価格ズレ警告】Goldman Sachs Feb 18 upside price target $250 ($261.84 旧目標 → 現在株価 $180.41比
+    +39% ポテンシャル）は既に Feb 25決算に織り込み始めている可能性。Feb 25後の修正 direction が分岐点。
+  - 【市況注記】中国 H200 export 規制は「米国承認 vs 中国実質禁止」の paradox で、Feb 25 CEO remarks の対中販売見通しが信頼性を著しく損傷。政治リスク（Feb-Mar
+    声明）で判定再評価が必須。
+monitoring_hint:
+  intensity: LIGHT
+  reason: Set1 AGREED（強根拠4点）で待機一致だが、Set2 DISAGREED で相反意見が BUY 76/100。Feb 25決算・Feb-Mar
+    政策声明で判定が逆転リスク高い。confidence LOW、freshness OK だが、AMD MI500実装遅延・China H200 実質禁止で根拠信頼度が低下。監視は決算前日まで「通知のみ」で軽度。
