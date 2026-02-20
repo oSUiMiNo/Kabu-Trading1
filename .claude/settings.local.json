@@ -53,7 +53,27 @@
       "Bash(/c/Users/osuim/Dev/Investment/Discusion/src/.venv/Scripts/python.exe:*)",
       "Bash(.venv/Scripts/pip install:*)",
       "Bash(uv add:*)",
-      "Bash(git -C /c/Users/osuim/Dev/Investment/Monitor/src rev-parse --show-toplevel)"
+      "Bash(git -C /c/Users/osuim/Dev/Investment/Monitor/src rev-parse --show-toplevel)",
+      "Bash(git -C:*)",
+      "Bash(gh repo view:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/GitHub CLI:/c/Program Files \\(x86\\)/GitHub CLI:/c/Users/osuim/AppData/Local/Programs/GitHub CLI\")",
+      "Bash(where.exe:*)",
+      "Bash(winget install:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/GitHub CLI\")",
+      "Bash(gh auth:*)",
+      "Bash(cmd.exe /c \"where gh\")",
+      "Bash(powershell.exe -Command \"\\(Get-Command gh -ErrorAction SilentlyContinue\\).Source\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Program Files'' -Filter ''gh.exe'' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 3 -ExpandProperty FullName\")",
+      "Bash(powershell.exe -Command \"[Environment]::GetEnvironmentVariable\\(''PATH'', ''Machine''\\)\")",
+      "Bash(tr:*)",
+      "Bash(powershell.exe -Command \"[Environment]::GetEnvironmentVariable\\(''PATH'', ''User''\\)\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\'' -Filter ''gh.exe'' -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty FullName\")",
+      "Bash(powershell.exe -NoProfile -Command \"& { Get-ChildItem ''C:\\\\Program Files'' -Directory | Where-Object { $_Name -like ''*GitHub*'' -or $_Name -like ''*gh*'' } | ForEach-Object { $_FullName } }\")",
+      "Bash(powershell.exe -NoProfile -Command 'dir \"\"C:\\\\Program Files \\(x86\\)\"\" -Dir | % { Write-Host $_.FullName }')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-ItemProperty \"\"HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\*\"\" | Where-Object { Write-Host $_.DisplayName $_.InstallLocation }')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-ItemProperty \"\"HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\*\"\" -ErrorAction SilentlyContinue | Select DisplayName, InstallLocation | ConvertTo-Json')",
+      "Bash(python3:*)",
+      "Bash(powershell.exe -NoProfile -Command 'refreshenv; gh --version')"
     ]
   }
 }

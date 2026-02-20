@@ -2,10 +2,10 @@ name: Monitor
 
 on:
   schedule:
-    # JST 9:00 = UTC 0:00 (東京市場 寄付き)
-    - cron: '0 0 * * 1-5'
-    # JST 21:00 = UTC 12:00 (米国市場 プレマーケット)
-    - cron: '0 12 * * 1-5'
+    # JST 7:00 = UTC 22:00 前日 (米国市場閉場後、東京寄付き2h前)
+    - cron: '0 22 * * 0-4'
+    # JST 16:30 = UTC 7:30 (東京市場閉場後、決算発表ピーク)
+    - cron: '30 7 * * 1-5'
   workflow_dispatch:
     inputs:
       ticker:
