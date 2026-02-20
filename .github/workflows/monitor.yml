@@ -12,11 +12,16 @@ on:
         description: '特定銘柄のみチェック（空欄=全銘柄）'
         required: false
         type: string
+      monitor_only:
+        description: '監視のみ（NG時にDiscussionを起動しない）'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -28,19 +33,26 @@ jobs:
       - name: Setup Python
         run: uv python install 3.12
 
-      - name: Install dependencies
+      - name: Install Monitor dependencies
         working-directory: Monitor/src
         run: uv sync
 
-      - name: Run monitor
+      - name: Install Discussion dependencies
+        working-directory: Discusion/src
+        run: uv sync
+
+      - name: Run Monitor → Discussion pipeline
         working-directory: Monitor/src
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          TICKER_ARG=""
+          ARGS=""
           if [ -n "${{ inputs.ticker }}" ]; then
-            TICKER_ARG="--ticker ${{ inputs.ticker }}"
+            ARGS="$ARGS --ticker ${{ inputs.ticker }}"
           fi
-          uv run python monitor_orchestrator.py $TICKER_ARG
+          if [ "${{ inputs.monitor_only }}" = "true" ]; then
+            ARGS="$ARGS --monitor-only"
+          fi
+          uv run python ng_dispatch.py $ARGS

@@ -11,6 +11,7 @@ Usage:
 import json
 import re
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -200,9 +201,18 @@ async def check_one_ticker(ticker: str) -> dict | None:
     return monitor_record
 
 
-async def run_monitor(target_ticker: str | None = None):
+@dataclass
+class MonitorSummary:
+    """run_monitor() の戻り値。NG銘柄のセッション情報を含む。"""
+    results: dict = field(default_factory=dict)
+    ng_tickers: list[dict] = field(default_factory=list)
+    total_cost: float = 0.0
+
+
+async def run_monitor(target_ticker: str | None = None) -> MonitorSummary:
     """watchlist の全 active 銘柄をチェックする。"""
     now = datetime.now(JST)
+    summary = MonitorSummary()
 
     print(f"{'='*60}")
     print(f"=== Monitor オーケストレーター ===")
@@ -216,7 +226,7 @@ async def run_monitor(target_ticker: str | None = None):
         watchlist = safe_db(list_watchlist, active_only=True)
         if not watchlist:
             print("  watchlist に active な銘柄がありません。終了します。")
-            return
+            return summary
         tickers = [w["ticker"] for w in watchlist]
         print(f"  対象: {len(tickers)} 銘柄")
         for t in tickers:
@@ -224,26 +234,32 @@ async def run_monitor(target_ticker: str | None = None):
 
     print()
 
-    results = {}
-    total_cost = 0.0
-
     for ticker in tickers:
+        session = safe_db(get_latest_session_with_plan, ticker)
         result = await check_one_ticker(ticker)
         if result:
-            results[ticker] = result
-            total_cost += result.get("cost_usd", 0) or 0
+            summary.results[ticker] = result
+            summary.total_cost += result.get("cost_usd", 0) or 0
+            if result.get("result") == "NG" and session:
+                summary.ng_tickers.append({
+                    "ticker": ticker,
+                    "mode": session.get("mode", "buy"),
+                    "span": session.get("span", "mid"),
+                })
         print()
+
+    ok_count = sum(1 for r in summary.results.values() if r.get("result") == "OK")
+    ng_count = len(summary.ng_tickers)
+    err_count = sum(1 for r in summary.results.values() if r.get("result") == "ERROR")
+    skip_count = len(tickers) - len(summary.results)
 
     print(f"{'='*60}")
     print(f"=== 完了 ===")
-    ok_count = sum(1 for r in results.values() if r.get("result") == "OK")
-    ng_count = sum(1 for r in results.values() if r.get("result") == "NG")
-    err_count = sum(1 for r in results.values() if r.get("result") == "ERROR")
-    skip_count = len(tickers) - len(results)
-
     print(f"  OK: {ok_count}, NG: {ng_count}, ERROR: {err_count}, SKIP: {skip_count}")
-    print(f"  合計コスト: ${total_cost:.4f}")
+    print(f"  合計コスト: ${summary.total_cost:.4f}")
     print(f"{'='*60}")
+
+    return summary
 
 
 if __name__ == "__main__":
