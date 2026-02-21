@@ -7,24 +7,29 @@ debug_prompt: |
 # show_options  : AIに渡すオプション（allowed_tools 等）
 # show_prompt   : AIに渡すプロンプト（共通システム / システム / プロンプト）
 # show_response : AIの回答テキスト
+# show_cost     : コスト（USD）
 
 # 議論
 discussion:
   show_options: false
   show_prompt: true
   show_response: false
+  show_cost: true
 # 監査
 opinion:
   show_options: false
   show_prompt: true
   show_response: false
+  show_cost: true
 # 監査ダブルチェックの判定
 judge:
   show_options: false
   show_prompt: true
   show_response: false
+  show_cost: true
 # 最終ジャッジ
 final_judge:
   show_options: false
   show_prompt: true
   show_response: false
+  show_cost: true

@@ -19,7 +19,7 @@ from supabase_client import safe_db, create_session, update_session
 
 from discussion_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
-from AgentUtil import side_ja
+from AgentUtil import side_ja, load_debug_config
 from final_judge_orchestrator import run_final_judge_orchestrator
 
 SET_THEMES: dict[int, str] = {
@@ -90,6 +90,7 @@ async def run_parallel(
     print(f"=== 全{num_sets}レーン完了 — 結果一覧 ===")
     print("=" * 70)
 
+    show_cost = load_debug_config("discussion").get("show_cost", False)
     total_cost = 0.0
     agreed_sets: list[int] = []
     disagreed_sets: list[int] = []
@@ -100,17 +101,19 @@ async def run_parallel(
             continue
         total_cost += r.合計コスト
 
+        cost_suffix = f"  ${r.合計コスト:.4f}" if show_cost else ""
         if r.一致度 == "AGREED":
             agreed_sets.append(r.レーン番号)
-            print(f"  レーン{r.レーン番号}: ✓ 一致 ({side_ja(r.支持側)})  ${r.合計コスト:.4f}")
+            print(f"  レーン{r.レーン番号}: ✓ 一致 ({side_ja(r.支持側)}){cost_suffix}")
         elif r.一致度 == "DISAGREED":
             disagreed_sets.append(r.レーン番号)
-            print(f"  レーン{r.レーン番号}: ✗ 不一致  ${r.合計コスト:.4f}")
+            print(f"  レーン{r.レーン番号}: ✗ 不一致{cost_suffix}")
         else:
             error_sets.append(r.レーン番号)
-            print(f"  レーン{r.レーン番号}: ⚠ エラー  ${r.合計コスト:.4f}")
+            print(f"  レーン{r.レーン番号}: ⚠ エラー{cost_suffix}")
 
-    print(f"\n  レーン合計コスト: ${total_cost:.4f}")
+    if show_cost:
+        print(f"\n  レーン合計コスト: ${total_cost:.4f}")
     print("=" * 70)
 
     if error_sets:

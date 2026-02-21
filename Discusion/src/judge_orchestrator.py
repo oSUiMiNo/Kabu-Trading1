@@ -99,16 +99,17 @@ async def run_single_judge(
     agent_file = AGENTS_DIR / "judge.md"
 
     dbg = load_debug_config("judge")
+    show_cost = dbg.pop("show_cost", False)
     result = await call_agent(
         prompt,
         file_path=str(agent_file),
-        show_cost=True,
+        show_cost=show_cost,
         show_tools=False,
         **dbg,
     )
 
     print(f"[レーン{set_num}] {label} 完了")
-    if result.cost:
+    if show_cost and result.cost:
         print(f"  コスト: ${result.cost:.4f}")
 
     # オーケストレーター側でファイル書き出し
@@ -169,6 +170,7 @@ async def run_judge_orchestrator(
     print(f"=== 全{total}件完了 — 判定結果一覧 ===")
     print("=" * 60)
 
+    show_cost = load_debug_config("judge").get("show_cost", False)
     total_cost = 0.0
     agreed_sets = []  # AGREEDのレーンを記録
     disagreed_sets = []  # DISAGREEDのレーンを記録
@@ -193,14 +195,16 @@ async def run_judge_orchestrator(
                 agreed_side = m_side.group(1)
 
         # 一致/不一致を判定
+        cost_suffix = f"  ${cost:.4f}" if show_cost else ""
         if agreement == "AGREED":
             agreed_sets.append(sn)
-            print(f"  レーン{sn} 判定#{jn}: ✓ 一致 ({side_ja(agreed_side)})  ${cost:.4f}")
+            print(f"  レーン{sn} 判定#{jn}: ✓ 一致 ({side_ja(agreed_side)}){cost_suffix}")
         else:
             disagreed_sets.append(sn)
-            print(f"  レーン{sn} 判定#{jn}: ✗ 不一致 → このレーンのフローは終了  ${cost:.4f}")
+            print(f"  レーン{sn} 判定#{jn}: ✗ 不一致 → このレーンのフローは終了{cost_suffix}")
 
-    print(f"\n  合計コスト: ${total_cost:.4f}")
+    if show_cost:
+        print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
 
     # --- 不一致レーンの処理 ---

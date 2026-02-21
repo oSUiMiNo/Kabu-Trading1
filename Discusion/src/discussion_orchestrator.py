@@ -191,16 +191,17 @@ async def run_discussion(
 
         # エージェント呼び出し
         dbg = load_debug_config("discussion")
+        show_cost = dbg.pop("show_cost", False)
         result: AgentResult = await call_agent(
             prompt,
             file_path=str(agent_file),
-            show_cost=True,
+            show_cost=show_cost,
             show_tools=False,
             **dbg,
         )
 
         print(f"---{lane_label} ラウンド{round_num} 完了 {'-' * 30}")
-        if result.cost:
+        if show_cost and result.cost:
             print(f"コスト: ${result.cost:.4f}")
 
         # オーケストレーター側でログに追記

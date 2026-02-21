@@ -55,7 +55,7 @@ def load_debug_config(phase: str) -> dict:
         {"show_options": bool, "show_prompt": bool, "show_response": bool}
         ファイルが無い or フェーズが未定義なら全て False。
     """
-    defaults = {"show_options": False, "show_prompt": False, "show_response": False}
+    defaults = {"show_options": False, "show_prompt": False, "show_response": False, "show_cost": False}
     if not DEBUG_CONFIG_PATH.exists():
         return defaults
     data = yaml.safe_load(DEBUG_CONFIG_PATH.read_text(encoding="utf-8")) or {}

@@ -282,15 +282,16 @@ async def run_final_judge_orchestrator(
 
     print(f"[全レーン] 最終判定 起動")
     dbg = load_debug_config("final_judge")
+    show_cost = dbg.pop("show_cost", False)
     result = await call_agent(
         prompt,
         file_path=str(agent_file),
-        show_cost=True,
+        show_cost=show_cost,
         show_tools=False,
         **dbg,
     )
     print(f"[全レーン] 最終判定 完了")
-    if result.cost:
+    if show_cost and result.cost:
         print(f"  コスト: ${result.cost:.4f}")
 
     # オーケストレーター側でログファイルに書き出し

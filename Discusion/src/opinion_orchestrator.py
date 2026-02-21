@@ -64,10 +64,11 @@ async def run_single_opinion(
     agent_file = AGENTS_DIR / "opinion.md"
 
     dbg = load_debug_config("opinion")
+    show_cost = dbg.pop("show_cost", False)
     result = await call_agent(
         prompt,
         file_path=str(agent_file),
-        show_cost=True,
+        show_cost=show_cost,
         show_tools=False,
         **dbg,
     )
@@ -132,6 +133,7 @@ async def run_opinion_orchestrator(
     print(f"=== 全{total}体完了 — 結果一覧 ===")
     print("=" * 60)
 
+    show_cost = load_debug_config("opinion").get("show_cost", False)
     total_cost = 0.0
     for idx, (sn, on) in enumerate(tasks):
         r = results[idx]
@@ -176,9 +178,11 @@ async def run_opinion_orchestrator(
             pos_label, neg_label = "売り", "売らない"
         else:
             pos_label, neg_label = "買い", "買わない"
-        print(f"  レーン{sn} 意見#{on}: {side_ja(side)}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis})  ${cost:.4f}")
+        cost_suffix = f"  ${cost:.4f}" if show_cost else ""
+        print(f"  レーン{sn} 意見#{on}: {side_ja(side)}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis}){cost_suffix}")
 
-    print(f"\n  合計コスト: ${total_cost:.4f}")
+    if show_cost:
+        print(f"\n  合計コスト: ${total_cost:.4f}")
     print("=" * 60)
 
     # --- Phase: Judge ---
