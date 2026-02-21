@@ -134,7 +134,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
 
 async def run_discussion(
     ticker: str,
-    max_rounds: int = 6,
+    max_rounds: int = 4,
     initial_prompt: str | None = None,
     log_path: Path | None = None,
     mode: str = "buy",
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     ticker = sys.argv[1]
     _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
     mode = _mode_map.get(sys.argv[2], "buy") if len(sys.argv) > 2 else "buy"
-    max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 6
+    max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 4
     initial_prompt = sys.argv[4] if len(sys.argv) > 4 else None
 
     anyio.run(lambda: run_discussion(ticker, max_rounds, initial_prompt, mode=mode))

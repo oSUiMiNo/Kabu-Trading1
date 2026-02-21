@@ -31,7 +31,7 @@ SET_THEMES: dict[int, str] = {
 async def run_parallel(
     ticker: str,
     num_sets: int = 2,
-    max_rounds: int = 6,
+    max_rounds: int = 4,
     initial_prompt: str | None = None,
     opinions_per_set: int = 2,
     mode: str = "buy",
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
     num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else 2
-    max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else 6
+    max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else 4
     opinions_per_set = int(sys.argv[6]) if len(sys.argv) > 6 else 2
     initial_prompt = sys.argv[7] if len(sys.argv) > 7 else None
 

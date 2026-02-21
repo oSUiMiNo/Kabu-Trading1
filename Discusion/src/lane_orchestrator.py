@@ -51,7 +51,7 @@ def get_set_log_path(ticker: str, set_num: int, session_dir: Path | None = None)
 async def run_lane(
     ticker: str,
     set_num: int,
-    max_rounds: int = 6,
+    max_rounds: int = 4,
     initial_prompt: str | None = None,
     opinions_per_lane: int = 2,
     mode: str = "buy",
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     set_num = int(sys.argv[2])
     _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
-    max_rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 6
+    max_rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 4
     opinions_per_lane = int(sys.argv[5]) if len(sys.argv) > 5 else 2
     initial_prompt = sys.argv[6] if len(sys.argv) > 6 else None
 
