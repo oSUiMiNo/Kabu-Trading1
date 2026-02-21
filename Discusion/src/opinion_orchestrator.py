@@ -34,6 +34,8 @@ def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str 
 
     if mode == "sell":
         mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論ログです。\n\n"
+    elif mode == "add":
+        mode_line = "【議論モード: 買い増し】買い増すべきか・買い増さないべきか（現状維持）の議論ログです。\n\n"
     else:
         mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論ログです。\n\n"
 
@@ -211,12 +213,12 @@ async def run_opinion_orchestrator(
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("使い方: python opinion_orchestrator.py <銘柄コード> [モード] [意見数]")
-        print("  モード: '買う' or '売る' (デフォルト: 買う)")
+        print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
         print("例: python opinion_orchestrator.py GOOGL 買う 2")
         sys.exit(1)
 
     ticker = sys.argv[1]
-    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "buy": "buy", "sell": "sell", "add": "add"}
     mode = _mode_map.get(sys.argv[2], "buy") if len(sys.argv) > 2 else "buy"
     opinions_per_set = int(sys.argv[3]) if len(sys.argv) > 3 else 2
 

@@ -47,10 +47,12 @@ def get_next_final_judge_num(ticker: str, session_dir: Path | None = None) -> in
 
 
 def _is_action_vote(side: str, mode: str) -> bool:
-    """supported_side がアクション側（BUY/SELL）かどうかを判定"""
+    """supported_side がアクション側（BUY/SELL/ADD）かどうかを判定"""
     s = side.upper()
     if mode == "buy":
         return "BUY" in s and "NOT_BUY" not in s
+    elif mode == "add":
+        return "ADD" in s and "NOT_ADD" not in s
     else:
         return "SELL" in s and "NOT_SELL" not in s
 
@@ -69,6 +71,7 @@ def compute_vote_tally(
 
     閾値:
       買うモード: 全会一致のみ BUY
+      買い増しモード: 全会一致のみ ADD
       売るモード: SELL票 ≥ ceil(全票数 × 2/3) なら SELL
 
     Returns:
@@ -91,10 +94,10 @@ def compute_vote_tally(
     total = action_votes + safe_votes
 
     if mode == "buy":
-        # 全会一致のみ BUY
         verdict = "BUY" if safe_votes == 0 and total > 0 else "NOT_BUY_WAIT"
+    elif mode == "add":
+        verdict = "ADD" if safe_votes == 0 and total > 0 else "NOT_ADD_HOLD"
     else:
-        # 2/3 以上で SELL
         threshold = math.ceil(total * 2 / 3) if total > 0 else 1
         verdict = "SELL" if action_votes >= threshold else "NOT_SELL_HOLD"
 
@@ -165,6 +168,8 @@ def build_final_judge_prompt(
 
     if mode == "sell":
         mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
+    elif mode == "add":
+        mode_line = "【議論モード: 買い増し】買い増すべきか・買い増さないべきか（現状維持）の議論です。\n\n"
     else:
         mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論です。\n\n"
 

@@ -50,7 +50,8 @@ async def run_parallel(
     t = ticker.upper()
 
     from discussion_orchestrator import _HORIZON_LABELS
-    mode_label = "売る/売らない" if mode == "sell" else "買う/買わない"
+    _mode_labels = {"sell": "売る/売らない", "add": "買い増す/買い増さない", "buy": "買う/買わない"}
+    mode_label = _mode_labels.get(mode, "買う/買わない")
     horizon_label = _HORIZON_LABELS.get(horizon, horizon)
     print(f"{'='*70}")
     print(f"=== {t} {num_sets}レーン ===")
@@ -176,7 +177,7 @@ if __name__ == "__main__":
         print("使い方: python parallel_orchestrator.py <銘柄コード> <投資期間> [モード] [レーン数] [最大ラウンド数] [意見数] [追加指示]")
         print()
         print("  投資期間（必須）: '短期' / '中期' / '長期'")
-        print("  モード: '買う' or '売る' (デフォルト: 買う)")
+        print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
         if len(sys.argv) >= 2 and (len(sys.argv) < 3 or sys.argv[2] not in _horizon_map):
             print()
             print(f"⚠ 投資期間が指定されていません。銘柄の直後に '短期' '中期' '長期' のいずれかを指定してください。")
@@ -184,7 +185,7 @@ if __name__ == "__main__":
 
     ticker = sys.argv[1]
     horizon = _horizon_map[sys.argv[2]]
-    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "buy": "buy", "sell": "sell", "add": "add"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
     num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else 2
     max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else 4

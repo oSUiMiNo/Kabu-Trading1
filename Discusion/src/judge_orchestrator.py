@@ -53,6 +53,8 @@ def build_judge_prompt(
 
     if mode == "sell":
         mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
+    elif mode == "add":
+        mode_line = "【議論モード: 買い増し】買い増すべきか・買い増さないべきか（現状維持）の議論です。\n\n"
     else:
         mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論です。\n\n"
 

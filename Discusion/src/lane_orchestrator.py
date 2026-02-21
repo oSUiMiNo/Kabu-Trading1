@@ -192,13 +192,13 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 3:
         print("使い方: python lane_orchestrator.py <銘柄コード> <レーン番号> [モード] [最大ラウンド数] [意見数] [追加指示]")
-        print("  モード: '買う' or '売る' (デフォルト: 買う)")
+        print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
         print("例: python lane_orchestrator.py NVDA 1 買う 6 2 '特にAI市場に注目して'")
         sys.exit(1)
 
     ticker = sys.argv[1]
     set_num = int(sys.argv[2])
-    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "buy": "buy", "sell": "sell", "add": "add"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
     max_rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 4
     opinions_per_lane = int(sys.argv[5]) if len(sys.argv) > 5 else 2

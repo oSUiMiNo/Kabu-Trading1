@@ -65,6 +65,8 @@ def _mode_directive(mode: str) -> str:
     """議論モードをプロンプト先頭に挿入する指示行を返す"""
     if mode == "sell":
         return "【議論モード: 売る】保有中の銘柄を「売るべきか・売らないべきか（保有継続）」で議論してください。\n\n"
+    if mode == "add":
+        return "【議論モード: 買い増し】保有中の銘柄を「買い増すべきか・買い増さないべきか（現状維持）」で議論してください。\n\n"
     return "【議論モード: 買う】この銘柄を「買うべきか・買わないべきか」で議論してください。\n\n"
 
 
@@ -149,7 +151,7 @@ async def run_discussion(
         max_rounds: 最大ラウンド数（Analyst + Devil's Advocate で2ラウンド = 1サイクル）
         initial_prompt: 初回Analystへの追加指示（省略可）
         log_path: ログファイルパス（省略時は logs/{TICKER}.md）
-        mode: 議論モード（"buy" = 買う/買わない、"sell" = 売る/売らない）
+        mode: 議論モード（"buy" = 買う/買わない、"sell" = 売る/売らない、"add" = 買い増す/買い増さない）
     """
     if log_path is None:
         log_path = get_log_path(ticker)
@@ -227,13 +229,14 @@ async def run_discussion(
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("使い方: python discussion_orchestrator.py <銘柄コード> [モード] [最大ラウンド数] [追加指示]")
-        print("  モード: '買う' or '売る' (デフォルト: 買う)")
-        print("例: python discussion_orchestrator.py NVDA 買う 6 '特にAI市場の競合状況に注目して'")
+        print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
+        print("例: python discussion_orchestrator.py NVDA 買う 4 '特にAI市場の競合状況に注目して'")
         print("例: python discussion_orchestrator.py NVDA 売る 4")
+        print("例: python discussion_orchestrator.py NVDA 買い増す 4")
         sys.exit(1)
 
     ticker = sys.argv[1]
-    _mode_map = {"買う": "buy", "売る": "sell", "buy": "buy", "sell": "sell"}
+    _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "buy": "buy", "sell": "sell", "add": "add"}
     mode = _mode_map.get(sys.argv[2], "buy") if len(sys.argv) > 2 else "buy"
     max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 4
     initial_prompt = sys.argv[4] if len(sys.argv) > 4 else None

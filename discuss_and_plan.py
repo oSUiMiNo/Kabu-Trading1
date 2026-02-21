@@ -8,12 +8,13 @@ Usage:
     python discuss_and_plan.py <銘柄> <期間> [モード]
 
     期間: '短期' / '中期' / '長期'
-    モード: '買う' / '売る' (デフォルト: 買う)
+    モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)
 
 例:
     python discuss_and_plan.py NVDA 中期
     python discuss_and_plan.py 楽天 長期 買う
     python discuss_and_plan.py AAPL 短期 売る
+    python discuss_and_plan.py NVDA 中期 買い増す
 """
 import re
 import subprocess
@@ -33,8 +34,8 @@ HORIZON_MAP = {
 HORIZON_TO_JP = {"short": "短期", "mid": "中期", "long": "長期"}
 
 MODE_MAP = {
-    "買う": "buy", "売る": "sell",
-    "buy": "buy", "sell": "sell",
+    "買う": "buy", "売る": "sell", "買い増す": "add",
+    "buy": "buy", "sell": "sell", "add": "add",
 }
 
 
@@ -102,7 +103,7 @@ def main():
         print("使い方: python discuss_and_plan.py <銘柄> <期間> [モード]")
         print()
         print("  期間（必須）: '短期' / '中期' / '長期'")
-        print("  モード:       '買う' / '売る' (デフォルト: 買う)")
+        print("  モード:       '買う' / '売る' / '買い増す' (デフォルト: 買う)")
         print()
         print("例:")
         print("  python discuss_and_plan.py NVDA 中期")
@@ -122,7 +123,8 @@ def main():
     mode_input = sys.argv[3] if len(sys.argv) > 3 else "buy"
     mode = MODE_MAP.get(mode_input, "buy")
 
-    mode_label = "売る" if mode == "sell" else "買う"
+    _mode_label_map = {"sell": "売る", "add": "買い増す", "buy": "買う"}
+    mode_label = _mode_label_map.get(mode, "買う")
 
     print(f"{'='*60}")
     print(f"=== Discussion → Planning パイプライン ===")
