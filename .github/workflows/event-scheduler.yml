@@ -1,0 +1,78 @@
+name: EventScheduler
+
+on:
+  schedule:
+    # 年次: 1月2日 00:00 UTC (JST 09:00)
+    - cron: '0 0 2 1 *'
+    # 月次: 毎月1日 00:00 UTC (JST 09:00)
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+    inputs:
+      command:
+        description: '実行コマンド（seed / annual / monthly）'
+        required: true
+        type: choice
+        options:
+          - monthly
+          - annual
+          - seed
+        default: monthly
+      months:
+        description: '月次取得の月数（デフォルト: 2）'
+        required: false
+        type: string
+        default: '2'
+
+jobs:
+  scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Setup Python
+        run: uv python install 3.12
+
+      - name: Install EventScheduler dependencies
+        working-directory: EventScheduler/src
+        run: uv sync
+
+      - name: Determine command from schedule
+        id: command
+        run: |
+          if [ -n "${{ inputs.command }}" ]; then
+            echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
+            echo "months=${{ inputs.months }}" >> "$GITHUB_OUTPUT"
+          else
+            DAY=$(date -u +%d)
+            MONTH=$(date -u +%m)
+            if [ "$MONTH" = "01" ] && [ "$DAY" = "02" ]; then
+              echo "cmd=annual" >> "$GITHUB_OUTPUT"
+              echo "months=12" >> "$GITHUB_OUTPUT"
+            else
+              echo "cmd=monthly" >> "$GITHUB_OUTPUT"
+              echo "months=2" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Run EventScheduler
+        working-directory: EventScheduler/src
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          CMD="${{ steps.command.outputs.cmd }}"
+          MONTHS="${{ steps.command.outputs.months }}"
+          if [ "$CMD" = "seed" ]; then
+            uv run python scheduler_orchestrator.py seed
+          elif [ "$CMD" = "annual" ]; then
+            uv run python scheduler_orchestrator.py annual
+          else
+            uv run python scheduler_orchestrator.py monthly --months "$MONTHS"
+          fi

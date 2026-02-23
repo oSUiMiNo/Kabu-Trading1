@@ -193,3 +193,158 @@ def list_watchlist(active_only: bool = True, market: str | None = None) -> list[
         q = q.eq("market", market.upper())
     resp = q.order("created_at").execute()
     return resp.data
+
+
+# ── event_master ─────────────────────────────────────────
+
+def upsert_event_master(event: dict) -> dict:
+    existing = (
+        get_client()
+        .from_("event_master")
+        .select("event_id")
+        .eq("event_id", event["event_id"])
+        .execute()
+    )
+    if existing.data:
+        resp = (
+            get_client()
+            .from_("event_master")
+            .update(event)
+            .eq("event_id", event["event_id"])
+            .execute()
+        )
+    else:
+        resp = get_client().from_("event_master").insert(event).execute()
+    return resp.data[0] if resp.data else {}
+
+
+def list_event_masters(region: str | None = None) -> list[dict]:
+    q = get_client().from_("event_master").select("*")
+    if region:
+        q = q.eq("region", region.upper())
+    resp = q.order("event_id").execute()
+    return resp.data
+
+
+# ── event_occurrence ─────────────────────────────────────
+
+def upsert_event_occurrence(occ: dict) -> dict:
+    existing = (
+        get_client()
+        .from_("event_occurrence")
+        .select("occurrence_id")
+        .eq("event_id", occ["event_id"])
+        .eq("scheduled_date_local", occ["scheduled_date_local"])
+        .execute()
+    )
+    if existing.data:
+        oid = existing.data[0]["occurrence_id"]
+        update_data = {k: v for k, v in occ.items() if k not in ("event_id", "scheduled_date_local")}
+        if update_data:
+            resp = (
+                get_client()
+                .from_("event_occurrence")
+                .update(update_data)
+                .eq("occurrence_id", oid)
+                .execute()
+            )
+        else:
+            resp = existing
+        result = resp.data[0] if resp.data else {}
+        result["occurrence_id"] = oid
+        return result
+    else:
+        resp = get_client().from_("event_occurrence").insert(occ).execute()
+        return resp.data[0] if resp.data else {}
+
+
+def list_event_occurrences(
+    event_id: str, from_date: str | None = None, to_date: str | None = None
+) -> list[dict]:
+    q = (
+        get_client()
+        .from_("event_occurrence")
+        .select("*")
+        .eq("event_id", event_id)
+    )
+    if from_date:
+        q = q.gte("scheduled_date_local", from_date)
+    if to_date:
+        q = q.lte("scheduled_date_local", to_date)
+    resp = q.order("scheduled_date_local").execute()
+    return resp.data
+
+
+# ── watch_schedule ───────────────────────────────────────
+
+def upsert_watch_schedule(watch: dict) -> dict:
+    existing = (
+        get_client()
+        .from_("watch_schedule")
+        .select("watch_id")
+        .eq("occurrence_id", watch["occurrence_id"])
+        .eq("watch_kind", watch["watch_kind"])
+        .eq("market", watch["market"])
+        .execute()
+    )
+    if existing.data:
+        wid = existing.data[0]["watch_id"]
+        update_data = {k: v for k, v in watch.items() if k not in ("occurrence_id", "watch_kind", "market")}
+        if update_data:
+            get_client().from_("watch_schedule").update(update_data).eq("watch_id", wid).execute()
+        return {"watch_id": wid}
+    else:
+        resp = get_client().from_("watch_schedule").insert(watch).execute()
+        return resp.data[0] if resp.data else {}
+
+
+def list_pending_watches(
+    from_utc: str, to_utc: str, market: str | None = None
+) -> list[dict]:
+    q = (
+        get_client()
+        .from_("watch_schedule")
+        .select("*, event_occurrence(event_id, scheduled_date_local)")
+        .eq("consumed", False)
+        .gte("watch_at_utc", from_utc)
+        .lte("watch_at_utc", to_utc)
+    )
+    if market:
+        q = q.eq("market", market.upper())
+    resp = q.order("watch_at_utc").execute()
+    return resp.data
+
+
+def mark_watch_consumed(watch_id: int) -> dict:
+    from datetime import datetime, timezone
+    resp = (
+        get_client()
+        .from_("watch_schedule")
+        .update({"consumed": True, "consumed_at": datetime.now(timezone.utc).isoformat()})
+        .eq("watch_id", watch_id)
+        .execute()
+    )
+    return resp.data[0] if resp.data else {}
+
+
+# ── ingest_run ───────────────────────────────────────────
+
+def create_ingest_run(run_type: str) -> dict:
+    resp = (
+        get_client()
+        .from_("ingest_run")
+        .insert({"run_type": run_type})
+        .execute()
+    )
+    return resp.data[0] if resp.data else {}
+
+
+def update_ingest_run(run_id: int, **fields) -> dict:
+    resp = (
+        get_client()
+        .from_("ingest_run")
+        .update(fields)
+        .eq("run_id", run_id)
+        .execute()
+    )
+    return resp.data[0] if resp.data else {}

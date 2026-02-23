@@ -1,0 +1,5 @@
+scheduler:
+  show_options: false
+  show_prompt: false
+  show_response: false
+  show_cost: true

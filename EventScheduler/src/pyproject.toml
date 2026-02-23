@@ -1,0 +1,15 @@
+[project]
+name = "event-scheduler"
+version = "0.1.0"
+description = "経済イベントスケジューラー"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk>=0.1.30",
+    "anyio",
+    "pyyaml",
+    "python-dotenv",
+    "postgrest>=0.19",
+]
+
+[dependency-groups]
+dev = []
