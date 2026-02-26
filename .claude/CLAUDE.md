@@ -11,6 +11,6 @@
 下記は現在の編集可・不可リストだ。不可のものを編集する際は必ずユーザに承認をもらうこと。
 
 @Discusion 編集不可
-@Monitor 編集不可
+@Monitor 編集可
 @Planning 編集不可
 @EventScheduler 編集可

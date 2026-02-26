@@ -1,0 +1,70 @@
+name: Event Monitor
+
+on:
+  schedule:
+    # 毎時 2,7,12,...,57分（5分間隔、毎時ちょうどを避ける）
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  event-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check for due watches
+        id: check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          pip install postgrest python-dotenv > /dev/null 2>&1
+          python Monitor/src/event_watch_check.py
+
+      # ── 以降は watch ありの場合のみ実行 ──
+
+      - name: Install uv
+        if: steps.check.outputs.has_watches == 'true'
+        uses: astral-sh/setup-uv@v4
+
+      - name: Setup uv Python
+        if: steps.check.outputs.has_watches == 'true'
+        run: uv python install 3.12
+
+      - name: Install Monitor dependencies
+        if: steps.check.outputs.has_watches == 'true'
+        working-directory: Monitor/src
+        run: uv sync
+
+      - name: Install Discussion dependencies
+        if: steps.check.outputs.has_watches == 'true'
+        working-directory: Discusion/src
+        run: uv sync
+
+      - name: Install Planning dependencies
+        if: steps.check.outputs.has_watches == 'true'
+        working-directory: Planning/src
+        run: uv sync
+
+      - name: Run Monitor pipeline for each market
+        if: steps.check.outputs.has_watches == 'true'
+        working-directory: Monitor/src
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          for MARKET in ${{ steps.check.outputs.markets }}; do
+            echo "============================================"
+            echo "=== Event Monitor: ${MARKET} market ==="
+            echo "============================================"
+            uv run python ng_dispatch.py --market "$MARKET"
+          done

@@ -26,7 +26,10 @@ flowchart TD
     DB2 --> WATCH["開催日から監視時刻を自動計算\n（発表5分後、20分後、翌朝 等）"]:::process
     WATCH --> DB3[("monitor_schedule")]:::db
 
-    DB3 --> DONE(["完了\nMonitor がこのデータを参照"]):::trigger
+    DB3 --> POLL["Event Monitor\n5分間隔で monitor_schedule を確認"]:::trigger
+    POLL --> DUE{期限到来の\nwatch あり？}:::decision
+    DUE -->|No| SKIP2["即終了"]:::process
+    DUE -->|Yes| MON["Monitor パイプライン起動\n対象市場の全銘柄をチェック"]:::trigger
     linkStyle default stroke-width:2px
 ```
 
@@ -176,6 +179,9 @@ flowchart LR
     GHA -->|"cron: 0 0 2 1 *\n毎年1/2 09:00 JST"| ANNUAL["annual\n12ヶ月分"]:::schedule
     GHA -->|"cron: 0 0 1 * *\n毎月1日 09:00 JST"| MONTHLY["monthly\n2ヶ月分"]:::schedule
     GHA -->|"workflow_dispatch"| MANUAL["手動実行\nseed / annual / monthly"]:::schedule
+
+    GHA2["GitHub Actions\n(Event Monitor)"]:::trigger
+    GHA2 -->|"cron: 2,7,...,57\n5分間隔"| CHECK["monitor_schedule\n確認 → watch あれば\nMonitor 起動"]:::schedule
     linkStyle default stroke-width:2px
 ```
 
