@@ -1,6 +1,38 @@
 # EventScheduler ワークフロー
 
-## 全体フロー
+## 概要フロー
+
+```mermaid
+%%{init: {'themeVariables': {'lineColor': '#777'}}}%%
+flowchart TD
+    classDef trigger fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef process fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
+    classDef agent fill:#FFF3E0,stroke:#E65100,color:#BF360C
+    classDef db fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
+    classDef decision fill:#FFFDE7,stroke:#F9A825,color:#F57F17
+
+    START(["定期実行 or 手動実行"]):::trigger
+    START --> SEED["16イベントの定義を DB に登録"]:::process
+    SEED --> DB1[("event_master")]:::db
+
+    DB1 --> LOOP["イベントごとに日程を取得"]:::process
+    LOOP --> AI["AI が公式サイトから\n開催日を収集"]:::agent
+    AI --> CHK{公式ソースで\n確認できた？}:::decision
+
+    CHK -->|No| SKIP["失敗理由を記録"]:::process
+    CHK -->|Yes| SAVE["開催日を DB に保存"]:::process
+    SAVE --> DB2[("event_occurrence")]:::db
+
+    DB2 --> WATCH["開催日から監視時刻を自動計算\n（発表5分後、20分後、翌朝 等）"]:::process
+    WATCH --> DB3[("watch_schedule")]:::db
+
+    DB3 --> DONE(["完了\nMonitor がこのデータを参照"]):::trigger
+    linkStyle default stroke-width:2px
+```
+
+---
+
+## 詳細フロー（開発リファレンス）
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#777'}}}%%

@@ -103,17 +103,20 @@ async def fetch_and_store_one(
         print(f"  [{event_id}] コスト: ${cost:.4f}")
 
     if not result or not result.text:
-        print(f"  [{event_id}] 警告: エージェント応答なし")
+        result_info["error"] = "エージェント応答なし"
+        print(f"  [{event_id}] 警告: {result_info['error']}")
         return result_info
 
     cal = parse_calendar_result(result.text)
     if not cal:
-        print(f"  [{event_id}] 警告: 結果パース失敗")
+        result_info["error"] = "結果パース失敗"
+        print(f"  [{event_id}] 警告: {result_info['error']}")
         return result_info
 
     if not cal.get("source_verified", False):
         err = cal.get("error", "不明")
-        print(f"  [{event_id}] 警告: ソース未確認 - {err}")
+        result_info["error"] = f"ソース未確認 - {err}"
+        print(f"  [{event_id}] 警告: {result_info['error']}")
         return result_info
 
     dates = cal.get("dates", [])
@@ -213,7 +216,8 @@ async def run_scheduler(run_type: str, months_ahead: int = 2) -> None:
                 success_count += 1
             else:
                 fail_count += 1
-                errors.append(f"{event['event_id']}: 取得失敗")
+                reason = info.get("error", "取得失敗")
+                errors.append(f"{event['event_id']}: {reason}")
         except Exception as e:
             fail_count += 1
             errors.append(f"{event['event_id']}: {e}")
