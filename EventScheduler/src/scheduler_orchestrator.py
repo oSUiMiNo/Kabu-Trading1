@@ -24,10 +24,10 @@ from supabase_client import (
     safe_db,
     upsert_event_master,
     list_event_masters,
-    upsert_event_occurrence,
-    upsert_watch_schedule,
-    create_ingest_run,
-    update_ingest_run,
+    upsert_event_date_time,
+    upsert_monitor_schedule,
+    create_scheduler_log,
+    update_scheduler_log,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -160,9 +160,9 @@ async def fetch_and_store_one(
                     press_utc = _local_to_utc(d, int(parts[0]), int(parts[1]), tz_name)
                     occ_data["press_start_utc"] = press_utc.isoformat()
 
-        occ_result = safe_db(upsert_event_occurrence, occ_data)
+        occ_result = safe_db(upsert_event_date_time, occ_data)
         if not occ_result or "occurrence_id" not in occ_result:
-            print(f"  [{event_id}] 警告: occurrence upsert 失敗 ({d_str})")
+            print(f"  [{event_id}] 警告: event_date_time upsert 失敗 ({d_str})")
             continue
 
         result_info["dates_count"] += 1
@@ -170,7 +170,7 @@ async def fetch_and_store_one(
         occ_for_watch = {**occ_data, "occurrence_id": occ_result["occurrence_id"]}
         watches = generate_watches(occ_for_watch, event, run_id)
         for w in watches:
-            safe_db(upsert_watch_schedule, w)
+            safe_db(upsert_monitor_schedule, w)
             result_info["watches_count"] += 1
 
     result_info["success"] = True
@@ -199,7 +199,7 @@ async def run_scheduler(run_type: str, months_ahead: int = 2) -> None:
 
     print(f"[2/4] 対象: {target_year}年 {target_months} 月\n")
 
-    ingest = safe_db(create_ingest_run, run_type)
+    ingest = safe_db(create_scheduler_log, run_type)
     run_id = ingest.get("run_id") if ingest else None
 
     events = EVENT_MASTERS
@@ -226,7 +226,7 @@ async def run_scheduler(run_type: str, months_ahead: int = 2) -> None:
 
     if run_id:
         safe_db(
-            update_ingest_run,
+            update_scheduler_log,
             run_id,
             finished_at=datetime.now(timezone.utc).isoformat(),
             events_processed=len(events),

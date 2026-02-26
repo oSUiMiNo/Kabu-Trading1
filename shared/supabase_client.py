@@ -226,12 +226,12 @@ def list_event_masters(region: str | None = None) -> list[dict]:
     return resp.data
 
 
-# ── event_occurrence ─────────────────────────────────────
+# ── event_date_time ──────────────────────────────────────
 
-def upsert_event_occurrence(occ: dict) -> dict:
+def upsert_event_date_time(occ: dict) -> dict:
     existing = (
         get_client()
-        .from_("event_occurrence")
+        .from_("event_date_time")
         .select("occurrence_id")
         .eq("event_id", occ["event_id"])
         .eq("scheduled_date_local", occ["scheduled_date_local"])
@@ -243,7 +243,7 @@ def upsert_event_occurrence(occ: dict) -> dict:
         if update_data:
             resp = (
                 get_client()
-                .from_("event_occurrence")
+                .from_("event_date_time")
                 .update(update_data)
                 .eq("occurrence_id", oid)
                 .execute()
@@ -254,16 +254,16 @@ def upsert_event_occurrence(occ: dict) -> dict:
         result["occurrence_id"] = oid
         return result
     else:
-        resp = get_client().from_("event_occurrence").insert(occ).execute()
+        resp = get_client().from_("event_date_time").insert(occ).execute()
         return resp.data[0] if resp.data else {}
 
 
-def list_event_occurrences(
+def list_event_date_times(
     event_id: str, from_date: str | None = None, to_date: str | None = None
 ) -> list[dict]:
     q = (
         get_client()
-        .from_("event_occurrence")
+        .from_("event_date_time")
         .select("*")
         .eq("event_id", event_id)
     )
@@ -275,12 +275,12 @@ def list_event_occurrences(
     return resp.data
 
 
-# ── watch_schedule ───────────────────────────────────────
+# ── monitor_schedule ─────────────────────────────────────
 
-def upsert_watch_schedule(watch: dict) -> dict:
+def upsert_monitor_schedule(watch: dict) -> dict:
     existing = (
         get_client()
-        .from_("watch_schedule")
+        .from_("monitor_schedule")
         .select("watch_id")
         .eq("occurrence_id", watch["occurrence_id"])
         .eq("watch_kind", watch["watch_kind"])
@@ -291,20 +291,20 @@ def upsert_watch_schedule(watch: dict) -> dict:
         wid = existing.data[0]["watch_id"]
         update_data = {k: v for k, v in watch.items() if k not in ("occurrence_id", "watch_kind", "market")}
         if update_data:
-            get_client().from_("watch_schedule").update(update_data).eq("watch_id", wid).execute()
+            get_client().from_("monitor_schedule").update(update_data).eq("watch_id", wid).execute()
         return {"watch_id": wid}
     else:
-        resp = get_client().from_("watch_schedule").insert(watch).execute()
+        resp = get_client().from_("monitor_schedule").insert(watch).execute()
         return resp.data[0] if resp.data else {}
 
 
-def list_pending_watches(
+def list_pending_monitors(
     from_utc: str, to_utc: str, market: str | None = None
 ) -> list[dict]:
     q = (
         get_client()
-        .from_("watch_schedule")
-        .select("*, event_occurrence(event_id, scheduled_date_local)")
+        .from_("monitor_schedule")
+        .select("*, event_date_time(event_id, scheduled_date_local)")
         .eq("consumed", False)
         .gte("watch_at_utc", from_utc)
         .lte("watch_at_utc", to_utc)
@@ -315,11 +315,11 @@ def list_pending_watches(
     return resp.data
 
 
-def mark_watch_consumed(watch_id: int) -> dict:
+def mark_monitor_consumed(watch_id: int) -> dict:
     from datetime import datetime, timezone
     resp = (
         get_client()
-        .from_("watch_schedule")
+        .from_("monitor_schedule")
         .update({"consumed": True, "consumed_at": datetime.now(timezone.utc).isoformat()})
         .eq("watch_id", watch_id)
         .execute()
@@ -327,22 +327,22 @@ def mark_watch_consumed(watch_id: int) -> dict:
     return resp.data[0] if resp.data else {}
 
 
-# ── ingest_run ───────────────────────────────────────────
+# ── event_scheduler_log ──────────────────────────────────
 
-def create_ingest_run(run_type: str) -> dict:
+def create_scheduler_log(run_type: str) -> dict:
     resp = (
         get_client()
-        .from_("ingest_run")
+        .from_("event_scheduler_log")
         .insert({"run_type": run_type})
         .execute()
     )
     return resp.data[0] if resp.data else {}
 
 
-def update_ingest_run(run_id: int, **fields) -> dict:
+def update_scheduler_log(run_id: int, **fields) -> dict:
     resp = (
         get_client()
-        .from_("ingest_run")
+        .from_("event_scheduler_log")
         .update(fields)
         .eq("run_id", run_id)
         .execute()

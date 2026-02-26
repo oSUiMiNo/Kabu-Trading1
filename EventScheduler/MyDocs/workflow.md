@@ -21,10 +21,10 @@ flowchart TD
 
     CHK -->|No| SKIP["失敗理由を記録"]:::process
     CHK -->|Yes| SAVE["開催日を DB に保存"]:::process
-    SAVE --> DB2[("event_occurrence")]:::db
+    SAVE --> DB2[("event_date_time")]:::db
 
     DB2 --> WATCH["開催日から監視時刻を自動計算\n（発表5分後、20分後、翌朝 等）"]:::process
-    WATCH --> DB3[("watch_schedule")]:::db
+    WATCH --> DB3[("monitor_schedule")]:::db
 
     DB3 --> DONE(["完了\nMonitor がこのデータを参照"]):::trigger
     linkStyle default stroke-width:2px
@@ -80,7 +80,7 @@ flowchart TD
         MONTHS_A --> S2b
         MONTHS_M --> S2b
 
-        S2b["create_ingest_run()"] --> DB_RUN[("ingest_run\ninsert")]
+        S2b["create_event_scheduler_log()"] --> DB_RUN[("event_scheduler_log\ninsert")]
         S2b:::process
         DB_RUN:::db
 
@@ -121,9 +121,9 @@ flowchart TD
         F3_CHK -->|true| F4["日付ごとにループ"]
         F4:::process
 
-        F4 --> F5["upsert_event_occurrence()"]
+        F4 --> F5["upsert_event_date_time()"]
         F5:::process
-        F5 --> DB_OCC[("event_occurrence\nupsert")]
+        F5 --> DB_OCC[("event_date_time\nupsert")]
         DB_OCC:::db
 
         DB_OCC --> F6["generate_watches()"]
@@ -148,15 +148,15 @@ flowchart TD
             W6:::output
         end
 
-        F6a --> F7["upsert_watch_schedule()"]
+        F6a --> F7["upsert_monitor_schedule()"]
         F7:::process
-        F7 --> DB_WS[("watch_schedule\nupsert")]
+        F7 --> DB_WS[("monitor_schedule\nupsert")]
         DB_WS:::db
     end
 
-    FETCH --> S4["[4/4] update_ingest_run()"]
+    FETCH --> S4["[4/4] update_event_scheduler_log()"]
     S4:::process
-    S4 --> DB_RUN_UPD[("ingest_run\nupdate")]
+    S4 --> DB_RUN_UPD[("event_scheduler_log\nupdate")]
     DB_RUN_UPD:::db
     DB_RUN_UPD --> DONE(["完了"])
     DONE:::trigger
@@ -184,9 +184,9 @@ flowchart LR
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#777'}}}%%
 erDiagram
-    event_master ||--o{ event_occurrence : "has"
-    event_occurrence ||--o{ watch_schedule : "generates"
-    ingest_run ||--o{ watch_schedule : "created_by"
+    event_master ||--o{ event_date_time : "has"
+    event_date_time ||--o{ monitor_schedule : "generates"
+    event_scheduler_log ||--o{ monitor_schedule : "created_by"
 
     event_master {
         TEXT event_id PK
@@ -199,7 +199,7 @@ erDiagram
         BOOL jp_follow_required
     }
 
-    event_occurrence {
+    event_date_time {
         BIGINT occurrence_id PK
         TEXT event_id FK
         TIMESTAMPTZ scheduled_at_utc
@@ -208,7 +208,7 @@ erDiagram
         TIMESTAMPTZ press_start_utc
     }
 
-    watch_schedule {
+    monitor_schedule {
         BIGINT watch_id PK
         BIGINT occurrence_id FK
         TEXT market
@@ -218,7 +218,7 @@ erDiagram
         BIGINT created_by_run_id
     }
 
-    ingest_run {
+    event_scheduler_log {
         BIGINT run_id PK
         TEXT run_type
         INT success_count
