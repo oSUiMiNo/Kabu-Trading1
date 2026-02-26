@@ -61,6 +61,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          EVENT_CONTEXT: ${{ steps.check.outputs.event_details }}
         run: |
           for MARKET in ${{ steps.check.outputs.markets }}; do
             echo "============================================"

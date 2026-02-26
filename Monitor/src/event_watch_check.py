@@ -41,7 +41,8 @@ cutoff = now - timedelta(minutes=LOOKBACK_MINUTES)
 resp = (
     client.from_("monitor_schedule")
     .select("watch_id, watch_kind, market, watch_at_utc, occurrence_id, "
-            "event_date_time(event_id, scheduled_date_local)")
+            "event_date_time(event_id, scheduled_date_local, "
+            "event_master(name_ja))")
     .eq("consumed", False)
     .gte("watch_at_utc", cutoff.isoformat())
     .lte("watch_at_utc", now.isoformat())
@@ -87,5 +88,16 @@ for w in watches:
 markets = sorted(set(w["market"] for w in watches))
 print(f"\n対象市場: {markets}")
 
+event_details = []
+for w in watches:
+    evt = w.get("event_date_time") or {}
+    master = evt.get("event_master") or {}
+    event_details.append({
+        "event_id": evt.get("event_id", ""),
+        "name_ja": master.get("name_ja", ""),
+        "watch_kind": w.get("watch_kind", ""),
+    })
+
 write_output("has_watches", "true")
 write_output("markets", " ".join(markets))
+write_output("event_details", json.dumps(event_details, ensure_ascii=False))

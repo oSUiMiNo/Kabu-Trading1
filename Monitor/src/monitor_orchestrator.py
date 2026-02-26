@@ -130,8 +130,11 @@ def _extract_plan_price(plan: dict) -> float | None:
         return None
 
 
+MAX_MONITOR_RETRIES = 3
+
+
 async def check_one_ticker(ticker: str) -> dict | None:
-    """1銘柄に対する監視チェックを実行する。"""
+    """1銘柄に対する監視チェックを実行する。エージェント呼び出し〜パースを最大3回リトライ。"""
     now = datetime.now(JST)
 
     session = safe_db(get_latest_session_with_plan, ticker)
@@ -151,25 +154,69 @@ async def check_one_ticker(ticker: str) -> dict | None:
     print(f"  [{ticker}] チェック開始 (plan: {plan_id})")
 
     prompt = build_check_prompt(ticker, session)
-
     agent_file = AGENTS_DIR / "monitor-checker.md"
     dbg = load_debug_config("monitor")
-    result = await call_agent(
-        prompt, file_path=str(agent_file), show_cost=True, **dbg,
-    )
 
-    cost = result.cost if result else None
-    if cost:
-        print(f"  [{ticker}] コスト: ${cost:.4f}")
+    monitor_data = None
+    total_cost = 0.0
+    last_error = ""
 
-    if not result or not result.text:
-        print(f"  [{ticker}] 警告: エージェント応答なし")
-        return None
+    for attempt in range(1, MAX_MONITOR_RETRIES + 1):
+        if attempt > 1:
+            print(f"  [{ticker}] リトライ {attempt}/{MAX_MONITOR_RETRIES}")
 
-    monitor_data = parse_monitor_result(result.text)
-    if not monitor_data:
-        print(f"  [{ticker}] 警告: 結果パース失敗")
-        return None
+        try:
+            result = await call_agent(
+                prompt, file_path=str(agent_file), show_cost=True, **dbg,
+            )
+        except Exception as e:
+            last_error = f"エージェント呼び出し例外: {e}"
+            print(f"  [{ticker}] {last_error}")
+            continue
+
+        cost = result.cost if result else None
+        if cost:
+            total_cost += cost
+            print(f"  [{ticker}] コスト: ${cost:.4f}")
+
+        if not result or not result.text:
+            last_error = "エージェント応答なし"
+            print(f"  [{ticker}] 警告: {last_error}")
+            continue
+
+        parsed = parse_monitor_result(result.text)
+        if not parsed:
+            last_error = "結果パース失敗"
+            print(f"  [{ticker}] 警告: {last_error}")
+            continue
+
+        if parsed.get("result") == "ERROR":
+            last_error = parsed.get("summary", "result=ERROR")
+            print(f"  [{ticker}] 警告: {last_error}")
+            continue
+
+        monitor_data = parsed
+        break
+
+    if monitor_data is None:
+        print(f"  [{ticker}] リトライ上限到達 — ERROR として記録")
+        plan_price = _extract_plan_price(plan)
+        error_record = {
+            "checked_at": now.isoformat(),
+            "plan_id": plan_id,
+            "result": "ERROR",
+            "current_price": None,
+            "plan_price": plan_price,
+            "price_change_pct": None,
+            "summary": f"リトライ {MAX_MONITOR_RETRIES} 回失敗: {last_error}",
+            "risk_flags": [],
+            "cost_usd": total_cost or None,
+            "retries_exhausted": True,
+            "error_detail": last_error,
+        }
+        session_id = session["id"]
+        safe_db(update_session, session_id, monitor=error_record)
+        return error_record
 
     plan_price = _extract_plan_price(plan)
     current_price = monitor_data.get("current_price")
@@ -187,7 +234,7 @@ async def check_one_ticker(ticker: str) -> dict | None:
         "price_change_pct": price_change_pct,
         "summary": monitor_data.get("summary", ""),
         "risk_flags": monitor_data.get("risk_flags", []),
-        "cost_usd": cost,
+        "cost_usd": total_cost or None,
     }
 
     if monitor_data.get("result") == "NG":
