@@ -285,16 +285,29 @@ async def run_final_judge_orchestrator(
     prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, session_dir)
     agent_file = AGENTS_DIR / "final-judge.md"
 
+    MAX_AGENT_RETRIES = 3
     print(f"[全レーン] 最終判定 起動")
     dbg = load_debug_config("final_judge")
     show_cost = dbg.pop("show_cost", False)
-    result = await call_agent(
-        prompt,
-        file_path=str(agent_file),
-        show_cost=show_cost,
-        show_tools=False,
-        **dbg,
-    )
+
+    result = AgentResult()
+    for attempt in range(1, MAX_AGENT_RETRIES + 1):
+        if attempt > 1:
+            print(f"[全レーン] 最終判定 リトライ {attempt}/{MAX_AGENT_RETRIES}")
+        try:
+            result = await call_agent(
+                prompt,
+                file_path=str(agent_file),
+                show_cost=show_cost,
+                show_tools=False,
+                **dbg,
+            )
+            if result and result.text:
+                break
+            print(f"[全レーン] 最終判定 警告: 応答なし")
+        except Exception as e:
+            print(f"[全レーン] 最終判定 エラー: {e}")
+
     print(f"[全レーン] 最終判定 完了")
     if show_cost and result.cost:
         print(f"  コスト: ${result.cost:.4f}")

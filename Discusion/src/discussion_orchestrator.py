@@ -13,6 +13,8 @@ import anyio
 
 from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log
 
+MAX_AGENT_RETRIES = 3
+
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
@@ -191,16 +193,27 @@ async def run_discussion(
         if initial_prompt and round_num == start_round and role == "analyst":
             prompt = f"{initial_prompt}\n\n{prompt}"
 
-        # エージェント呼び出し
+        # エージェント呼び出し（リトライ付き）
         dbg = load_debug_config("discussion")
         show_cost = dbg.pop("show_cost", False)
-        result: AgentResult = await call_agent(
-            prompt,
-            file_path=str(agent_file),
-            show_cost=show_cost,
-            show_tools=False,
-            **dbg,
-        )
+
+        result = AgentResult()
+        for attempt in range(1, MAX_AGENT_RETRIES + 1):
+            if attempt > 1:
+                print(f"---{lane_label} ラウンド{round_num} リトライ {attempt}/{MAX_AGENT_RETRIES}")
+            try:
+                result = await call_agent(
+                    prompt,
+                    file_path=str(agent_file),
+                    show_cost=show_cost,
+                    show_tools=False,
+                    **dbg,
+                )
+                if result and result.text:
+                    break
+                print(f"---{lane_label} ラウンド{round_num} 警告: 応答なし")
+            except Exception as e:
+                print(f"---{lane_label} ラウンド{round_num} エラー: {e}")
 
         print(f"---{lane_label} ラウンド{round_num} 完了 {'-' * 30}")
         if show_cost and result.cost:

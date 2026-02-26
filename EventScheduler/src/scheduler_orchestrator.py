@@ -83,6 +83,9 @@ def parse_calendar_result(agent_output: str) -> dict | None:
     return None
 
 
+MAX_AGENT_RETRIES = 3
+
+
 async def fetch_and_store_one(
     event: dict,
     target_year: int,
@@ -96,27 +99,48 @@ async def fetch_and_store_one(
     agent_file = AGENTS_DIR / "calendar-fetcher.md"
     dbg = load_debug_config("scheduler")
 
-    result = await call_agent(prompt, file_path=str(agent_file), **dbg)
+    cal = None
+    total_cost = 0.0
+    last_error = ""
 
-    cost = result.cost if result else None
-    if cost:
-        print(f"  [{event_id}] コスト: ${cost:.4f}")
+    for attempt in range(1, MAX_AGENT_RETRIES + 1):
+        if attempt > 1:
+            print(f"  [{event_id}] リトライ {attempt}/{MAX_AGENT_RETRIES}")
 
-    if not result or not result.text:
-        result_info["error"] = "エージェント応答なし"
-        print(f"  [{event_id}] 警告: {result_info['error']}")
-        return result_info
+        try:
+            result = await call_agent(prompt, file_path=str(agent_file), **dbg)
+        except Exception as e:
+            last_error = f"エージェント呼び出し例外: {e}"
+            print(f"  [{event_id}] {last_error}")
+            continue
 
-    cal = parse_calendar_result(result.text)
+        cost = result.cost if result else None
+        if cost:
+            total_cost += cost
+            print(f"  [{event_id}] コスト: ${cost:.4f}")
+
+        if not result or not result.text:
+            last_error = "エージェント応答なし"
+            print(f"  [{event_id}] 警告: {last_error}")
+            continue
+
+        parsed = parse_calendar_result(result.text)
+        if not parsed:
+            last_error = "結果パース失敗"
+            print(f"  [{event_id}] 警告: {last_error}")
+            continue
+
+        if not parsed.get("source_verified", False):
+            last_error = f"ソース未確認 - {parsed.get('error', '不明')}"
+            print(f"  [{event_id}] 警告: {last_error}")
+            continue
+
+        cal = parsed
+        break
+
     if not cal:
-        result_info["error"] = "結果パース失敗"
-        print(f"  [{event_id}] 警告: {result_info['error']}")
-        return result_info
-
-    if not cal.get("source_verified", False):
-        err = cal.get("error", "不明")
-        result_info["error"] = f"ソース未確認 - {err}"
-        print(f"  [{event_id}] 警告: {result_info['error']}")
+        result_info["error"] = f"リトライ {MAX_AGENT_RETRIES} 回失敗: {last_error}"
+        print(f"  [{event_id}] {result_info['error']}")
         return result_info
 
     dates = cal.get("dates", [])

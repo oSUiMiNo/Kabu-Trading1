@@ -82,6 +82,9 @@ def build_judge_prompt(
     )
 
 
+MAX_AGENT_RETRIES = 3
+
+
 async def run_single_judge(
     ticker: str,
     set_num: int,
@@ -93,7 +96,7 @@ async def run_single_judge(
     mode: str = "buy",
     session_dir: Path | None = None,
 ) -> AgentResult:
-    """1体のjudgeエージェントを実行し、結果テキストをファイルに書き出す"""
+    """1体のjudgeエージェントを実行し、結果テキストをファイルに書き出す（最大3回リトライ）"""
     label = f"判定#{judge_num} (意見{opinion_a_num} vs 意見{opinion_b_num})"
     print(f"[レーン{set_num}] {label} 起動")
 
@@ -102,13 +105,24 @@ async def run_single_judge(
 
     dbg = load_debug_config("judge")
     show_cost = dbg.pop("show_cost", False)
-    result = await call_agent(
-        prompt,
-        file_path=str(agent_file),
-        show_cost=show_cost,
-        show_tools=False,
-        **dbg,
-    )
+
+    result = AgentResult()
+    for attempt in range(1, MAX_AGENT_RETRIES + 1):
+        if attempt > 1:
+            print(f"[レーン{set_num}] {label} リトライ {attempt}/{MAX_AGENT_RETRIES}")
+        try:
+            result = await call_agent(
+                prompt,
+                file_path=str(agent_file),
+                show_cost=show_cost,
+                show_tools=False,
+                **dbg,
+            )
+            if result and result.text:
+                break
+            print(f"[レーン{set_num}] {label} 警告: 応答なし")
+        except Exception as e:
+            print(f"[レーン{set_num}] {label} エラー: {e}")
 
     print(f"[レーン{set_num}] {label} 完了")
     if show_cost and result.cost:

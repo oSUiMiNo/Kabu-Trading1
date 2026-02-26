@@ -146,9 +146,12 @@ def _parse_price_result(agent_output: str) -> float | None:
     return None
 
 
+MAX_AGENT_RETRIES = 3
+
+
 async def _fetch_current_price(ticker: str, market: Market) -> float | None:
     """
-    price-fetcher エージェントを呼び出して現在価格を取得する。
+    price-fetcher エージェントを呼び出して現在価格を取得する（最大3回リトライ）。
 
     Returns:
         取得成功時は float、失敗時は None。
@@ -162,15 +165,28 @@ async def _fetch_current_price(ticker: str, market: Market) -> float | None:
 
     agent_file = AGENTS_DIR / "price-fetcher.md"
     dbg = load_debug_config("price_fetch")
-    result = await call_agent(prompt, file_path=str(agent_file), show_cost=True, **dbg)
 
-    if result and result.cost:
-        print(f"  コスト: ${result.cost:.4f}")
+    for attempt in range(1, MAX_AGENT_RETRIES + 1):
+        if attempt > 1:
+            print(f"  価格取得 リトライ {attempt}/{MAX_AGENT_RETRIES}")
+        try:
+            result = await call_agent(prompt, file_path=str(agent_file), show_cost=True, **dbg)
 
-    if not result or not result.text:
-        return None
+            if result and result.cost:
+                print(f"  コスト: ${result.cost:.4f}")
 
-    return _parse_price_result(result.text)
+            if not result or not result.text:
+                print(f"  価格取得 警告: 応答なし")
+                continue
+
+            price = _parse_price_result(result.text)
+            if price is not None:
+                return price
+            print(f"  価格取得 警告: パース失敗")
+        except Exception as e:
+            print(f"  価格取得 エラー: {e}")
+
+    return None
 
 
 # ═══════════════════════════════════════════════════════
@@ -433,23 +449,34 @@ async def run_plan_orchestrator(
             f"ログ鮮度超過（{freshness.log_age_days}日 > {freshness.max_allowed_days}日）: 再評価推奨"
         )
 
-    # --- 7. エージェント呼び出し（commentary 生成） ---
+    # --- 7. エージェント呼び出し（commentary 生成、リトライ付き） ---
     print(f">>> commentary 生成（plan-generator エージェント）")
     prompt = build_commentary_prompt(spec, judgment.raw_text, additional_file_paths)
     agent_file = AGENTS_DIR / "plan-generator.md"
 
     dbg = load_debug_config("plan")
-    result = await call_agent(prompt, file_path=str(agent_file), show_cost=True, **dbg)
 
-    if result and result.cost:
-        print(f"  コスト: ${result.cost:.4f}")
+    commentary_result = None
+    for attempt in range(1, MAX_AGENT_RETRIES + 1):
+        if attempt > 1:
+            print(f"  commentary 生成 リトライ {attempt}/{MAX_AGENT_RETRIES}")
+        try:
+            result = await call_agent(prompt, file_path=str(agent_file), show_cost=True, **dbg)
+            if result and result.cost:
+                print(f"  コスト: ${result.cost:.4f}")
+            if result and result.text:
+                commentary_result = result
+                break
+            print(f"  commentary 生成 警告: 応答なし")
+        except Exception as e:
+            print(f"  commentary 生成 エラー: {e}")
 
     # --- 8. commentary 反映 ---
-    if result and result.text:
-        _merge_commentary(spec, result.text)
+    if commentary_result and commentary_result.text:
+        _merge_commentary(spec, commentary_result.text)
         print(f"  commentary 反映完了")
     else:
-        print(f"  警告: エージェント応答なし。数値のみの PlanSpec を出力します")
+        print(f"  警告: 全リトライ失敗。数値のみの PlanSpec を出力します")
 
     # --- 9. 最終 YAML 保存 ---
     output_path = save_plan_spec(spec, LOGS_DIR)

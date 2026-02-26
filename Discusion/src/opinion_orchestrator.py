@@ -51,6 +51,9 @@ def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str 
     )
 
 
+MAX_AGENT_RETRIES = 3
+
+
 async def run_single_opinion(
     ticker: str,
     set_num: int,
@@ -58,7 +61,7 @@ async def run_single_opinion(
     mode: str = "buy",
     session_dir: Path | None = None,
 ) -> AgentResult:
-    """1体のopinionエージェントを実行"""
+    """1体のopinionエージェントを実行（最大3回リトライ）"""
     label = f"意見#{opinion_num}"
     print(f"[レーン{set_num}] {label} 起動")
 
@@ -67,17 +70,27 @@ async def run_single_opinion(
 
     dbg = load_debug_config("opinion")
     show_cost = dbg.pop("show_cost", False)
-    result = await call_agent(
-        prompt,
-        file_path=str(agent_file),
-        show_cost=show_cost,
-        show_tools=False,
-        **dbg,
-    )
 
-    print(f"[レーン{set_num}] {label} 完了")
+    for attempt in range(1, MAX_AGENT_RETRIES + 1):
+        if attempt > 1:
+            print(f"[レーン{set_num}] {label} リトライ {attempt}/{MAX_AGENT_RETRIES}")
+        try:
+            result = await call_agent(
+                prompt,
+                file_path=str(agent_file),
+                show_cost=show_cost,
+                show_tools=False,
+                **dbg,
+            )
+            if result and result.text:
+                print(f"[レーン{set_num}] {label} 完了")
+                return result
+            print(f"[レーン{set_num}] {label} 警告: 応答なし")
+        except Exception as e:
+            print(f"[レーン{set_num}] {label} エラー: {e}")
 
-    return result
+    print(f"[レーン{set_num}] {label} 全リトライ失敗")
+    return AgentResult()
 
 
 async def run_opinion_orchestrator(
