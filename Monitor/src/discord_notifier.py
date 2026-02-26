@@ -104,6 +104,19 @@ def build_embed(payload: NotifyPayload) -> dict:
             "fields": fields,
         }
 
+    if label == NotifyLabel.COMPLETE:
+        tickers = md.get("tickers", [])
+        count = len(tickers)
+        fields.append({"name": "チェック数", "value": f"{count} 銘柄", "inline": True})
+        if tickers:
+            fields.append({"name": "銘柄", "value": ", ".join(tickers), "inline": False})
+        return {
+            "title": title,
+            "description": "全銘柄のプランが現在の市場状況に対して有効です。",
+            "color": color,
+            "fields": fields,
+        }
+
     result_raw = md.get("result", "?")
     result_val = _RESULT_JA.get(result_raw, result_raw)
     current_price = md.get("current_price", "?")
@@ -198,7 +211,7 @@ def send_webhook(embed: dict) -> bool:
 
 async def notify(payload: NotifyPayload) -> bool:
     """サマリー生成 → Embed 構築 → Webhook 送信の統合関数。"""
-    if payload.label != NotifyLabel.ERROR:
+    if payload.label not in (NotifyLabel.ERROR, NotifyLabel.COMPLETE):
         summary = await generate_beginner_summary(payload)
         payload.beginner_summary = summary
 

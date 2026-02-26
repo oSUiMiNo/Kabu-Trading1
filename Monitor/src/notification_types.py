@@ -15,6 +15,7 @@ class NotifyLabel(Enum):
     GOOD_NEWS = "朗報"
     WARNING = "警告"
     CHECK = "確認"
+    COMPLETE = "完了"
     ERROR = "エラー"
 
 
@@ -23,8 +24,11 @@ LABEL_COLOR = {
     NotifyLabel.GOOD_NEWS: 0x00CC00,
     NotifyLabel.WARNING: 0xFFA500,
     NotifyLabel.CHECK: 0x3498DB,
+    NotifyLabel.COMPLETE: 0x2ECC71,
     NotifyLabel.ERROR: 0x808080,
 }
+
+MARKET_JA = {"US": "米国株", "JP": "日本株"}
 
 
 @dataclass

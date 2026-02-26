@@ -191,6 +191,50 @@ class TestBuildEmbed(unittest.TestCase):
         self.assertIn("発表5分後", event_field["value"])
 
 
+class TestCompleteEmbed(unittest.TestCase):
+    """【完了】通知の Embed テスト"""
+
+    def test_complete_us_embed(self):
+        payload = NotifyPayload(
+            label=NotifyLabel.COMPLETE,
+            ticker="米国株 全銘柄OK",
+            monitor_data={"tickers": ["NVDA", "AAPL", "TSLA"]},
+        )
+        embed = build_embed(payload)
+        self.assertEqual(embed["title"], "【完了】米国株 全銘柄OK")
+        self.assertEqual(embed["color"], LABEL_COLOR[NotifyLabel.COMPLETE])
+        self.assertIn("全銘柄のプランが現在の市場状況に対して有効です。", embed["description"])
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertIn("チェック数", field_names)
+        self.assertIn("銘柄", field_names)
+        count_field = next(f for f in embed["fields"] if f["name"] == "チェック数")
+        self.assertEqual(count_field["value"], "3 銘柄")
+        tickers_field = next(f for f in embed["fields"] if f["name"] == "銘柄")
+        self.assertEqual(tickers_field["value"], "NVDA, AAPL, TSLA")
+
+    def test_complete_jp_embed(self):
+        payload = NotifyPayload(
+            label=NotifyLabel.COMPLETE,
+            ticker="日本株 全銘柄OK",
+            monitor_data={"tickers": ["7203", "9984"]},
+        )
+        embed = build_embed(payload)
+        self.assertEqual(embed["title"], "【完了】日本株 全銘柄OK")
+        count_field = next(f for f in embed["fields"] if f["name"] == "チェック数")
+        self.assertEqual(count_field["value"], "2 銘柄")
+
+    def test_complete_no_new_plan_fields(self):
+        payload = NotifyPayload(
+            label=NotifyLabel.COMPLETE,
+            ticker="全銘柄 全銘柄OK",
+            monitor_data={"tickers": ["NVDA"]},
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertNotIn("── 新プラン ──", field_names)
+        self.assertNotIn("結果", field_names)
+
+
 class TestJapaneseTranslation(unittest.TestCase):
     """英語値が日本語に翻訳されているかのテスト"""
 

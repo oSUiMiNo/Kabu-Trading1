@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import safe_db, get_latest_session_with_plan
 
 from monitor_orchestrator import run_monitor
-from notification_types import NotifyLabel, NotifyPayload, classify_label
+from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA
 from discord_notifier import notify
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -127,6 +127,16 @@ async def run_pipeline(
     if not summary.ng_tickers:
         print()
         print("NG 銘柄なし。Discussion/Planning は起動しません。")
+        ok_tickers = [t for t, r in summary.results.items() if r.get("result") == "OK"]
+        if ok_tickers:
+            market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+            payload = NotifyPayload(
+                label=NotifyLabel.COMPLETE,
+                ticker=f"{market_name} 全銘柄OK",
+                monitor_data={"tickers": ok_tickers},
+                event_context=event_context,
+            )
+            await notify(payload)
         return
 
     print()
