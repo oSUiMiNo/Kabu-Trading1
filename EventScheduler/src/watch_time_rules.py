@@ -142,14 +142,6 @@ def generate_watches(
         watches.append(
             _make_watch(oid, market, release_utc + timedelta(minutes=20), "post_release_20m", run_id)
         )
-        if market == "EU":
-            watches.append(
-                _make_watch(oid, "US", release_utc + timedelta(minutes=5), "post_release_5m", run_id)
-            )
-            watches.append(
-                _make_watch(oid, "US", release_utc + timedelta(minutes=20), "post_release_20m", run_id)
-            )
-
     if category == "central_bank" and event.get("has_press_conference"):
         press_utc = occurrence.get("press_start_utc")
         if press_utc:
@@ -158,19 +150,11 @@ def generate_watches(
             watches.append(
                 _make_watch(oid, market, press_utc + timedelta(minutes=10), "post_press_10m", run_id)
             )
-            if market == "EU":
-                watches.append(
-                    _make_watch(oid, "US", press_utc + timedelta(minutes=10), "post_press_10m", run_id)
-                )
         elif release_utc:
             estimated_press = release_utc + timedelta(minutes=30)
             watches.append(
                 _make_watch(oid, market, estimated_press + timedelta(minutes=10), "post_press_10m", run_id)
             )
-            if market == "EU":
-                watches.append(
-                    _make_watch(oid, "US", estimated_press + timedelta(minutes=10), "post_press_10m", run_id)
-                )
 
     if event.get("jp_follow_required"):
         next_tse = next_trading_day(scheduled_date)
@@ -178,6 +162,10 @@ def generate_watches(
         watches.append(
             _make_watch(oid, "JP", jp_follow_utc, "jp_follow_tse_open", run_id)
         )
+        if market == "EU":
+            watches.append(
+                _make_watch(oid, "US", jp_follow_utc, "us_follow_tse_open", run_id)
+            )
 
     if event_id == "JP_BOJ":
         boj_midday_utc = _local_to_utc(scheduled_date, 12, 30, "Asia/Tokyo")
