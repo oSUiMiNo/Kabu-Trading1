@@ -26,13 +26,17 @@ _DECISION_JA = {
 }
 
 _RISK_FLAG_JA = {
-    "price_deviation_exceeded": "価格乖離超過",
+    "price_deviation_exceeded": "価格乖離超過（下落）",
     "basis_invalidated": "根拠崩壊",
     "new_regulatory_risk": "規制リスク",
     "earnings_miss": "決算未達",
     "sector_downturn": "セクター悪化",
     "macro_shock": "マクロショック",
     "management_change": "経営陣変更",
+    "price_surge_exceeded": "価格乖離超過（上昇）",
+    "target_reached": "目標価格到達",
+    "earnings_beat": "決算好調",
+    "concern_resolved": "懸念材料の解消",
 }
 
 _WATCH_KIND_JA = {
