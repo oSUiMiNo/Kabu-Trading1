@@ -191,7 +191,10 @@ def send_webhook(embed: dict) -> bool:
     req = urllib.request.Request(
         webhook_url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "InvestmentMonitor/1.0",
+        },
         method="POST",
     )
 
