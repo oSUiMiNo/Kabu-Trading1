@@ -15,7 +15,7 @@ from pathlib import Path
 import anyio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
-from supabase_client import safe_db, create_session, update_session
+from supabase_client import safe_db, create_session, update_session, get_discussion_config
 
 from discussion_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
@@ -30,13 +30,19 @@ SET_THEMES: dict[int, str] = {
 
 async def run_parallel(
     ticker: str,
-    num_sets: int = 2,
-    max_rounds: int = 4,
+    num_sets: int | None = None,
+    max_rounds: int | None = None,
     initial_prompt: str | None = None,
-    opinions_per_set: int = 2,
+    opinions_per_set: int | None = None,
     mode: str = "buy",
     horizon: str = "mid",
 ):
+    if num_sets is None or max_rounds is None or opinions_per_set is None:
+        disc_cfg = safe_db(get_discussion_config) or {}
+        num_sets = num_sets or disc_cfg.get("num_sets", 2)
+        max_rounds = max_rounds or disc_cfg.get("max_rounds", 4)
+        opinions_per_set = opinions_per_set or disc_cfg.get("opinions_per_set", 2)
+
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
     session_name = datetime.now().strftime("%y%m%d_%H%M")
@@ -187,9 +193,9 @@ if __name__ == "__main__":
     horizon = _horizon_map[sys.argv[2]]
     _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "buy": "buy", "sell": "sell", "add": "add"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
-    num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else 2
-    max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else 4
-    opinions_per_set = int(sys.argv[6]) if len(sys.argv) > 6 else 2
+    num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else None
+    max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else None
+    opinions_per_set = int(sys.argv[6]) if len(sys.argv) > 6 else None
     initial_prompt = sys.argv[7] if len(sys.argv) > 7 else None
 
     anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt, opinions_per_set, mode, horizon))

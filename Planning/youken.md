@@ -210,8 +210,8 @@ data_checks:
   anchor_price: 0
   current_price: 0
   price_deviation_pct: 0
-  deviation_ok_pct: 0      # SHORT=3 / MID=5 / LONG=7
-  deviation_block_pct: 10
+  price_tolerance_pct: 0      # SHORT=3 / MID=5 / LONG=7
+  price_block_pct: 10
   status: "OK|BLOCK_REEVALUATE"
 
 risk_defaults:

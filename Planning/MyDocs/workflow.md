@@ -1,7 +1,7 @@
 # ワークフロー
 
 ```mermaid
-flowchart LR
+flowchart TB
     in((Discussion<br>ログ一式<br>in))
 
     in --> LP["ログ解析<br>(log_parser)"]
@@ -9,9 +9,9 @@ flowchart LR
     LP --> |"判定・投票・根拠<br>+ 関連ログのパス"| PC{"現在価格<br>指定あり？"}
 
     PC --> |No| PF[/"🌐 price-fetcher<br>Web検索で株価取得"/]
-    PC --> |Yes| CALC
+    PC --> |Yes| C1
 
-    PF --> |"current_price"| CALC
+    PF --> |"current_price"| C1
 
     subgraph CALC ["決定論的計算 (plan_calc)"]
         C1["鮮度チェック"] --> C2["価格ズレ判定"]
@@ -19,7 +19,7 @@ flowchart LR
         C3 --> C4["配分・株数計算"]
     end
 
-    CALC --> PS["PlanSpec 組立<br>(plan_spec)"]
+    C4 --> PS["PlanSpec 組立<br>(plan_spec)"]
 
     PS --> |"数値確定済み YAML +<br>ログ一式"| PG[/"🌐 plan-generator<br>commentary 生成<br>(Web検索で最新情報補強)"/]
 

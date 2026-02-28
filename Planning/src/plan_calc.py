@@ -70,10 +70,10 @@ _CONFIDENCE_KEY = {"high": Confidence.HIGH, "med": Confidence.MED, "low": Confid
 class PlanConfig:
     """portfolio_config テーブルから読み込む投資パラメータ。"""
 
-    deviation_ok_pct: dict[Horizon, float] = field(default_factory=lambda: {
+    price_tolerance_pct: dict[Horizon, float] = field(default_factory=lambda: {
         Horizon.SHORT: 3.0, Horizon.MID: 5.0, Horizon.LONG: 7.0,
     })
-    deviation_block_pct: float = 10.0
+    price_block_pct: float = 10.0
 
     max_log_age_days: dict[Horizon, int] = field(default_factory=lambda: {
         Horizon.SHORT: 2, Horizon.MID: 7, Horizon.LONG: 30,
@@ -130,10 +130,10 @@ def load_plan_config(db_config: dict | None) -> PlanConfig:
         return float(val) if val is not None else fallback
 
     return PlanConfig(
-        deviation_ok_pct=_parse_horizon_jsonb(
-            db_config.get("deviation_ok_pct"), defaults.deviation_ok_pct,
+        price_tolerance_pct=_parse_horizon_jsonb(
+            db_config.get("price_tolerance_pct"), defaults.price_tolerance_pct,
         ),
-        deviation_block_pct=_num("deviation_block_pct", defaults.deviation_block_pct),
+        price_block_pct=_num("price_block_pct", defaults.price_block_pct),
         max_log_age_days=_parse_horizon_jsonb(
             db_config.get("max_log_age_days"), defaults.max_log_age_days,
         ),
@@ -176,8 +176,8 @@ class DeviationResult:
     anchor_price: float
     current_price: float
     price_deviation_pct: float
-    deviation_ok_pct: float
-    deviation_block_pct: float
+    price_tolerance_pct: float
+    price_block_pct: float
     status: str  # "OK" | "BLOCK_REEVALUATE"
 
 
@@ -191,14 +191,14 @@ def check_price_deviation(
         deviation = 0.0
     else:
         deviation = abs(current_price - anchor_price) / anchor_price * 100
-    ok_pct = cfg.deviation_ok_pct[horizon]
-    status = "BLOCK_REEVALUATE" if deviation > cfg.deviation_block_pct else "OK"
+    ok_pct = cfg.price_tolerance_pct[horizon]
+    status = "BLOCK_REEVALUATE" if deviation > cfg.price_block_pct else "OK"
     return DeviationResult(
         anchor_price=anchor_price,
         current_price=current_price,
         price_deviation_pct=round(deviation, 2),
-        deviation_ok_pct=ok_pct,
-        deviation_block_pct=cfg.deviation_block_pct,
+        price_tolerance_pct=ok_pct,
+        price_block_pct=cfg.price_block_pct,
         status=status,
     )
 

@@ -1,5 +1,5 @@
 """
-イベントマスターデータ定義（17イベント）
+イベントマスターデータ定義（16イベント）
 
 scheduler_orchestrator.py seed で DB に upsert される。
 """

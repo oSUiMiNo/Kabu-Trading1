@@ -38,7 +38,7 @@ flowchart TD
 ## 詳細フロー（開発リファレンス）
 
 ```mermaid
-%%{init: {'themeVariables': {'lineColor': '#777'}}}%%
+%%{init: {'themeVariables': {'lineColor': '#777', 'fontSize': '18px'}, 'flowchart': {'nodeSpacing': 30, 'rankSpacing': 25, 'padding': 25, 'useMaxWidth': false}}}%%
 flowchart TD
     classDef trigger fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
     classDef process fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
@@ -83,7 +83,7 @@ flowchart TD
         MONTHS_A --> S2b
         MONTHS_M --> S2b
 
-        S2b["create_event_scheduler_log()"] --> DB_RUN[("event_scheduler_log\ninsert")]
+        S2b["create_scheduler_log()"] --> DB_RUN[("event_scheduler_log\ninsert")]
         S2b:::process
         DB_RUN:::db
 
@@ -141,14 +141,16 @@ flowchart TD
             W2["post_release_20m\n= release + 20min"]
             W3["post_press_10m\n= press + 10min"]
             W4["jp_follow_tse_open\n= 翌TSE営業日 09:10"]
-            W5["boj_midday\n= 12:30 JST"]
-            W6["boj_afternoon\n= 15:45 JST"]
+            W5["us_follow_tse_open\n= 翌TSE営業日 09:10\n（EU→US フォロー）"]
+            W6["boj_midday\n= 12:30 JST"]
+            W7["boj_afternoon\n= 15:45 JST"]
             W1:::output
             W2:::output
             W3:::output
             W4:::output
             W5:::output
             W6:::output
+            W7:::output
         end
 
         F6a --> F7["upsert_monitor_schedule()"]
@@ -163,7 +165,7 @@ flowchart TD
     DB_RUN_UPD:::db
     DB_RUN_UPD --> DONE(["完了"])
     DONE:::trigger
-    linkStyle default stroke-width:2px
+    linkStyle default stroke-width:3px
 ```
 
 ## トリガー

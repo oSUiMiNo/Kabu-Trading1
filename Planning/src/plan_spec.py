@@ -38,8 +38,8 @@ class PlanSpec:
     anchor_price: float = 0.0
     current_price: float = 0.0
     price_deviation_pct: float = 0.0
-    deviation_ok_pct: float = 0.0
-    deviation_block_pct: float = 10.0
+    price_tolerance_pct: float = 0.0
+    price_block_pct: float = 10.0
     data_checks_status: str = "OK"
 
     # risk_defaults ブロック
@@ -133,8 +133,8 @@ def build_yaml(spec: PlanSpec) -> str:
             ("anchor_price", spec.anchor_price),
             ("current_price", spec.current_price),
             ("price_deviation_pct", spec.price_deviation_pct),
-            ("deviation_ok_pct", spec.deviation_ok_pct),
-            ("deviation_block_pct", spec.deviation_block_pct),
+            ("price_tolerance_pct", spec.price_tolerance_pct),
+            ("price_block_pct", spec.price_block_pct),
             ("status", spec.data_checks_status),
         )),
         ("risk_defaults", _ordered_dict(

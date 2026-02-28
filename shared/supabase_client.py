@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -66,6 +67,67 @@ def get_client() -> SyncPostgrestClient:
 def get_portfolio_config() -> dict:
     resp = get_client().from_("portfolio_config").select("*").limit(1).execute()
     return resp.data[0] if resp.data else {}
+
+
+def get_discussion_config() -> dict:
+    """Discussion パラメータを portfolio_config から取得。"""
+    cfg = get_portfolio_config()
+    return {
+        "num_sets": cfg.get("discussion_num_lanes", 2),
+        "max_rounds": cfg.get("discussion_max_rounds", 4),
+        "opinions_per_set": cfg.get("discussion_opinions_per_lane", 2),
+    }
+
+
+def get_due_regular_schedules(now_utc: datetime) -> list[dict]:
+    """
+    現在時刻に該当する定期Monitorスケジュールを返す。
+    マッチ条件: hour/minute が ±3分以内、days_of_week 一致、
+    monitor_last_runs で最終実行が30分以上前。
+    """
+    cfg = get_portfolio_config()
+    if not cfg.get("monitor_schedule_enabled", True):
+        return []
+
+    schedules = cfg.get("monitor_schedules", [])
+    last_runs = cfg.get("monitor_last_runs") or {}
+    if isinstance(last_runs, str):
+        last_runs = json.loads(last_runs)
+    dow = now_utc.weekday()
+    matched = []
+
+    for sched in schedules:
+        if dow not in sched.get("days_of_week", []):
+            continue
+
+        target_minute = sched["hour_utc"] * 60 + sched["minute_utc"]
+        current_minute = now_utc.hour * 60 + now_utc.minute
+        if abs(current_minute - target_minute) > 3:
+            continue
+
+        label = sched["label"]
+        last_run_str = last_runs.get(label)
+        if last_run_str:
+            last_run_dt = datetime.fromisoformat(last_run_str)
+            if last_run_dt.tzinfo is None:
+                last_run_dt = last_run_dt.replace(tzinfo=timezone.utc)
+            elapsed = (now_utc - last_run_dt).total_seconds()
+            if elapsed < 1800:
+                continue
+
+        matched.append(sched)
+
+    return matched
+
+
+def mark_regular_schedule_run(label: str, now_utc: datetime) -> None:
+    """monitor_last_runs を更新して重複実行を防止。"""
+    cfg = get_portfolio_config()
+    last_runs = cfg.get("monitor_last_runs") or {}
+    if isinstance(last_runs, str):
+        last_runs = json.loads(last_runs)
+    last_runs[label] = now_utc.isoformat()
+    update_portfolio_config(monitor_last_runs=last_runs)
 
 
 def update_portfolio_config(**fields) -> dict:

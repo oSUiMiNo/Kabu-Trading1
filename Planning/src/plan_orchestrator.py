@@ -377,7 +377,7 @@ async def run_plan_orchestrator(
 
     # --- 3. 価格ズレ判定 ---
     deviation = check_price_deviation(current_price, anchor_price, h, config=cfg)
-    print(f"  価格ズレ: {deviation.price_deviation_pct}%（許容{deviation.deviation_ok_pct}% / ブロック{deviation.deviation_block_pct}%）→ {deviation.status}")
+    print(f"  価格ズレ: {deviation.price_deviation_pct}%（許容{deviation.price_tolerance_pct}% / ブロック{deviation.price_block_pct}%）→ {deviation.status}")
 
     # --- 4. confidence ---
     p, confidence = calc_confidence(judgment.vote_for, judgment.vote_against)
@@ -419,8 +419,8 @@ async def run_plan_orchestrator(
         anchor_price=deviation.anchor_price,
         current_price=deviation.current_price,
         price_deviation_pct=deviation.price_deviation_pct,
-        deviation_ok_pct=deviation.deviation_ok_pct,
-        deviation_block_pct=deviation.deviation_block_pct,
+        price_tolerance_pct=deviation.price_tolerance_pct,
+        price_block_pct=deviation.price_block_pct,
         data_checks_status=deviation.status,
         # risk_defaults
         stop_loss_pct=cfg.stop_loss_pct[h],
