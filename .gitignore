@@ -1,4 +1,5 @@
 .cc-attachments/
 .env.local
+.claude/settings.local.json
 Planning/logs/
 shared/__pycache__/
