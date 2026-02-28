@@ -1,11 +1,27 @@
+##
+# 経済イベントスケジューラ
+#
+# FOMC、雇用統計、CPI、決算発表などの経済イベントを取得し、
+# DB の event_master / event_watch テーブルに登録する。
+# 登録された watch は Event Monitor ワークフローが 5分間隔で期限到来を検知する。
+#
+# コマンド:
+#   seed    … 初期データ投入（年間 + 直近月のイベントを一括登録）
+#   annual  … 年間の主要イベントを取得・登録（年1回: 1/2）
+#   monthly … 直近 N ヶ月のイベントを取得・登録（月1回: 毎月1日、デフォルト2ヶ月先まで）
+#
+# スケジュール:
+#   - 1月2日 09:00 JST … annual（その年の主要イベントを年初に一括取得）
+#   - 毎月1日 09:00 JST … monthly（翌月・翌々月のイベントを補充）
+#   ※ 1月は annual と monthly が両方トリガーされるが、
+#     1/1 = monthly, 1/2 = annual で日が異なるので重複しない
+##
 name: EventScheduler
 
 on:
   schedule:
-    # 年次: 1月2日 00:00 UTC (JST 09:00)
-    - cron: '0 0 2 1 *'
-    # 月次: 毎月1日 00:00 UTC (JST 09:00)
-    - cron: '0 0 1 * *'
+    - cron: '0 0 2 1 *'    # 年次: 1月2日 09:00 JST → annual
+    - cron: '0 0 1 * *'    # 月次: 毎月1日 09:00 JST → monthly
   workflow_dispatch:
     inputs:
       command:
@@ -42,6 +58,11 @@ jobs:
         working-directory: EventScheduler/src
         run: uv sync
 
+      # cron トリガー時の日付から annual / monthly を自動判定。
+      # workflow_dispatch で command が指定された場合はそちらを優先。
+      # 出力:
+      #   cmd    … "seed" / "annual" / "monthly"
+      #   months … annual=12（1年分）, monthly=2（2ヶ月先まで）
       - name: Determine command from schedule
         id: command
         run: |

@@ -1,3 +1,4 @@
 .cc-attachments/
 .env.local
 Planning/logs/
+shared/__pycache__/

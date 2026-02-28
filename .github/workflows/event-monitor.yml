@@ -1,9 +1,29 @@
+##
+# イベント駆動型監視ワークフロー
+#
+# EventScheduler が登録した経済イベント（FOMC, 雇用統計, 決算発表 等）に紐づく
+# event_watch レコードの期限到来を検知し、該当市場の Monitor パイプラインを起動する。
+#
+# 動作フロー:
+#   1. event_watch_check.py  … DB の event_watch テーブルから期限到来の watch を検索
+#      - 該当なし → ジョブ終了（以降のステップはスキップ）
+#      - 該当あり → 対象市場リスト (markets) とイベント詳細 (event_details) を出力
+#   2. ng_dispatch.py        … 市場ごとに Monitor → Discussion → Planning パイプラインを実行
+#      - EVENT_CONTEXT 環境変数でイベント情報を渡し、Discord 通知にトリガイベントを表示
+#
+# 定期 Monitor との違い:
+#   - 定期 Monitor … 固定スケジュール（1日4回+週末1回）で全銘柄を巡回チェック
+#   - Event Monitor … イベント起因で「影響がありそうな銘柄」だけを即時チェック
+#
+# スケジュール:
+#   5分間隔・24時間稼働。毎時ちょうど (:00) を避けているのは
+#   他ワークフローや GitHub 側の負荷集中を避けるため。
+##
 name: Event Monitor
 
 on:
   schedule:
-    # 毎時 2,7,12,...,57分（5分間隔、毎時ちょうどを避ける）
-    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'  # 5分間隔（:00 回避）
   workflow_dispatch: {}
 
 jobs:
@@ -20,16 +40,22 @@ jobs:
         with:
           python-version: '3.12'
 
+      # event_watch テーブルから watch_at <= now() のレコードを検索。
+      # 出力:
+      #   has_watches   … "true" / "false"
+      #   markets       … スペース区切りの市場リスト（例: "US JP"）
+      #   event_details … JSON（イベント名・ID 等、Discord 通知用）
+      # uv を使わず pip で最小依存だけ入れる（watch なしなら即終了なので軽量化）。
       - name: Check for due watches
         id: check
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          pip install postgrest python-dotenv > /dev/null 2>&1
+          pip install postgrest python-dotenv
           python Monitor/src/event_watch_check.py
 
-      # ── 以降は watch ありの場合のみ実行 ──
+      # ── 以降は watch ありの場合のみ実行（has_watches == 'true'）──
 
       - name: Install uv
         if: steps.check.outputs.has_watches == 'true'
@@ -54,6 +80,9 @@ jobs:
         working-directory: Planning/src
         run: uv sync
 
+      # 対象市場ごとに Monitor パイプラインを実行。
+      # EVENT_CONTEXT を渡すことで ng_dispatch.py がイベント駆動であることを認識し、
+      # Discord 通知の Embed にトリガイベント名を表示する。
       - name: Run Monitor pipeline for each market
         if: steps.check.outputs.has_watches == 'true'
         working-directory: Monitor/src
