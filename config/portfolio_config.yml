@@ -88,3 +88,11 @@ monitor_schedules:
     minute_utc: 0
     days_of_week: [5, 6]
     skip_spans: []
+
+  - label: JP_PM
+    description: "平日 JP 2回目: 21:37 JST（大引け前、longスキップ）"
+    market: JP
+    hour_utc: 12
+    minute_utc: 37
+    days_of_week: [0, 1, 2, 3, 4]
+    skip_spans: [long]
