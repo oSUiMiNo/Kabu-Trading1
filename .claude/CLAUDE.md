@@ -14,3 +14,10 @@
 @Monitor 編集可
 @Planning 編集不可
 @EventScheduler 編集不可
+
+
+## よく使うパスとその呼称
+| 呼称 | パス | 備考 | 
+|-----|------|------|
+| リモートリポジトリ | @https://github.com/oSUiMiNo/Kabu-Trading1 | スキル gh_run を使って閲覧すること |
+| イシュー | @リモートリポジトリ/issues |
