@@ -1,0 +1,48 @@
+##
+# 設定同期ワークフロー
+#
+# config/portfolio_config.yml の変更を検知し、DB に自動反映する。
+# 手動実行（workflow_dispatch）では dry-run オプションを選択可能。
+##
+name: Sync Config
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/portfolio_config.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'dry-run（差分表示のみ、DB更新しない）'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install postgrest python-dotenv pyyaml
+
+      - name: Sync YAML to DB
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="--dry-run"
+          fi
+          python shared/sync_config.py $ARGS

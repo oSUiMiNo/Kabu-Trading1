@@ -19,5 +19,5 @@
 ## よく使うパスとその呼称
 | 呼称 | パス | 備考 | 
 |-----|------|------|
-| リモートリポジトリ | @https://github.com/oSUiMiNo/Kabu-Trading1 | スキル gh_run を使って閲覧すること |
+| リモートリポジトリ | @https://github.com/oSUiMiNo/Kabu-Trading1 | 閲覧や操作時はスキル gh_run を使うこと |
 | イシュー | @リモートリポジトリ/issues |

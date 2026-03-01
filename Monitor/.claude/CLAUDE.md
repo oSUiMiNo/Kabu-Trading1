@@ -27,5 +27,17 @@ python src/monitor_orchestrator.py           # 監視のみ（単体実行）
 |----------|------|
 | src/ng_dispatch.py | パイプライン（Monitor → Discussion → Planning） |
 | src/monitor_orchestrator.py | 監視オーケストレーター |
+| src/event_watch_check.py | イベント watch + 定期スケジュールの検出（event-monitor.yml から呼ばれる） |
 | src/AgentUtil.py | Claude Agent SDK ユーティリティ（Discussionからコピー） |
 | .claude/commands/monitor-checker.md | 監視チェック用サブエージェント定義 |
+
+
+## 自動実行
+
+定期 Monitor は `event-monitor.yml`（5分ポーリング）に統合済み。
+`event_watch_check.py` がイベント watch と定期スケジュール（`portfolio_config.monitor_schedules`）の
+両方を検出し、マッチしたら `ng_dispatch.py` を起動する。
+
+`monitor.yml` は手動実行（`workflow_dispatch`）専用。
+
+設定の詳細は `MyDocs/config-management.md` を参照。

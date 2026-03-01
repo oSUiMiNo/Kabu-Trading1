@@ -1,0 +1,90 @@
+# ポートフォリオ設定（portfolio_config テーブル）
+#
+# このファイルを編集して push すると、GitHub Actions が自動で DB に同期する。
+# ローカルから手動同期: python shared/sync_config.py [--dry-run]
+#
+# 注意:
+#   - id, updated_at, monitor_last_runs はシステム管理のため記載不要
+#   - days_of_week: 0=月, 1=火, 2=水, 3=木, 4=金, 5=土, 6=日
+
+# ── 投資パラメータ ──
+total_budget_jpy: 3000000
+risk_limit_pct: 5.00
+default_take_profit_pct: 20.00
+notes: "テスト用ポートフォリオ（5銘柄: NVDA, TSLA, AMZN, 6702, U）"
+
+# 損切り幅（投資期間別 %）
+stop_loss_pct:
+  short: -4
+  mid: -8
+  long: -15
+
+# 価格ズレ許容幅（投資期間別 %）
+price_tolerance_pct:
+  short: 3
+  mid: 5
+  long: 7
+
+# 価格ズレ停止閾値（%）
+price_block_pct: 10
+
+# ログ鮮度上限（投資期間別 日数）
+max_log_age_days:
+  short: 2
+  mid: 7
+  long: 30
+
+# 1銘柄への配分上限（confidence別 %）
+max_allocation_pct:
+  low: 5
+  med: 10
+  high: 15
+
+# ── Discussion パラメータ ──
+discussion_num_lanes: 2
+discussion_max_rounds: 4
+discussion_opinions_per_lane: 2
+
+# ── Monitor 定期スケジュール ──
+monitor_schedule_enabled: true
+
+monitor_schedules:
+  - label: JP_AM
+    description: "平日 JP 1回目: 10:10 JST（寄付直後）"
+    market: JP
+    hour_utc: 1
+    minute_utc: 10
+    days_of_week: [0, 1, 2, 3, 4]
+    skip_spans: []
+
+  - label: JP_PM
+    description: "平日 JP 2回目: 16:00 JST（大引け前、longスキップ）"
+    market: JP
+    hour_utc: 7
+    minute_utc: 0
+    days_of_week: [0, 1, 2, 3, 4]
+    skip_spans: [long]
+
+  - label: US_AM
+    description: "平日 US 1回目: 0:00 JST（NY寄付後）"
+    market: US
+    hour_utc: 15
+    minute_utc: 0
+    days_of_week: [6, 0, 1, 2, 3]
+    skip_spans: []
+
+  - label: US_PM
+    description: "平日 US 2回目: 6:30 JST（NY引け前、longスキップ）"
+    market: US
+    hour_utc: 21
+    minute_utc: 30
+    days_of_week: [6, 0, 1, 2, 3]
+    skip_spans: [long]
+
+  - label: WEEKEND
+    description: "週末 全銘柄一括: 10:00 JST"
+    market: null
+    hour_utc: 1
+    minute_utc: 0
+    days_of_week: [5, 6]
+    skip_spans: []
