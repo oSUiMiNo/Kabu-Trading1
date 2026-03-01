@@ -102,8 +102,8 @@ event-monitor.yml（5分ごと cron）
 event_watch_check.py
     ├── 1. monitor_schedule テーブルからイベント watch を検索
     ├── 2. portfolio_config.monitor_schedules から定期スケジュールを評価
-    │      （現在時刻と ±7分以内でマッチ判定）
-    │      （monitor_last_runs で30分以内の重複を防止）
+    │      （予定時刻の7分前〜90分後でマッチ判定）
+    │      （monitor_last_runs で120分以内の重複を防止）
     └── 3. どちらかマッチしたら → ng_dispatch.py を起動
                                     │
                                     ▼
