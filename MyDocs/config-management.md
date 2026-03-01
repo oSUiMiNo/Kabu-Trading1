@@ -102,13 +102,24 @@ event-monitor.yml（5分ごと cron）
 event_watch_check.py
     ├── 1. monitor_schedule テーブルからイベント watch を検索
     ├── 2. portfolio_config.monitor_schedules から定期スケジュールを評価
-    │      （予定時刻の7分前〜90分後でマッチ判定）
-    │      （monitor_last_runs で120分以内の重複を防止）
+    │      （下記マッチ判定パラメータ参照）
+    │      （monitor_last_runs で重複を防止）
     └── 3. どちらかマッチしたら → ng_dispatch.py を起動
                                     │
                                     ▼
                               Monitor → Discussion → Planning パイプライン
 ```
+
+### マッチ判定パラメータ
+
+GitHub Actions の cron は5分間隔で設定しているが、実際は数分〜最大78分程度の遅延が発生する。
+そのため予定時刻に対して広い許容窓を設けている。
+
+| 設定 | 値 | 意味 |
+|------|-----|------|
+| -方向（前） | 40分 | 予定の40分前のcronでも拾う |
+| +方向（後） | 90分 | 最大90分の遅延をカバー |
+| 重複防止 | 150分 | 窓の合計130分を超える値で二重発火防止 |
 
 `monitor.yml` は手動実行（`workflow_dispatch`）専用。テストや特定銘柄チェック用。
 
