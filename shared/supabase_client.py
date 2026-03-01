@@ -82,8 +82,9 @@ def get_discussion_config() -> dict:
 def get_due_regular_schedules(now_utc: datetime) -> list[dict]:
     """
     現在時刻に該当する定期Monitorスケジュールを返す。
-    マッチ条件: hour/minute が ±3分以内、days_of_week 一致、
+    マッチ条件: hour/minute が ±7分以内、days_of_week 一致、
     monitor_last_runs で最終実行が30分以上前。
+    ※ GitHub Actions の cron は数分〜十数分遅延するため許容幅を広めにとる。
     """
     cfg = get_portfolio_config()
     if not cfg.get("monitor_schedule_enabled", True):
@@ -102,7 +103,7 @@ def get_due_regular_schedules(now_utc: datetime) -> list[dict]:
 
         target_minute = sched["hour_utc"] * 60 + sched["minute_utc"]
         current_minute = now_utc.hour * 60 + now_utc.minute
-        if abs(current_minute - target_minute) > 3:
+        if abs(current_minute - target_minute) > 7:
             continue
 
         label = sched["label"]
