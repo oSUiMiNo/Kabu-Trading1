@@ -93,7 +93,7 @@ monitor_schedules:
   - label: JP_PM
     description: "平日 JP 2回目: 23:45 JST（大引け前、longスキップ）"
     market: US
-    hour_utc: 2
-    minute_utc: 50
+    hour_utc: 4
+    minute_utc: 27
     days_of_week: [6]
     skip_spans: [long]
