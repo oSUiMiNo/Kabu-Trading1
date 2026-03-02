@@ -336,7 +336,7 @@ async def run_plan_orchestrator(
     logs = find_session_logs(session_path, ticker)
     if not logs.final_judge:
         print(f"  エラー: {session_path} に final_judge ログが見つかりません")
-        return None
+        sys.exit(1)
 
     print(f"  ログ: {logs.final_judge.name}")
     judgment = parse_final_judge(logs.final_judge)
@@ -363,7 +363,7 @@ async def run_plan_orchestrator(
             print(f"  取得成功: {current_price}")
         else:
             print(f"  エラー: 価格取得に失敗しました。現在価格を手動指定してください。")
-            return None
+            sys.exit(1)
 
     if anchor_price is None:
         anchor_price = current_price
