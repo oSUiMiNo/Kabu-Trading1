@@ -85,6 +85,7 @@ def get_due_regular_schedules(now_utc: datetime) -> list[dict]:
     マッチ条件: 予定時刻の40分前〜90分後、days_of_week 一致、
     monitor_last_runs で最終実行が150分以上前。
     ※ GitHub Actions の cron は最大78分程度の遅延が観測されており、許容幅を広くとる。
+    test: true のスケジュールは時刻・曜日チェックをスキップし即発火（重複防止10分）。
     """
     cfg = get_portfolio_config()
     if not cfg.get("monitor_schedule_enabled", True):
@@ -98,23 +99,27 @@ def get_due_regular_schedules(now_utc: datetime) -> list[dict]:
     matched = []
 
     for sched in schedules:
-        if dow not in sched.get("days_of_week", []):
-            continue
+        is_test = sched.get("test", False)
 
-        target_minute = sched["hour_utc"] * 60 + sched["minute_utc"]
-        current_minute = now_utc.hour * 60 + now_utc.minute
-        diff = current_minute - target_minute
-        if diff < -40 or diff > 90:
-            continue
+        if not is_test:
+            if dow not in sched.get("days_of_week", []):
+                continue
+
+            target_minute = sched["hour_utc"] * 60 + sched["minute_utc"]
+            current_minute = now_utc.hour * 60 + now_utc.minute
+            diff = current_minute - target_minute
+            if diff < -40 or diff > 90:
+                continue
 
         label = sched["label"]
+        dedup_seconds = 600 if is_test else 9000
         last_run_str = last_runs.get(label)
         if last_run_str:
             last_run_dt = datetime.fromisoformat(last_run_str)
             if last_run_dt.tzinfo is None:
                 last_run_dt = last_run_dt.replace(tzinfo=timezone.utc)
             elapsed = (now_utc - last_run_dt).total_seconds()
-            if elapsed < 9000:
+            if elapsed < dedup_seconds:
                 continue
 
         matched.append(sched)
