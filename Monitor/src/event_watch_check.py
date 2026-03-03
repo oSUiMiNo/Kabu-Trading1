@@ -145,6 +145,71 @@ all_markets = sorted(event_markets | regular_markets)
 all_skip_spans = sorted(set(regular_skip_spans + skip_spans_from_events))
 has_watches = bool(watches) or bool(due_schedules)
 
+
+# ── 5. EventScheduler ログ監視（常時実行）──
+SCHEDULER_LOG_LOOKBACK_MINUTES = 10
+
+
+def check_scheduler_log_errors():
+    """直近の EventScheduler 実行で失敗があれば Discord に通知する。"""
+    discord_url = os.environ.get("DISCORD_WEBHOOK_URL")
+    if not discord_url:
+        return
+
+    lookback = now - timedelta(minutes=SCHEDULER_LOG_LOOKBACK_MINUTES)
+    try:
+        resp = (
+            client.from_("event_scheduler_log")
+            .select("run_id, run_type, finished_at, fail_count, error_summary")
+            .gt("finished_at", lookback.isoformat())
+            .gt("fail_count", 0)
+            .order("finished_at", desc=True)
+            .execute()
+        )
+    except Exception as e:
+        print(f"\n[スケジューラ監視] ログ取得失敗: {e}")
+        return
+
+    failed_runs = resp.data or []
+    if not failed_runs:
+        return
+
+    for run in failed_runs:
+        run_id = run.get("run_id", "?")
+        run_type = run.get("run_type", "?")
+        fail_count = run.get("fail_count", 0)
+        error_summary = run.get("error_summary") or "(詳細なし)"
+        finished_at = run.get("finished_at", "?")
+
+        print(f"\n[スケジューラ監視] 失敗を検出: run_id={run_id}  run_type={run_type}  fail_count={fail_count}")
+
+        msg = (
+            "**[EventScheduler エラー]**\n"
+            f"run_id: {run_id}  /  run_type: {run_type}\n"
+            f"失敗件数: {fail_count}\n"
+            f"完了時刻: {finished_at}\n"
+            f"エラー詳細:\n```\n{error_summary[:1000]}\n```"
+        )
+        discord_req = urllib.request.Request(
+            discord_url,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            data=json.dumps({"content": msg}).encode(),
+        )
+        try:
+            with urllib.request.urlopen(discord_req, timeout=10):
+                pass
+            print(f"[スケジューラ監視] Discord 通知送信完了 (run_id={run_id})")
+        except Exception as e:
+            print(f"[スケジューラ監視] Discord 通知失敗: {e}")
+
+
+try:
+    check_scheduler_log_errors()
+except Exception as e:
+    print(f"\n[スケジューラ監視] 予期しないエラー: {e}")
+
+
 if not has_watches:
     print("\nトリガーなし。終了。")
     write_output("has_watches", "false")
