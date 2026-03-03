@@ -99,11 +99,16 @@ def run_planning(ticker: str, session_dir: str, horizon_jp: str) -> int:
 
 
 def main():
+    planning_only = "--planning-only" in sys.argv
+    if planning_only:
+        sys.argv = [a for a in sys.argv if a != "--planning-only"]
+
     if len(sys.argv) < 3:
-        print("使い方: python discuss_and_plan.py <銘柄> <期間> [モード]")
+        print("使い方: python discuss_and_plan.py <銘柄> <期間> [モード] [--planning-only]")
         print()
         print("  期間（必須）: '短期' / '中期' / '長期'")
         print("  モード:       '買う' / '売る' / '買い増す' (デフォルト: 買う)")
+        print("  --planning-only: Discussion をスキップし既存ログで Planning のみ実行")
         print()
         print("例:")
         print("  python discuss_and_plan.py NVDA 中期")
@@ -131,6 +136,25 @@ def main():
     print(f"=== 銘柄: {ticker} / 期間: {horizon_jp} / モード: {mode_label} ===")
     print(f"{'='*60}")
     print()
+
+    # ── --planning-only: Discussion スキップ ──
+    if planning_only:
+        session_dir = _find_latest_session_dir(ticker)
+        if not session_dir:
+            print(f"エラー: {ticker} の Discussion ログが見つかりません（--planning-only）。")
+            sys.exit(1)
+        print(f"--planning-only: Discussion スキップ、ログ使用: {session_dir.name}")
+        print()
+        exit_code = run_planning(ticker, str(session_dir), horizon_jp)
+        if exit_code != 0:
+            print()
+            print(f"エラー: Planning が異常終了しました (exit code: {exit_code})")
+            sys.exit(exit_code)
+        print()
+        print(f"{'='*60}")
+        print(f"=== Planning のみ完了: {ticker} / {horizon_jp} ===")
+        print(f"{'='*60}")
+        return
 
     # ── Step 1: Discussion ──
     print(f"{'='*60}")

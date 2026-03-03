@@ -15,6 +15,7 @@ Usage:
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +36,25 @@ SPAN_TO_CLI = {"short": "short", "mid": "mid", "long": "long"}
 MODE_TO_CLI = {"buy": "buy", "sell": "sell"}
 
 MAX_DISPATCH_RETRIES = 2
+
+
+def _find_latest_discussion_dir(ticker: str) -> Path | None:
+    """銘柄の最新 Discussion ログディレクトリを返す（Planning 完了は問わない）。"""
+    logs_dir = PROJECT_ROOT / "Discusion" / "logs"
+    if not logs_dir.exists():
+        return None
+    pattern = re.compile(r"^\d{6}_\d{4}$")
+    candidates = sorted(
+        (d for d in logs_dir.iterdir()
+         if d.is_dir() and pattern.match(d.name)),
+        key=lambda d: d.name,
+        reverse=True,
+    )
+    t = ticker.upper()
+    for d in candidates:
+        if list(d.glob(f"{t}_final_judge_*.md")):
+            return d
+    return None
 
 
 def _load_event_context() -> dict | None:
@@ -64,31 +84,36 @@ def _fetch_new_plan(ticker: str) -> dict | None:
 def run_discuss_and_plan(ticker: str, span: str, mode: str) -> int:
     """
     discuss_and_plan.py（Discussion → Planning パイプライン）を subprocess で起動する。
-    最大 MAX_DISPATCH_RETRIES 回リトライする。
+    失敗時は Discussion ログの有無に応じて Planning のみ、または全体をリトライする。
 
     Returns:
-        プロセスの exit code（0=正常、全リトライ失敗時は最後の exit code）
+        プロセスの exit code（0=正常、リトライ失敗時は最後の exit code）
     """
-    cmd = [
-        sys.executable,
-        str(PIPELINE_SCRIPT),
-        ticker,
-        SPAN_TO_CLI.get(span, "mid"),
-        MODE_TO_CLI.get(mode, "buy"),
-    ]
+    cmd = [sys.executable, str(PIPELINE_SCRIPT), ticker,
+           SPAN_TO_CLI.get(span, "mid"), MODE_TO_CLI.get(mode, "buy")]
 
-    for attempt in range(1, MAX_DISPATCH_RETRIES + 1):
-        if attempt > 1:
-            print(f"  [{ticker}] Discussion → Planning リトライ {attempt}/{MAX_DISPATCH_RETRIES}")
+    print(f"  [{ticker}] Discussion → Planning 起動: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
 
-        print(f"  [{ticker}] Discussion → Planning 起動: {' '.join(cmd)}")
-        result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
+    if result.returncode == 0:
+        return 0
 
-        if result.returncode == 0:
-            return 0
+    print(f"  [{ticker}] Discussion → Planning 失敗 (exit code: {result.returncode})")
 
-        print(f"  [{ticker}] Discussion → Planning 失敗 (exit code: {result.returncode})")
+    session_dir = _find_latest_discussion_dir(ticker)
+    if session_dir:
+        retry_cmd = cmd + ["--planning-only"]
+        print(f"  [{ticker}] Planning のみ再実行（Discussion ログ: {session_dir.name}）")
+    else:
+        retry_cmd = cmd
+        print(f"  [{ticker}] Discussion → Planning 全体リトライ（Discussion ログなし）")
 
+    result = subprocess.run(retry_cmd, cwd=str(PROJECT_ROOT))
+
+    if result.returncode == 0:
+        return 0
+
+    print(f"  [{ticker}] リトライ失敗 (exit code: {result.returncode})")
     return result.returncode
 
 
