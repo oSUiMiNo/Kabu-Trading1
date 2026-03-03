@@ -23,7 +23,12 @@ name: Event Monitor
 on:
   schedule:
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'  # 5分間隔（:00 回避）
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      fire_now:
+        description: 'pg_cronテストスケジュールによる直接実行（checkをスキップしてMonitorを即起動）'
+        type: boolean
+        default: false
 
 jobs:
   event-watch:
@@ -46,8 +51,10 @@ jobs:
       #   skip_spans    … スペース区切り（例: "long"）
       #   event_details … JSON（イベント名・ID 等、Discord 通知用、イベント watch 時のみ）
       # uv を使わず pip で最小依存だけ入れる（watch なしなら即終了なので軽量化）。
+      # fire_now=true（pg_cronテスト発火）の場合はこのステップをスキップ。
       - name: Check for due watches
         id: check
+        if: ${{ !inputs.fire_now }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -58,28 +65,43 @@ jobs:
           pip install postgrest python-dotenv
           python Monitor/src/event_watch_check.py
 
-      # ── 以降は watch ありの場合のみ実行（has_watches == 'true'）──
+      # check の結果と fire_now フラグを統合し、should_run を決定する。
+      # fire_now=true の場合は check をスキップしているため、強制的に should_run=true とする。
+      - name: Resolve should_run
+        id: resolve
+        run: |
+          FIRE_NOW="${{ inputs.fire_now }}"
+          HAS_WATCHES="${{ steps.check.outputs.has_watches }}"
+          if [[ "$FIRE_NOW" == "true" || "$HAS_WATCHES" == "true" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "markets=${{ steps.check.outputs.markets }}" >> "$GITHUB_OUTPUT"
+            echo "skip_spans=${{ steps.check.outputs.skip_spans }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 以降は should_run == 'true' の場合のみ実行 ──
 
       - name: Install uv
-        if: steps.check.outputs.has_watches == 'true'
+        if: steps.resolve.outputs.should_run == 'true'
         uses: astral-sh/setup-uv@v4
 
       - name: Setup uv Python
-        if: steps.check.outputs.has_watches == 'true'
+        if: steps.resolve.outputs.should_run == 'true'
         run: uv python install 3.12
 
       - name: Install Monitor dependencies
-        if: steps.check.outputs.has_watches == 'true'
+        if: steps.resolve.outputs.should_run == 'true'
         working-directory: Monitor/src
         run: uv sync
 
       - name: Install Discussion dependencies
-        if: steps.check.outputs.has_watches == 'true'
+        if: steps.resolve.outputs.should_run == 'true'
         working-directory: Discusion/src
         run: uv sync
 
       - name: Install Planning dependencies
-        if: steps.check.outputs.has_watches == 'true'
+        if: steps.resolve.outputs.should_run == 'true'
         working-directory: Planning/src
         run: uv sync
 
@@ -88,7 +110,7 @@ jobs:
       # 定期スケジュール由来の場合は skip_spans を --skip-span 引数として渡す。
       # markets が空の場合は全銘柄チェック（market 引数なし）。
       - name: Run Monitor pipeline for each market
-        if: steps.check.outputs.has_watches == 'true'
+        if: steps.resolve.outputs.should_run == 'true'
         working-directory: Monitor/src
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -97,8 +119,8 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           EVENT_CONTEXT: ${{ steps.check.outputs.event_details }}
         run: |
-          MARKETS="${{ steps.check.outputs.markets }}"
-          SKIP_SPANS="${{ steps.check.outputs.skip_spans }}"
+          MARKETS="${{ steps.resolve.outputs.markets }}"
+          SKIP_SPANS="${{ steps.resolve.outputs.skip_spans }}"
 
           SKIP_ARGS=""
           for SPAN in $SKIP_SPANS; do
