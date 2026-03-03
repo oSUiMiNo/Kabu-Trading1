@@ -54,8 +54,7 @@ monitor_schedules:
     market: JP
     hour_utc: 1
     minute_utc: 10
-    # days_of_week: [0, 1, 2, 3, 4]
-    days_of_week: [4]
+    days_of_week: [0, 1, 2, 3, 4]
     skip_spans: []
 
   - label: JP_PM
@@ -63,8 +62,7 @@ monitor_schedules:
     market: JP
     hour_utc: 7
     minute_utc: 0
-    # days_of_week: [0, 1, 2, 3, 4]
-    days_of_week: [4]
+    days_of_week: [0, 1, 2, 3, 4]
     skip_spans: [long]
 
   - label: US_AM
@@ -72,8 +70,7 @@ monitor_schedules:
     market: US
     hour_utc: 15
     minute_utc: 0
-    # days_of_week: [6, 0, 1, 2, 3]
-    days_of_week: [4]
+    days_of_week: [6, 0, 1, 2, 3]
     skip_spans: []
 
   - label: US_PM
@@ -81,8 +78,7 @@ monitor_schedules:
     market: US
     hour_utc: 21
     minute_utc: 30
-    # days_of_week: [6, 0, 1, 2, 3]
-    days_of_week: [4]
+    days_of_week: [6, 0, 1, 2, 3]
     skip_spans: [long]
 
   - label: WEEKEND
@@ -90,17 +86,15 @@ monitor_schedules:
     market: null
     hour_utc: 1
     minute_utc: 0
-    # days_of_week: [5, 6]
-    days_of_week: [4]
+    days_of_week: [5, 6]
     skip_spans: []
 
 # 実験用スケジュール（test: true で時刻・曜日チェックをスキップし即発火）
   - label: TEST
     description: "テスト用"
     market: US
-    hour_utc: 4
-    minute_utc: 34
-    # days_of_week: [0, 1, 2, 3, 4, 5, 6]
-    days_of_week: [4]
+    hour_utc: 5
+    minute_utc: 35
+    days_of_week: [0, 1, 2, 3, 4, 5, 6]
     skip_spans: []
     test: true
