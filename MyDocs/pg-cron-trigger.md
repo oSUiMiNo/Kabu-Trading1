@@ -105,7 +105,7 @@ Supabase のデータベースに内蔵されている pg_cron で、
 
 ## pg_cron に登録されているジョブ一覧
 
-全てのジョブは Supabase DB 内（クラウド）で実行される。ユーザーの PC には一切負荷がかからない。
+全てのジョブは **Supabase DB 内**（クラウド）で実行される。所有者はすべて Supabase DB。ユーザーの PC には一切負荷がかからない。
 
 ### 本番スケジュール（時刻ぴったりに発火）
 
@@ -136,12 +136,14 @@ Supabase のデータベースに内蔵されている pg_cron で、
 
 ## DB 上の SQL 関数
 
-| 関数名 | 役割 |
-|--------|------|
-| `trigger_workflow_dispatch()` | Vault から PAT を取得し、pg_net で GitHub API の workflow_dispatch を呼ぶ。pg_net をラップしており、beta の仕様変更時にここだけ修正すれば済む |
-| `fire_test_schedules()` | `portfolio_config.monitor_schedules` から `test: true` のエントリを探し、`monitor_last_runs` で10分以内に実行済みでなければ `trigger_workflow_dispatch()` を呼び、**発火後にそのエントリを自動削除**する（1回限りの発火） |
-| `retry_failed_dispatches()` | `cron.job_run_details` で直近30分の失敗を検索し、あれば `trigger_workflow_dispatch()` を再実行 |
-| `check_pg_cron_health()` | pg_cron の monitor ジョブの最終成功時刻、経過時間、失敗数を返す。`event_watch_check.py` から RPC で呼ばれる |
+すべて **Supabase DB 内**（クラウド）で定義・実行される SQL 関数。
+
+| 関数名 | 所有者 | 役割 |
+|--------|--------|------|
+| `trigger_workflow_dispatch()` | Supabase DB | Vault から PAT を取得し、pg_net で GitHub API の workflow_dispatch を呼ぶ。pg_net をラップしており、beta の仕様変更時にここだけ修正すれば済む |
+| `fire_test_schedules()` | Supabase DB | `portfolio_config.monitor_schedules` から `test: true` のエントリを探し、`monitor_last_runs` で10分以内に実行済みでなければ `trigger_workflow_dispatch()` を呼び、**発火後にそのエントリを自動削除**する（1回限りの発火） |
+| `retry_failed_dispatches()` | Supabase DB | `cron.job_run_details` で直近30分の失敗を検索し、あれば `trigger_workflow_dispatch()` を再実行 |
+| `check_pg_cron_health()` | Supabase DB | pg_cron の monitor ジョブの最終成功時刻、経過時間、失敗数を返す。`event_watch_check.py` から RPC で呼ばれる |
 
 
 ## 実行済み判定の仕組み（2段階の重複チェック）
@@ -310,14 +312,14 @@ pg_cron は GitHub Actions cron より精度は高いが、以下のリスクが
 
 ## 関連する場所
 
-| 場所 | 何があるか |
-|------|-----------|
-| Supabase DB 内 | pg_cron ジョブ（7個）、SQL 関数（4個）、Vault（PAT 保管） |
-| `portfolio_config.monitor_schedules` | スケジュール定義（今まで通り） |
-| `portfolio_config.monitor_last_runs` | 実行済み判定（ラベルごとの最終実行時刻） |
-| `.github/workflows/event-monitor.yml` | Monitor ワークフロー（pg_cron からも cron からも起動される） |
-| `shared/supabase_client.py` | `get_due_regular_schedules()` スケジュールマッチング + 重複防止判定 |
-| `Monitor/src/event_watch_check.py` | スケジュールチェック + pg_cron 死活監視 + 自動 Fast Reboot + パイプライン起動 |
+| 場所 | 所有者 | 何があるか |
+|------|--------|-----------|
+| Supabase DB 内 | Supabase DB | pg_cron ジョブ（7個）、SQL 関数（4個）、Vault（PAT 保管） |
+| `portfolio_config.monitor_schedules` | Supabase DB | スケジュール定義（今まで通り） |
+| `portfolio_config.monitor_last_runs` | Supabase DB | 実行済み判定（ラベルごとの最終実行時刻） |
+| `.github/workflows/event-monitor.yml` | EventScheduler | Monitor ワークフロー（pg_cron からも cron からも起動される） |
+| `shared/supabase_client.py` の `get_due_regular_schedules()` | shared | スケジュールマッチング + 重複防止判定 |
+| `Monitor/src/event_watch_check.py` | Monitor | スケジュールチェック + pg_cron 死活監視 + 自動 Fast Reboot + パイプライン起動 |
 
 
 ## セキュリティ
