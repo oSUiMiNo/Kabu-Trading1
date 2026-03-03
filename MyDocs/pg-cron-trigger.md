@@ -123,7 +123,8 @@ Supabase のデータベースに内蔵されている pg_cron で、
 |----------|---------|------|
 | `fire_test_schedules` | `* * * * *` | 毎分、DB に `test: true` のスケジュールがあり未発火（10分以内に実行なし）なら workflow_dispatch |
 
-テストスケジュールを DB に追加すれば **最大1分以内** に発火し、**発火後に自動削除** される（1回限り）。
+テストしたいとき、`portfolio_config.monitor_schedules`（JSON配列）に `"test": true` のスケジュールを追加すれば **最大1分以内** に発火する。
+発火後、そのスケジュール定義は **JSON配列から自動削除** される（使い捨て。削除しないと毎分発火し続けるため）。
 テストスケジュールがなければ空振り（SELECT 1回のみ、負荷は実質ゼロ）。
 
 ### 保守ジョブ
@@ -138,12 +139,13 @@ Supabase のデータベースに内蔵されている pg_cron で、
 
 すべて **Supabase DB 内**（クラウド）で定義・実行される SQL 関数。
 
-| 関数名 | 所有者 | 役割 |
-|--------|--------|------|
-| `trigger_workflow_dispatch()` | Supabase DB | Vault から PAT を取得し、pg_net で GitHub API の workflow_dispatch を呼ぶ。pg_net をラップしており、beta の仕様変更時にここだけ修正すれば済む |
-| `fire_test_schedules()` | Supabase DB | `portfolio_config.monitor_schedules` から `test: true` のエントリを探し、`monitor_last_runs` で10分以内に実行済みでなければ `trigger_workflow_dispatch()` を呼び、**発火後にそのエントリを自動削除**する（1回限りの発火） |
-| `retry_failed_dispatches()` | Supabase DB | `cron.job_run_details` で直近30分の失敗を検索し、あれば `trigger_workflow_dispatch()` を再実行 |
-| `check_pg_cron_health()` | Supabase DB | pg_cron の monitor ジョブの最終成功時刻、経過時間、失敗数を返す。`event_watch_check.py` から RPC で呼ばれる |
+| 関数名 | 所有者 | 呼ばれるタイミング | 役割 |
+|--------|--------|-------------------|------|
+| `trigger_workflow_dispatch()` | Supabase DB | 単独では動かない。本番ジョブ・`fire_test_schedules()`・`retry_failed_dispatches()` から呼ばれる | Vault から PAT を取得し、pg_net で GitHub API の workflow_dispatch を呼ぶ。pg_net をラップしており、beta の仕様変更時にここだけ修正すれば済む |
+| `fire_test_schedules()` | Supabase DB | pg_cron で毎分（`* * * * *`） | `portfolio_config.monitor_schedules`（JSON配列）から `"test": true` のスケジュール定義を探し、`monitor_last_runs` で10分以内に実行済みでなければ `trigger_workflow_dispatch()` を呼ぶ。**発火後、その `"test": true` のスケジュール定義をJSON配列から削除**する（使い捨て。本番スケジュールは `test` フラグがないので影響なし） |
+| `retry_failed_dispatches()` | Supabase DB | pg_cron で5分ごと（`*/5 * * * *`） | `cron.job_run_details` で直近30分の失敗を検索し、あれば `trigger_workflow_dispatch()` を再実行 |
+| `check_pg_cron_health()` | Supabase DB | `event_watch_check.py` が実行されるたびに RPC で呼ばれる（実質5〜10分に1回） | pg_cron の monitor ジョブの最終成功時刻、経過時間、失敗数を返す |
+
 
 
 ## 実行済み判定の仕組み（2段階の重複チェック）
@@ -188,7 +190,7 @@ Supabase のデータベースに内蔵されている pg_cron で、
               → event_watch_check.py
               → get_due_regular_schedules()
                 ├─ チェック2: last_runs で10分以内に実行済み？ → YES → スキップ
-                └─ NO → Monitor 実行 → last_runs 更新
+                └─ NO → last_runs 更新（この時点で記録） → Monitor 実行
 
 
 【本番スケジュールの場合】
@@ -199,7 +201,7 @@ Supabase のデータベースに内蔵されている pg_cron で、
               → event_watch_check.py
               → get_due_regular_schedules()
                 ├─ チェック2: last_runs で150分以内に実行済み？ → YES → スキップ
-                └─ NO → Monitor 実行 → last_runs 更新
+                └─ NO → last_runs 更新（この時点で記録） → Monitor 実行
 
   GH Actions 5分ポーリング（1:12 UTC に来た場合）
     └─ event_watch_check.py
@@ -319,7 +321,7 @@ pg_cron は GitHub Actions cron より精度は高いが、以下のリスクが
 | `portfolio_config.monitor_last_runs` | Supabase DB | 実行済み判定（ラベルごとの最終実行時刻） |
 | `.github/workflows/event-monitor.yml` | EventScheduler | Monitor ワークフロー（pg_cron からも cron からも起動される） |
 | `shared/supabase_client.py` の `get_due_regular_schedules()` | shared | スケジュールマッチング + 重複防止判定 |
-| `Monitor/src/event_watch_check.py` | Monitor | スケジュールチェック + pg_cron 死活監視 + 自動 Fast Reboot + パイプライン起動 |
+| `Monitor/src/event_watch_check.py` | Monitor | スケジュールチェック + pg_cron 死活監視 + 自動 Fast Reboot + パイプライン起動。GitHub Actions のワークフローが起動されるたびに最初に実行される（メイン経路: pg_cron → workflow_dispatch、フォールバック経路: GH Actions cron 5分ごと） |
 
 
 ## セキュリティ

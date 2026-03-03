@@ -7,20 +7,22 @@ OpenAI / GLM を呼び出す。戻り値は AgentResult 互換。
 OpenAI:
   - tools 未指定 → Chat Completions API（テキスト生成のみ）
   - tools 指定   → Responses API（web_search 等のツール使用可能）
-GLM:
-  AsyncOpenAI の base_url を Z.AI エンドポイントに向けて使用
-  （公式推奨の OpenAI 互換モード）。
+GLM（2通りの呼び出し方）:
+  call_glm       … AsyncOpenAI で OpenAI 互換エンドポイント（シンプルなテキスト生成）
+  call_glm_agent … Claude Agent SDK + Z.AI の Anthropic 互換エンドポイント経由。
+                   call_agent() と同一インターフェースで WebSearch 等のツール使用可能。
 
 依存パッケージ:
-    openai>=2.20   … call_openai / call_glm 両方で使用
-    python-dotenv  … .env.local 読み込み
-    pyyaml         … エージェントファイルのフロントマターパース
+    openai>=2.20          … call_openai / call_glm で使用
+    claude-agent-sdk      … call_glm_agent で使用
+    python-dotenv         … .env.local 読み込み
+    pyyaml                … エージェントファイルのフロントマターパース
 
 Usage:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "shared"))
-    from llm_client import call_openai, call_glm
+    from llm_client import call_openai, call_glm, call_glm_agent
 
     # テキスト生成のみ
     result = await call_openai("要約して")
@@ -28,8 +30,12 @@ Usage:
     # ウェブ検索付き（Responses API）
     result = await call_openai("NVDAの最新株価は？", tools=["web_search"])
 
-    # GLM
+    # GLM（シンプル、ツールなし）
     result = await call_glm("NVDAを分析して", model="glm-4.7-flash")
+
+    # GLM（call_agent 互換、WebSearch 等のツール使用可能）
+    result = await call_glm_agent("NVDAを分析して")
+    result = await call_glm_agent("NVDAを分析して", file_path=".claude/commands/analyst.md", model="glm-4")
 """
 
 from __future__ import annotations
@@ -503,6 +509,132 @@ async def call_glm(
     return result
 
 
+async def call_glm_agent(
+    messages,
+    file_path: str | Path | None = None,
+    model: str = "glm-4.7-flash",
+    show_options: bool = False,
+    show_prompt: bool = False,
+    show_response: bool = False,
+    show_cost: bool = True,
+    show_tools: bool = False,
+) -> AgentResult:
+    """
+    GLM (Z.AI) を Claude Agent SDK 経由で呼び出す。call_agent() と同等のインターフェース。
+
+    Z.AI の Anthropic 互換エンドポイントに ANTHROPIC_BASE_URL を向けることで GLM を使用する。
+    call_glm() と異なり、Claude Agent SDK のツール（WebSearch 等）をそのまま使用できる。
+
+    Args:
+        messages: プロンプト文字列、list[dict]（OpenAI形式）、または非同期イテレーター
+        file_path: エージェント定義ファイル (.md)。本文が system_prompt、
+                   フロントマターの tools が allowed_tools になる
+        model: GLM モデル名（"glm-5", "glm-4.7", "glm-4.5-air" 等）
+        show_options: オプション内容をコンソール出力
+        show_prompt: プロンプトをコンソール出力
+        show_response: レスポンスをコンソール出力
+        show_cost: コストをコンソール出力（SDK が Claude 料金で計算するため実 GLM 料金と異なる場合あり）
+        show_tools: 使用ツールをコンソール出力
+
+    Returns:
+        AgentResult (text, cost, tools_used)
+    """
+    _load_env()
+    from claude_agent_sdk import (
+        query,
+        ClaudeAgentOptions,
+        AssistantMessage,
+        TextBlock,
+        ToolUseBlock,
+        ResultMessage,
+    )
+
+    api_key = os.environ.get("ZHIPUAI_API_KEY", "")
+
+    if isinstance(messages, str):
+        prompt = messages
+    elif isinstance(messages, list):
+        prompt = "\n".join(
+            m.get("content", "") for m in messages if m.get("role") != "system"
+        )
+    else:
+        parts: list[str] = []
+        async for msg in messages:
+            if isinstance(msg, str):
+                parts.append(msg)
+            elif isinstance(msg, AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, TextBlock) and block.text:
+                        parts.append(block.text)
+        prompt = "\n".join(parts)
+
+    config = parse_agent_file(file_path) if file_path else None
+
+    opt_kwargs: dict = {
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
+            "ANTHROPIC_AUTH_TOKEN": api_key,
+            "ANTHROPIC_MODEL": model,
+        }
+    }
+    if config and config.system_prompt:
+        opt_kwargs["system_prompt"] = config.system_prompt
+    if config and config.metadata.get("tools"):
+        opt_kwargs["allowed_tools"] = config.metadata["tools"]
+
+    options = ClaudeAgentOptions(**opt_kwargs)
+
+    if show_prompt or show_options:
+        print("╔══════════ リク (GLM Agent) ══════════")
+        if show_options:
+            print(f"  model: {model}")
+            print(f"  base_url: https://api.z.ai/api/anthropic")
+            if config and config.metadata.get("tools"):
+                print(f"  allowed_tools: {config.metadata['tools']}")
+        if show_prompt:
+            if config and config.system_prompt:
+                preview = config.system_prompt[:200] + "..." if len(config.system_prompt) > 200 else config.system_prompt
+                print(f"  [system] {preview}")
+            preview = prompt[:200] + "..." if len(prompt) > 200 else prompt
+            print(f"  [prompt] {preview}")
+        print("╚══════════════════════════════════")
+
+    result = AgentResult()
+    text_parts: list[str] = []
+
+    try:
+        async for response in query(prompt=prompt, options=options):
+            if isinstance(response, AssistantMessage):
+                for block in response.content:
+                    if isinstance(block, TextBlock) and block.text:
+                        text_parts.append(block.text)
+                    elif isinstance(block, ToolUseBlock):
+                        result.tools_used.append(block.name)
+                        if show_tools:
+                            print(f"[ツール: {block.name}]")
+            elif isinstance(response, ResultMessage):
+                if response.total_cost_usd:
+                    result.cost = response.total_cost_usd
+    except Exception as e:
+        result.text = "\n".join(text_parts)
+        if not result.text:
+            raise
+        print(f"  [GLM Agent 警告] SDK 終了時エラー: {e}")
+        return result
+
+    result.text = "\n".join(text_parts)
+
+    if show_response and result.text:
+        print("╔══════════ レス (GLM Agent) ══════════")
+        print(result.text)
+        print("╚══════════════════════════════════")
+
+    if show_cost and result.cost is not None:
+        print(f"  [コスト] ${result.cost:.6f} ※Claude 料金ベース（GLM 実コストと異なる場合あり）")
+
+    return result
+
+
 if __name__ == "__main__":
     import sys
 
@@ -512,6 +644,8 @@ if __name__ == "__main__":
 
         if provider == "glm":
             r = await call_glm(prompt, show_response=True)
+        elif provider == "glm-agent":
+            r = await call_glm_agent(prompt, show_response=True, show_tools=True)
         else:
             r = await call_openai(prompt, show_response=True)
 

@@ -1,6 +1,7 @@
 """
 Claude Agent SDK 共通ユーティリティ
 """
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -221,7 +222,11 @@ async def call_agent(
     show_tools: bool = False,
 ) -> AgentResult:
     """
-    プロンプトを受け取り、Claude Codeに渡して応答を表示し、結果を返す。
+    プロンプトを受け取り、LLMに渡して応答を表示し、結果を返す。
+
+    DISCUSSION_LLM_PROVIDER 環境変数でバックエンドを切り替え可能:
+      claude（デフォルト）: Claude Code（Claude Agent SDK）
+      glm               : Z.AI / GLM（DISCUSSION_GLM_MODEL で機種指定、デフォルト glm-4.7-flash）
 
     Args:
         messages: 文字列または非同期イテレーター（文字列またはAssistantMessageを返す）
@@ -231,17 +236,23 @@ async def call_agent(
 
     Returns:
         AgentResult: text（応答テキスト）, cost（コスト）, tools_used（使用ツール）
-
-    Usage:
-        import asyncio
-        from AgentUtil import call_agent
-
-        # 応答を受け取って後続処理に使う
-        result = asyncio.run(call_agent("〇〇銘柄を分析して", file_path=".claude/commands/analyst.md"))
-        print(result.text)        # 応答テキスト
-        print(result.cost)        # コスト（USD）
-        print(result.tools_used)  # ["Read", "WebSearch", ...]
     """
+    # --- GLM ルーティング ---
+    _provider = os.environ.get("DISCUSSION_LLM_PROVIDER", "claude").lower()
+    if _provider == "glm":
+        _shared = Path(__file__).resolve().parent.parent.parent / "shared"
+        if str(_shared) not in sys.path:
+            sys.path.insert(0, str(_shared))
+        from llm_client import call_glm_agent as _call_glm_agent
+        _glm_model = os.environ.get("DISCUSSION_GLM_MODEL", "glm-4.7-flash")
+        _r = await _call_glm_agent(
+            messages, file_path=file_path, model=_glm_model,
+            show_options=show_options, show_prompt=show_prompt,
+            show_response=show_response, show_cost=show_cost, show_tools=show_tools,
+        )
+        return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
+
+    # --- Claude Code（デフォルト）---
     # 文字列ならそのまま使う、非同期イテレーターなら収集
     if isinstance(messages, str):
         prompt = messages
