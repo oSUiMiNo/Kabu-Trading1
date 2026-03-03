@@ -93,8 +93,8 @@ monitor_schedules:
   - label: TEST
     description: "テスト用"
     market: US
-    hour_utc: 7
-    minute_utc: 55
+    hour_utc: 8
+    minute_utc: 40
     days_of_week: [0, 1, 2, 3, 4, 5, 6]
     skip_spans: []
     test: true
