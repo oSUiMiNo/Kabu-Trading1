@@ -193,7 +193,10 @@ def check_scheduler_log_errors():
         discord_req = urllib.request.Request(
             discord_url,
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "InvestmentMonitor/1.0",
+            },
             data=json.dumps({"content": msg}).encode(),
         )
         try:
