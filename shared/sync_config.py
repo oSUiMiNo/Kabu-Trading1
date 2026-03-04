@@ -34,6 +34,28 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
+def jst_to_utc(hour_jst: int, minute_jst: int) -> tuple[int, int]:
+    total_minutes = hour_jst * 60 + minute_jst - 9 * 60
+    if total_minutes < 0:
+        total_minutes += 24 * 60
+    return total_minutes // 60, total_minutes % 60
+
+
+def convert_schedules_jst_to_utc(yaml_data: dict) -> dict:
+    schedules = yaml_data.get("monitor_schedules")
+    if not schedules:
+        return yaml_data
+    converted = []
+    for s in schedules:
+        s = dict(s)
+        if "hour_jst" in s and "minute_jst" in s:
+            h, m = jst_to_utc(s.pop("hour_jst"), s.pop("minute_jst"))
+            s["hour_utc"] = h
+            s["minute_utc"] = m
+        converted.append(s)
+    return {**yaml_data, "monitor_schedules": converted}
+
+
 def normalize_value(key: str, value):
     if key in JSONB_COLUMNS and isinstance(value, (dict, list)):
         return value
@@ -91,6 +113,7 @@ def sync(dry_run: bool = False):
         sys.exit(1)
 
     yaml_data = load_yaml(CONFIG_PATH)
+    yaml_data = convert_schedules_jst_to_utc(yaml_data)
     db_data = get_portfolio_config()
 
     if not db_data:
