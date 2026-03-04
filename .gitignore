@@ -2,4 +2,5 @@
 .env.local
 .claude/settings.local.json
 Planning/logs/
-shared/__pycache__/
+**/__pycache__/
+**/*.pyc
