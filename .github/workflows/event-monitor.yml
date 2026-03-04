@@ -29,6 +29,10 @@ on:
         description: 'pg_cronテストスケジュールによる直接実行（checkをスキップしてMonitorを即起動）'
         type: boolean
         default: false
+      fire_now_market:
+        description: 'fire_now=true時に対象とする市場（US/JP、空=全銘柄）'
+        type: string
+        default: ''
 
 jobs:
   event-watch:
@@ -74,7 +78,11 @@ jobs:
           HAS_WATCHES="${{ steps.check.outputs.has_watches }}"
           if [[ "$FIRE_NOW" == "true" || "$HAS_WATCHES" == "true" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "markets=${{ steps.check.outputs.markets }}" >> "$GITHUB_OUTPUT"
+            if [[ "$FIRE_NOW" == "true" ]]; then
+              echo "markets=${{ inputs.fire_now_market }}" >> "$GITHUB_OUTPUT"
+            else
+              echo "markets=${{ steps.check.outputs.markets }}" >> "$GITHUB_OUTPUT"
+            fi
             echo "skip_spans=${{ steps.check.outputs.skip_spans }}" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
