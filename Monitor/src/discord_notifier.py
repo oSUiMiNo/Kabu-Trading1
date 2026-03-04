@@ -25,6 +25,12 @@ _DECISION_JA = {
     "NOT_SELL_HOLD": "売らない（保有継続）",
 }
 
+_CONFIDENCE_JA = {
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+}
+
 _RISK_FLAG_JA = {
     "price_deviation_exceeded": "価格乖離超過（下落）",
     "basis_invalidated": "根拠崩壊",
@@ -132,10 +138,15 @@ def build_embed(payload: NotifyPayload) -> dict:
     pct = md.get("price_change_pct")
     pct_str = f"{pct:+.2f}%" if pct is not None else "?"
 
-    fields.append({"name": "結果", "value": result_val, "inline": True})
-    fields.append({"name": "現在価格", "value": str(current_price), "inline": True})
-    fields.append({"name": "プラン時価格", "value": str(plan_price), "inline": True})
-    fields.append({"name": "変動率", "value": pct_str, "inline": True})
+    price_table = (
+        "```\n"
+        f"結果      : {result_val}\n"
+        f"現在価格  : {current_price}\n"
+        f"プラン時  : {plan_price}\n"
+        f"変動率    : {pct_str}\n"
+        "```"
+    )
+    fields.append({"name": "\u200b", "value": price_table, "inline": False})
 
     summary = md.get("summary", "")
     if summary:
@@ -154,17 +165,20 @@ def build_embed(payload: NotifyPayload) -> dict:
         plan = payload.new_plan
         decision_raw = str(plan.get("decision_final", "?"))
         decision_ja = _DECISION_JA.get(decision_raw.strip("*").strip(), decision_raw)
-        fields.append({"name": "── 新プラン ──", "value": "\u200b", "inline": False})
-        fields.append({"name": "判定", "value": decision_ja, "inline": True})
-        fields.append({"name": "確信度", "value": str(plan.get("confidence", "?")), "inline": True})
-
+        confidence_raw = str(plan.get("confidence", "?"))
+        confidence_ja = _CONFIDENCE_JA.get(confidence_raw.lower(), confidence_raw)
+        plan_lines = [
+            f"判定    : {decision_ja}",
+            f"確信度  : {confidence_ja}",
+        ]
         alloc = plan.get("allocation_jpy")
         if alloc is not None:
-            fields.append({"name": "配分額", "value": f"¥{alloc:,.0f}", "inline": True})
-
+            plan_lines.append(f"配分額  : ¥{alloc:,.0f}")
         qty = plan.get("quantity")
         if qty is not None:
-            fields.append({"name": "数量", "value": str(qty), "inline": True})
+            plan_lines.append(f"数量    : {qty}")
+        plan_table = "```\n" + "\n".join(plan_lines) + "\n```"
+        fields.append({"name": "── 新プラン ──", "value": plan_table, "inline": False})
 
     if payload.event_context:
         ec = payload.event_context
@@ -234,7 +248,12 @@ def send_start_notification(market: str | None) -> bool:
         "description": f"🕐  **{time_str}**",
         "color": LABEL_COLOR[NotifyLabel.START],
     }
-    return send_webhook(embed, content=f"# {market_ja} Monitor 開始")
+    content = (
+        "## ============================\n"
+        f"# {market_ja} Monitor 開始\n"
+        "## ============================"
+    )
+    return send_webhook(embed, content=content)
 
 
 async def notify(payload: NotifyPayload) -> bool:
