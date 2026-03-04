@@ -106,13 +106,21 @@ def build_embed(payload: NotifyPayload) -> dict:
 
     if label == NotifyLabel.COMPLETE:
         tickers = md.get("tickers", [])
+        ng_tickers = md.get("ng_tickers", [])
         count = len(tickers)
         fields.append({"name": "チェック数", "value": f"{count} 銘柄", "inline": True})
         if tickers:
             fields.append({"name": "銘柄", "value": ", ".join(tickers), "inline": False})
+        if ng_tickers:
+            fields.append({"name": "NG銘柄（再プラン済み）", "value": ", ".join(ng_tickers), "inline": False})
+        description = (
+            "全銘柄のチェックとプラン更新が完了しました。"
+            if ng_tickers
+            else "全銘柄のプランが現在の市場状況に対して有効です。"
+        )
         return {
             "title": title,
-            "description": "全銘柄のプランが現在の市場状況に対して有効です。",
+            "description": description,
             "color": color,
             "fields": fields,
         }

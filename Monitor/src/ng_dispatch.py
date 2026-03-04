@@ -230,6 +230,20 @@ async def run_pipeline(
     print(f"=== パイプライン完了 ===")
     print(f"{'='*60}")
 
+    all_tickers = list(summary.results.keys())
+    ng_ticker_names = [ng["ticker"] for ng in summary.ng_tickers]
+    market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+    payload = NotifyPayload(
+        label=NotifyLabel.COMPLETE,
+        ticker=f"{market_name} 全銘柄チェック完了",
+        monitor_data={
+            "tickers": all_tickers,
+            "ng_tickers": ng_ticker_names,
+        },
+        event_context=event_context,
+    )
+    await notify(payload)
+
 
 if __name__ == "__main__":
     target = None
