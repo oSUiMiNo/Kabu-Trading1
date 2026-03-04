@@ -11,6 +11,7 @@ from enum import Enum
 
 
 class NotifyLabel(Enum):
+    START = "開始"
     URGENT = "緊急"
     GOOD_NEWS = "朗報"
     WARNING = "警告"
@@ -20,6 +21,7 @@ class NotifyLabel(Enum):
 
 
 LABEL_COLOR = {
+    NotifyLabel.START: 0x00B4D8,
     NotifyLabel.URGENT: 0xFF0000,
     NotifyLabel.GOOD_NEWS: 0x00CC00,
     NotifyLabel.WARNING: 0xFFA500,

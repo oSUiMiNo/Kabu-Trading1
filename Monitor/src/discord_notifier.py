@@ -12,7 +12,7 @@ import os
 import urllib.request
 from pathlib import Path
 
-from notification_types import NotifyLabel, NotifyPayload, LABEL_COLOR
+from notification_types import NotifyLabel, NotifyPayload, LABEL_COLOR, MARKET_JA
 
 AGENTS_DIR = Path(__file__).resolve().parent.parent / ".claude" / "commands"
 
@@ -188,14 +188,18 @@ def build_embed(payload: NotifyPayload) -> dict:
     return embed
 
 
-def send_webhook(embed: dict) -> bool:
+def send_webhook(embed: dict, content: str = "") -> bool:
     """Discord Webhook にメッセージを送信する。"""
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
     if not webhook_url:
         print("  [通知] DISCORD_WEBHOOK_URL 未設定 — スキップ")
         return False
 
-    body = json.dumps({"embeds": [embed]}).encode("utf-8")
+    payload: dict = {}
+    if content:
+        payload["content"] = content
+    payload["embeds"] = [embed]
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         webhook_url,
         data=body,
@@ -218,6 +222,19 @@ def send_webhook(embed: dict) -> bool:
     except Exception as e:
         print(f"  [通知] Discord 送信失敗: {e}")
         return False
+
+
+def send_start_notification(market: str | None) -> bool:
+    """Monitor 開始時に Discord に通知する。"""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone(timedelta(hours=9)))
+    time_str = now.strftime("%Y-%m-%d %H:%M JST")
+    market_ja = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+    embed = {
+        "description": f"🕐  **{time_str}**",
+        "color": LABEL_COLOR[NotifyLabel.START],
+    }
+    return send_webhook(embed, content=f"# {market_ja} Monitor 開始")
 
 
 async def notify(payload: NotifyPayload) -> bool:

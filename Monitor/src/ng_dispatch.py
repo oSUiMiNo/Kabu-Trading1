@@ -27,7 +27,7 @@ from supabase_client import safe_db, get_latest_session_with_plan
 
 from monitor_orchestrator import run_monitor
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA
-from discord_notifier import notify
+from discord_notifier import notify, send_start_notification
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 PIPELINE_SCRIPT = PROJECT_ROOT / "discuss_and_plan.py"
@@ -125,6 +125,7 @@ async def run_pipeline(
 ):
     """Monitor → Discussion → Planning パイプライン（通知統合済み）。"""
     event_context = _load_event_context()
+    send_start_notification(market)
     summary = await run_monitor(target_ticker, market=market, skip_spans=skip_spans)
 
     for ticker, monitor_data in summary.results.items():
