@@ -13,6 +13,9 @@ from pathlib import Path
 
 import anyio
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
+from supabase_client import safe_db, get_lane_field
+
 from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log, side_ja
 
 
@@ -116,6 +119,17 @@ def _read_latest_judge(ticker: str, set_num: int, session_dir: Path | None = Non
     return latest.read_text(encoding="utf-8")
 
 
+def _extract_discussion_summary(content: str) -> str:
+    """議論テキストから暫定結論・EXPORT 付近を抽出する（全文は大きすぎるため）"""
+    if not content:
+        return ""
+    idx = content.rfind("暫定結論")
+    if idx != -1:
+        start = max(0, content.rfind("\n#", 0, idx))
+        return content[start:].strip()
+    return content[-3000:].strip() if len(content) > 3000 else content
+
+
 def _read_discussion_export(ticker: str, set_num: int, session_dir: Path | None = None) -> str:
     """議論ログから暫定結論・EXPORT 付近を抽出する（全文は大きすぎるため）"""
     base = session_dir if session_dir else LOGS_DIR
@@ -124,14 +138,7 @@ def _read_discussion_export(ticker: str, set_num: int, session_dir: Path | None 
     if not log_path.exists():
         return ""
     content = log_path.read_text(encoding="utf-8")
-    # 最後の「暫定結論」以降を抽出（EXPORT 含む）
-    idx = content.rfind("暫定結論")
-    if idx != -1:
-        # 少し前から取る（セクション見出し含む）
-        start = max(0, content.rfind("\n#", 0, idx))
-        return content[start:].strip()
-    # 見つからなければ末尾 3000 文字
-    return content[-3000:].strip() if len(content) > 3000 else content
+    return _extract_discussion_summary(content)
 
 
 def build_final_judge_prompt(
@@ -142,6 +149,7 @@ def build_final_judge_prompt(
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
     session_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> str:
     """final_judgeエージェントに渡すプロンプトを組み立てる（ファイル内容インライン埋め込み）"""
     t = ticker.upper()
@@ -198,8 +206,13 @@ def build_final_judge_prompt(
     inline_sections = []
     for sn in all_sets:
         label = "AGREED" if sn in agreed_sets else "DISAGREED"
-        judge_content = _read_latest_judge(ticker, sn, session_dir)
-        discussion_export = _read_discussion_export(ticker, sn, session_dir)
+        if session_id:
+            judge_content = safe_db(get_lane_field, session_id, sn, "judge_md") or ""
+            disc_full = safe_db(get_lane_field, session_id, sn, "discussion_md") or ""
+            discussion_export = _extract_discussion_summary(disc_full)
+        else:
+            judge_content = _read_latest_judge(ticker, sn, session_dir)
+            discussion_export = _read_discussion_export(ticker, sn, session_dir)
 
         section = f"--- set{sn} [{label}] ここから ---\n"
         if discussion_export:
@@ -239,6 +252,7 @@ async def run_final_judge_orchestrator(
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
     session_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> FinalJudgeResult:
     """
     最終判定オーケストレーターを実行。
@@ -282,7 +296,7 @@ async def run_final_judge_orchestrator(
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
-    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, session_dir)
+    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, session_dir, session_id)
     agent_file = AGENTS_DIR / "final-judge.md"
 
     MAX_AGENT_RETRIES = 3

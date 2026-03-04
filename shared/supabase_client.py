@@ -235,6 +235,35 @@ def get_latest_session(ticker: str) -> dict | None:
     return resp.data[0] if resp.data else None
 
 
+def write_lane_field(session_id: str, lane_num: int, field: str, value: str) -> None:
+    """sessions.lanes[lane_num][field] を atomic に更新する（並列実行安全）。"""
+    get_client().rpc("update_session_lane", {
+        "p_session_id": session_id,
+        "p_lane_num": str(lane_num),
+        "p_field": field,
+        "p_value": value,
+    }).execute()
+
+
+def get_lane_field(session_id: str, lane_num: int, field: str):
+    """sessions.lanes[lane_num][field] を取得する。"""
+    resp = (
+        get_client()
+        .from_("sessions")
+        .select("lanes")
+        .eq("id", session_id)
+        .limit(1)
+        .execute()
+    )
+    if not resp.data:
+        return None
+    lanes = resp.data[0].get("lanes") or {}
+    if isinstance(lanes, str):
+        lanes = json.loads(lanes)
+    lane = lanes.get(str(lane_num)) or {}
+    return lane.get(field)
+
+
 def get_latest_session_with_plan(ticker: str) -> dict | None:
     """指定銘柄で plan が存在する最新の completed セッションを取得。"""
     resp = (
