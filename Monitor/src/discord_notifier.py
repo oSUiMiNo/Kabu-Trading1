@@ -58,6 +58,28 @@ _WATCH_KIND_JA = {
     "boj_afternoon": "日銀 午後",
 }
 
+_LABEL_EMOJI = {
+    NotifyLabel.URGENT: "🚨",
+    NotifyLabel.GOOD_NEWS: "🎉",
+    NotifyLabel.WARNING: "⚠️",
+    NotifyLabel.CHECK: "🔍",
+    NotifyLabel.COMPLETE: "✅",
+    NotifyLabel.ERROR: "❌",
+}
+
+
+def _extract_plan_description(plan: dict) -> str:
+    """yaml_full から monitoring_hint.reason を取得する。"""
+    plan_yaml = plan.get("yaml_full", "")
+    if not plan_yaml:
+        return ""
+    try:
+        import yaml
+        parsed = yaml.safe_load(plan_yaml)
+        return parsed.get("monitoring_hint", {}).get("reason", "")
+    except Exception:
+        return ""
+
 
 def _build_summary_prompt(payload: NotifyPayload) -> str:
     """notify-summarizer に渡すプロンプトを組み立てる。"""
@@ -98,20 +120,18 @@ async def generate_beginner_summary(payload: NotifyPayload) -> str:
 
 def build_embed(payload: NotifyPayload) -> dict:
     """Discord Embed dict を構築する。"""
+    from datetime import datetime, timezone
     md = payload.monitor_data
     label = payload.label
     color = LABEL_COLOR.get(label, 0x808080)
-    title = f"【{label.value}】{payload.ticker}"
-
+    emoji = _LABEL_EMOJI.get(label, "")
+    title = f"{emoji} [ {label.value} ]　{payload.ticker}"
+    timestamp = datetime.now(timezone.utc).isoformat()
     fields = []
 
     if label == NotifyLabel.ERROR:
         fields.append({"name": "エラー詳細", "value": payload.error_detail or "不明", "inline": False})
-        return {
-            "title": title,
-            "color": color,
-            "fields": fields,
-        }
+        return {"title": title, "color": color, "timestamp": timestamp, "fields": fields}
 
     if label == NotifyLabel.COMPLETE:
         tickers = md.get("tickers", [])
@@ -127,80 +147,91 @@ def build_embed(payload: NotifyPayload) -> dict:
             if ng_tickers
             else "全銘柄のプランが現在の市場状況に対して有効です。"
         )
-        return {
-            "title": title,
-            "description": description,
-            "color": color,
-            "fields": fields,
-        }
+        return {"title": title, "description": description, "color": color, "timestamp": timestamp, "fields": fields}
 
-    result_raw = md.get("result", "?")
-    result_val = _RESULT_JA.get(result_raw, result_raw)
     current_price = md.get("current_price", "?")
     plan_price = md.get("plan_price", "?")
     pct = md.get("price_change_pct")
     pct_str = f"{pct:+.2f}%" if pct is not None else "?"
 
-    price_table = (
-        "```\n"
-        f"結果      : {result_val}\n"
-        f"現在価格  : {current_price}\n"
-        f"プラン時  : {plan_price}\n"
-        f"変動率    : {pct_str}\n"
-        "```"
-    )
-    fields.append({"name": "\u200b", "value": price_table, "inline": False})
-
-    summary = md.get("summary", "")
-    if summary:
-        fields.append({"name": "サマリー", "value": summary[:1024], "inline": False})
-
-    ng_reason = md.get("ng_reason", "")
-    if ng_reason:
-        fields.append({"name": "NG理由", "value": ng_reason[:1024], "inline": False})
-
-    risk_flags = md.get("risk_flags") or []
-    if risk_flags:
-        flags_ja = [_RISK_FLAG_JA.get(f, f) for f in risk_flags]
-        fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja), "inline": False})
-
     if payload.new_plan:
+        # NG → 再議論済みレイアウト
         plan = payload.new_plan
         decision_raw = str(plan.get("decision_final", "?"))
         decision_ja = _DECISION_JA.get(decision_raw.strip("*").strip(), decision_raw)
         confidence_raw = str(plan.get("confidence", "?"))
         confidence_ja = _CONFIDENCE_JA.get(confidence_raw.lower(), confidence_raw)
-        plan_lines = [
-            f"判定    : {decision_ja}",
-            f"確信度  : {confidence_ja}",
-        ]
+
+        plan_desc = _extract_plan_description(plan)
+        if plan_desc:
+            fields.append({"name": "新プラン", "value": f"> {plan_desc}", "inline": False})
+
+        result_lines = [f"> 判定 : {decision_ja}", f"> 確信度 : {confidence_ja}"]
         alloc = plan.get("allocation_jpy")
         if alloc is not None:
-            plan_lines.append(f"配分額  : ¥{alloc:,.0f}")
+            result_lines.append(f"> 配分額 : ¥{alloc:,.0f}")
         qty = plan.get("quantity")
         if qty is not None:
-            plan_lines.append(f"数量    : {qty}")
-        plan_table = "```\n" + "\n".join(plan_lines) + "\n```"
-        fields.append({"name": "── 新プラン ──", "value": plan_table, "inline": False})
+            result_lines.append(f"> 数量 : {qty}")
+        fields.append({"name": "議論結果", "value": "\n".join(result_lines), "inline": False})
+
+        fields.append({"name": "株価", "value": (
+            f"> 現在価格  : {current_price}\n"
+            f"> プラン時  : {plan_price}\n"
+            f"> 変動率    : {pct_str}"
+        ), "inline": False})
+
+        summary = md.get("summary", "")
+        if summary:
+            fields.append({"name": "議論サマリ", "value": f"> {summary[:1020]}", "inline": False})
+
+        ng_reason = md.get("ng_reason", "")
+        if ng_reason:
+            fields.append({"name": "監視時NG理由", "value": f"> {ng_reason[:1020]}", "inline": False})
+
+        embed = {
+            "title": title,
+            "description": "プラン続行がNGと判断し再議論しました",
+            "color": color,
+            "timestamp": timestamp,
+            "fields": fields,
+        }
+
+    else:
+        # 新プランなし（CHECK など）
+        result_raw = md.get("result", "?")
+        result_val = _RESULT_JA.get(result_raw, result_raw)
+        fields.append({"name": "株価", "value": (
+            f"> 結果      : {result_val}\n"
+            f"> 現在価格  : {current_price}\n"
+            f"> プラン時  : {plan_price}\n"
+            f"> 変動率    : {pct_str}"
+        ), "inline": False})
+
+        summary = md.get("summary", "")
+        if summary:
+            fields.append({"name": "議論サマリ", "value": f"> {summary[:1020]}", "inline": False})
+
+        ng_reason = md.get("ng_reason", "")
+        if ng_reason:
+            fields.append({"name": "監視時NG理由", "value": f"> {ng_reason[:1020]}", "inline": False})
+
+        risk_flags = md.get("risk_flags") or []
+        if risk_flags:
+            flags_ja = [_RISK_FLAG_JA.get(f, f) for f in risk_flags]
+            fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja), "inline": False})
+
+        embed = {"title": title, "color": color, "timestamp": timestamp, "fields": fields}
+        if payload.beginner_summary:
+            embed["description"] = payload.beginner_summary
 
     if payload.event_context:
         ec = payload.event_context
         event_name = ec.get("name_ja", ec.get("event_id", "?"))
         watch_kind_raw = ec.get("watch_kind", "")
         watch_kind_ja = _WATCH_KIND_JA.get(watch_kind_raw, watch_kind_raw)
-        event_str = f"{event_name}"
-        if watch_kind_ja:
-            event_str += f"（{watch_kind_ja}）"
+        event_str = event_name + (f"（{watch_kind_ja}）" if watch_kind_ja else "")
         fields.append({"name": "トリガイベント", "value": event_str, "inline": False})
-
-    embed = {
-        "title": title,
-        "color": color,
-        "fields": fields,
-    }
-
-    if payload.beginner_summary:
-        embed["description"] = payload.beginner_summary
 
     return embed
 
