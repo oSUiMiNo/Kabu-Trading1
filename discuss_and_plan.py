@@ -16,7 +16,6 @@ Usage:
     python discuss_and_plan.py AAPL 短期 売る
     python discuss_and_plan.py NVDA 中期 買い増す
 """
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +23,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 DISCUSSION_DIR = PROJECT_ROOT / "Discusion" / "src"
-DISCUSSION_LOGS = PROJECT_ROOT / "Discusion" / "logs"
 PLANNING_DIR = PROJECT_ROOT / "Planning" / "src"
 
 HORIZON_MAP = {
@@ -50,32 +48,6 @@ def _find_venv_python(src_dir: Path) -> str:
     return "python"
 
 
-def _find_latest_session_dir(ticker: str) -> Path | None:
-    """Discusion/logs/ 配下で最新のセッションディレクトリを返す。
-
-    ディレクトリ名が YYMMDD_HHMM 形式であること、
-    かつ指定銘柄の final_judge ファイルが存在することを検証する。
-    """
-    if not DISCUSSION_LOGS.exists():
-        return None
-
-    pattern = re.compile(r"^\d{6}_\d{4}$")
-    candidates = sorted(
-        (d for d in DISCUSSION_LOGS.iterdir()
-         if d.is_dir() and pattern.match(d.name)),
-        key=lambda d: d.name,
-        reverse=True,
-    )
-
-    t = ticker.upper()
-    for d in candidates:
-        final_judges = list(d.glob(f"{t}_final_judge_*.md"))
-        if final_judges:
-            return d
-
-    return None
-
-
 def run_discussion(ticker: str, horizon: str, mode: str) -> int:
     """Discussion を subprocess で実行する。"""
     python = _find_venv_python(DISCUSSION_DIR)
@@ -87,11 +59,11 @@ def run_discussion(ticker: str, horizon: str, mode: str) -> int:
     return result.returncode
 
 
-def run_planning(ticker: str, session_dir: str, horizon_jp: str) -> int:
+def run_planning(ticker: str, horizon_jp: str) -> int:
     """Planning を subprocess で実行する。"""
     python = _find_venv_python(PLANNING_DIR)
     script = str(PLANNING_DIR / "plan_orchestrator.py")
-    cmd = [python, script, ticker, session_dir, horizon_jp]
+    cmd = [python, script, ticker, horizon_jp]
 
     print(f"  コマンド: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=str(PLANNING_DIR))
@@ -139,13 +111,9 @@ def main():
 
     # ── --planning-only: Discussion スキップ ──
     if planning_only:
-        session_dir = _find_latest_session_dir(ticker)
-        if not session_dir:
-            print(f"エラー: {ticker} の Discussion ログが見つかりません（--planning-only）。")
-            sys.exit(1)
-        print(f"--planning-only: Discussion スキップ、ログ使用: {session_dir.name}")
+        print(f"--planning-only: Discussion スキップ（DB から最新セッションを使用）")
         print()
-        exit_code = run_planning(ticker, str(session_dir), horizon_jp)
+        exit_code = run_planning(ticker, horizon_jp)
         if exit_code != 0:
             print()
             print(f"エラー: Planning が異常終了しました (exit code: {exit_code})")
@@ -172,23 +140,12 @@ def main():
     print("Discussion 完了")
     print()
 
-    # ── Step 2: セッションディレクトリ特定 ──
-    session_dir = _find_latest_session_dir(ticker)
-    if not session_dir:
-        print(f"エラー: Discussion のログディレクトリが見つかりません。")
-        print(f"  検索先: {DISCUSSION_LOGS}")
-        print(f"  対象銘柄: {ticker.upper()}")
-        sys.exit(1)
-
-    print(f"セッションディレクトリ: {session_dir}")
-    print()
-
-    # ── Step 3: Planning ──
+    # ── Step 2: Planning ──
     print(f"{'='*60}")
     print(f"=== Step 2: Planning（プラン生成） ===")
     print(f"{'='*60}")
 
-    exit_code = run_planning(ticker, str(session_dir), horizon_jp)
+    exit_code = run_planning(ticker, horizon_jp)
     if exit_code != 0:
         print()
         print(f"エラー: Planning が異常終了しました (exit code: {exit_code})")

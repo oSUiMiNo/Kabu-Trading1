@@ -1,24 +1,25 @@
 """
 Plan オーケストレーター
 
-Discussion プロジェクトのログ一式（議論・判定・最終判定）を受け取り、
+DB から最新セッションの final_judge / lanes を取得し、
 決定論的な計算ですべての数値を確定させた上で、
 エージェントに commentary フィールド (decision_basis の why_it_matters,
 monitoring_hint の reason, execution_notes) を生成させ、
 PlanSpec YAML を出力する。
 
 Usage:
-    python plan_orchestrator.py <銘柄> <セッションDir> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格]
+    python plan_orchestrator.py <銘柄> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格]
 
     現在価格を省略すると price-fetcher エージェントがWeb検索で自動取得する。
     基準価格を省略すると現在価格と同値（ズレ0%）になる。
     "-" を指定しても省略扱い。
 
 例:
-    python plan_orchestrator.py 楽天 "C:\\...\\Discusion\\logs" 中期
-    python plan_orchestrator.py 楽天 "C:\\...\\Discusion\\logs" 中期 5000000 50000
-    python plan_orchestrator.py NVDA "C:\\...\\logs\\260210_1200" 長期 5000000 5% - 135
+    python plan_orchestrator.py 楽天 中期
+    python plan_orchestrator.py 楽天 中期 5000000 50000
+    python plan_orchestrator.py NVDA 長期 5000000 5% - 135
 """
+import json
 import os
 import re
 import sys
@@ -37,7 +38,7 @@ from notification_types import NotifyPayload, classify_label
 from discord_notifier import notify
 
 from AgentUtil import call_agent, load_debug_config
-from log_parser import SessionLogs, find_session_logs, parse_final_judge
+from log_parser import parse_final_judge_from_db
 from plan_calc import (
     Horizon, Market, Confidence, PlanConfig,
     check_freshness, check_price_deviation, calc_confidence, calc_allocation,
@@ -199,7 +200,7 @@ async def _fetch_current_price(ticker: str, market: Market) -> float | None:
 def build_commentary_prompt(
     spec: PlanSpec,
     raw_judge_text: str,
-    additional_file_paths: list[Path] | None = None,
+    additional_texts: list[tuple[str, str]] | None = None,
 ) -> str:
     """
     plan-generator エージェントに渡すプロンプトを組み立てる。
@@ -209,19 +210,22 @@ def build_commentary_prompt(
     - monitoring_hint.reason を生成
     - execution_notes に状況に応じた注記を追加
     - 全ての数値はオーケストレーター算出済み。エージェントは数値を変更しない。
-    - 追加ファイル（議論ログ・意見書・判定・アクションプラン）を Read で参照して commentary を補強
+    - additional_texts（議論ログ・判定ログ）を参照して commentary を補強
+
+    Args:
+        additional_texts: [(ラベル, テキスト内容), ...] 形式の追加コンテキスト
     """
     yaml_str = build_yaml(spec)
 
-    additional_files_section = ""
-    if additional_file_paths:
-        paths_text = "\n".join(f"  - {p}" for p in additional_file_paths)
-        additional_files_section = (
+    additional_section = ""
+    if additional_texts:
+        parts = []
+        for label, content in additional_texts:
+            parts.append(f"--- {label} ---\n{content}\n")
+        additional_section = (
             f"\n"
-            f"【参照可能な追加ファイル（必要に応じて Read で読んでください）】\n"
-            f"Discussion プロジェクトが出力した議論・判定ログです。\n"
-            f"議論ログ（set*.md）は大きいため必要な部分だけ読めば十分です。\n"
-            f"{paths_text}\n"
+            f"【参考：Discussion ログ】\n"
+            f"{''.join(parts)}"
         )
 
     return (
@@ -234,11 +238,11 @@ def build_commentary_prompt(
         f"--- ここから ---\n"
         f"{raw_judge_text}\n"
         f"--- ここまで ---\n"
-        f"{additional_files_section}"
+        f"{additional_section}"
         f"\n"
         f"【あなたの作業】\n"
         f"1. 銘柄「{spec.ticker}」に関する最新ニュースや市場状況をWeb検索で確認\n"
-        f"2. 追加ファイルがある場合は Read で参照し、根拠の詳細や議論の文脈を把握する\n"
+        f"2. 追加の Discussion ログがある場合は参照し、根拠の詳細や議論の文脈を把握する\n"
         f"3. decision_basis の各項目に why_it_matters（結論の決め手になった理由を日本語1文。最新情報があれば言及）を付与\n"
         f"4. monitoring_hint.reason を生成（投票状況・confidence・freshness + 直近イベントを踏まえた1文）\n"
         f"5. execution_notes に追加すべき注記があれば追加（価格ズレ警告、鮮度警告、市況注記など）\n"
@@ -300,7 +304,6 @@ def _merge_commentary(spec: PlanSpec, agent_output: str) -> None:
 
 async def run_plan_orchestrator(
     ticker: str,
-    session_dir: str,
     budget_total_jpy: int,
     risk_limit: str,
     horizon: str,
@@ -312,7 +315,7 @@ async def run_plan_orchestrator(
     Plan オーケストレーターのメイン関数。
 
     フロー:
-    1. ログ解析 (log_parser)
+    1. DB からセッション取得 (final_judge / lanes)
     1.5. 価格取得 (price-fetcher, current_price 未指定時)
     2. 鮮度チェック (plan_calc)
     3. 価格ズレ判定 (plan_calc)
@@ -334,27 +337,37 @@ async def run_plan_orchestrator(
     print(f"=== 投資期間: {_HORIZON_JA.get(horizon, horizon)} ===")
     print(f"{'='*60}")
 
-    # --- 1. ログ解析 ---
-    session_path = Path(session_dir)
-    logs = find_session_logs(session_path, ticker)
-    if not logs.final_judge:
-        print(f"  エラー: {session_path} に final_judge ログが見つかりません")
+    # --- 1. DB からセッション取得 ---
+    _db_session = safe_db(get_latest_session, t)
+    if not _db_session:
+        print(f"  エラー: {t} のセッションが DB に見つかりません")
         sys.exit(1)
 
-    print(f"  ログ: {logs.final_judge.name}")
-    judgment = parse_final_judge(logs.final_judge)
+    fj_data = _db_session.get("final_judge") or {}
+    if not fj_data:
+        print(f"  エラー: {t} のセッションに final_judge がありません")
+        sys.exit(1)
+
+    created_at = _db_session.get("created_at", "")
+    judgment = parse_final_judge_from_db(fj_data, ticker, created_at)
     print(f"  判定: {judgment.decision}（raw: {judgment.decision_raw}）")
     print(f"  投票: for={judgment.vote_for}, against={judgment.vote_against}")
     print(f"  一致度: {judgment.overall_agreement}")
 
-    additional_file_paths: list[Path] = [
-        *logs.set_files,
-        *logs.judge_files,
-    ]
-    if additional_file_paths:
-        print(f"  追加ファイル: {len(additional_file_paths)} 件")
-        for p in additional_file_paths:
-            print(f"    - {p.name}")
+    lanes_raw = _db_session.get("lanes") or {}
+    if isinstance(lanes_raw, str):
+        lanes_raw = json.loads(lanes_raw)
+    additional_texts: list[tuple[str, str]] = []
+    for lane_id, lane_data in sorted(lanes_raw.items()):
+        if isinstance(lane_data, dict):
+            disc_md = lane_data.get("discussion_md", "")
+            if disc_md:
+                additional_texts.append((f"set{lane_id} 議論", disc_md))
+            judge_md = lane_data.get("judge_md", "")
+            if judge_md:
+                additional_texts.append((f"set{lane_id} 判定", judge_md))
+    if additional_texts:
+        print(f"  追加テキスト: {len(additional_texts)} 件")
     print()
 
     # --- 1.5 価格取得（current_price 未指定時）---
@@ -454,7 +467,7 @@ async def run_plan_orchestrator(
 
     # --- 7. エージェント呼び出し（commentary 生成、リトライ付き） ---
     print(f">>> commentary 生成（plan-generator エージェント）")
-    prompt = build_commentary_prompt(spec, judgment.raw_text, additional_file_paths)
+    prompt = build_commentary_prompt(spec, judgment.raw_text, additional_texts)
     agent_file = AGENTS_DIR / "plan-generator.md"
 
     dbg = load_debug_config("plan")
@@ -491,7 +504,6 @@ async def run_plan_orchestrator(
     print(f"{'='*60}")
 
     # --- 10. DB 書き込み（sessions.plan JSONB に格納） ---
-    _db_session = safe_db(get_latest_session, spec.ticker)
     _db_session_id = _db_session["id"] if _db_session else None
     if _db_session_id:
         plan_data = {
@@ -553,8 +565,8 @@ def _parse_optional_float(argv: list[str], idx: int) -> float | None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("使い方: python plan_orchestrator.py <銘柄> <セッションDir> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格]")
+    if len(sys.argv) < 3:
+        print("使い方: python plan_orchestrator.py <銘柄> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格]")
         print()
         print("  期間（必須）: '短期' / '中期' / '長期'")
         print("  予算・リスク上限は省略時に Supabase DB から自動取得")
@@ -564,18 +576,17 @@ if __name__ == "__main__":
         print("  基準価格: 省略または '-' → 現在価格と同値（ズレ0%）")
         print()
         print("例:")
-        print("  python plan_orchestrator.py NVDA \"C:\\...\\logs\\260210\" 長期")
-        print("  python plan_orchestrator.py 楽天 \"C:\\...\\Discusion\\logs\" 中期 5000000 50000")
-        print("  python plan_orchestrator.py NVDA \"C:\\...\\logs\\260210\" 長期 5000000 5% - 135")
+        print("  python plan_orchestrator.py NVDA 長期")
+        print("  python plan_orchestrator.py 楽天 中期 5000000 50000")
+        print("  python plan_orchestrator.py NVDA 長期 5000000 5% - 135")
         sys.exit(1)
 
-    if sys.argv[3] not in _HORIZON_MAP:
-        print(f"エラー: 期間 '{sys.argv[3]}' は無効です。'短期' / '中期' / '長期' のいずれかを指定してください。")
+    if sys.argv[2] not in _HORIZON_MAP:
+        print(f"エラー: 期間 '{sys.argv[2]}' は無効です。'短期' / '中期' / '長期' のいずれかを指定してください。")
         sys.exit(1)
 
     ticker = sys.argv[1]
-    session_dir = sys.argv[2]
-    horizon = _HORIZON_MAP[sys.argv[3]]
+    horizon = _HORIZON_MAP[sys.argv[2]]
 
     # DB からデフォルト値を取得（CLI 引数で上書き可能）
     _db_config = safe_db(get_portfolio_config) or {}
@@ -591,15 +602,15 @@ if __name__ == "__main__":
         val = db_src.get(db_key)
         return float(val) if val is not None else 0.0
 
-    budget = _cli_or_db_int(4, "total_budget_jpy")
-    if len(sys.argv) > 5 and sys.argv[5] != "-":
-        risk_limit = sys.argv[5]
+    budget = _cli_or_db_int(3, "total_budget_jpy")
+    if len(sys.argv) > 4 and sys.argv[4] != "-":
+        risk_limit = sys.argv[4]
     elif _db_config.get("risk_limit_pct") is not None:
         risk_limit = f"{_db_config['risk_limit_pct']}%"
     else:
         risk_limit = "5%"
-    current_price = _parse_optional_float(sys.argv, 6)
-    anchor_price = _parse_optional_float(sys.argv, 7)
+    current_price = _parse_optional_float(sys.argv, 5)
+    anchor_price = _parse_optional_float(sys.argv, 6)
 
     if budget == 0:
         print("エラー: 予算が 0 です。CLI 引数または Supabase の portfolio_config を設定してください。")
@@ -612,7 +623,7 @@ if __name__ == "__main__":
         print(f"  (DB フォールバック有効)")
 
     anyio.run(lambda: run_plan_orchestrator(
-        ticker, session_dir, budget, risk_limit, horizon,
+        ticker, budget, risk_limit, horizon,
         current_price, anchor_price,
         config=plan_config,
     ))

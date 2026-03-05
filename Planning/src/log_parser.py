@@ -315,6 +315,77 @@ def _extract_decision_basis(export: dict | None, full_text: str) -> list[Decisio
     return basis_list
 
 
+def parse_final_judge_from_db(fj_data: dict, ticker: str, created_at: str) -> ParsedJudgment:
+    """
+    DB の sessions.final_judge dict から ParsedJudgment を生成する。
+
+    fj_data の期待キー:
+        markdown          : final_judge ログ全文（テキスト解析に使用）
+        action_votes      : アクション票数（なければ markdown から抽出）
+        safe_votes        : 安全票数（同上）
+        overall_agreement : 総合一致度（同上）
+    """
+    text = fj_data.get("markdown", "")
+
+    export = _extract_export_yaml(text)
+
+    # --- 判定結果 ---
+    decision_raw = None
+    if export:
+        decision_raw = _extract_decision_from_export(export)
+    if not decision_raw:
+        decision_raw = _extract_decision_from_text(text)
+    if not decision_raw:
+        decision_raw = "UNKNOWN"
+    decision = DECISION_MAP.get(decision_raw, decision_raw)
+
+    # --- 総合一致度（DB優先、なければテキストから） ---
+    agreement = fj_data.get("overall_agreement")
+    if not agreement:
+        if export:
+            agreement = _extract_agreement_from_export(export)
+    if not agreement:
+        agreement = _extract_agreement_from_text(text)
+    if not agreement:
+        agreement = "UNKNOWN"
+
+    # --- 投票数（DB優先、なければテキストから） ---
+    vote_for = fj_data.get("action_votes")
+    vote_against = fj_data.get("safe_votes")
+    if vote_for is None or vote_against is None:
+        votes = None
+        if export:
+            votes = _extract_votes_from_export(export)
+        if not votes:
+            votes = _extract_votes_from_text(text)
+        if not votes and export:
+            votes = _infer_votes_from_export(export, decision_raw)
+        vote_for = votes[0] if votes else 0
+        vote_against = votes[1] if votes else 0
+
+    # --- 根拠 ---
+    basis = _extract_decision_basis(export, text)
+
+    # --- ログ日時 ---
+    try:
+        log_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        log_date = log_date.replace(tzinfo=None)
+    except (ValueError, AttributeError):
+        log_date = datetime.now()
+
+    return ParsedJudgment(
+        ticker=ticker.upper(),
+        decision=decision,
+        decision_raw=decision_raw,
+        vote_for=int(vote_for),
+        vote_against=int(vote_against),
+        overall_agreement=agreement,
+        log_date=log_date,
+        decision_basis=basis,
+        raw_text=text,
+    )
+
+
 def parse_final_judge(log_path: Path) -> ParsedJudgment:
     """
     final_judge ログを解析して ParsedJudgment を返す。
