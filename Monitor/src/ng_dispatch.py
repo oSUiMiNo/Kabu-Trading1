@@ -23,7 +23,7 @@ from pathlib import Path
 import anyio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
-from supabase_client import safe_db, get_latest_session_with_plan
+from supabase_client import safe_db
 
 from monitor_orchestrator import run_monitor
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA
@@ -67,18 +67,6 @@ def _load_event_context() -> dict | None:
     except (json.JSONDecodeError, TypeError):
         return None
 
-
-def _fetch_new_plan(ticker: str) -> dict | None:
-    """Discussion → Planning 完了後の最新プランを DB から取得する。"""
-    session = safe_db(get_latest_session_with_plan, ticker)
-    if not session:
-        return None
-    plan = session.get("plan")
-    if not plan:
-        return None
-    if isinstance(plan, str):
-        plan = json.loads(plan)
-    return plan
 
 
 def run_discuss_and_plan(ticker: str, span: str, mode: str) -> int:
@@ -204,17 +192,6 @@ async def run_pipeline(
 
         if exit_code == 0:
             print(f"  [{ticker}] Discussion → Planning 完了")
-            new_plan = _fetch_new_plan(ticker)
-            label = classify_label(monitor_data)
-            if label:
-                payload = NotifyPayload(
-                    label=label,
-                    ticker=ticker,
-                    monitor_data=monitor_data,
-                    new_plan=new_plan,
-                    event_context=event_context,
-                )
-                await notify(payload)
         else:
             print(f"  [{ticker}] Discussion → Planning 全リトライ失敗 (exit code: {exit_code})")
             payload = NotifyPayload(

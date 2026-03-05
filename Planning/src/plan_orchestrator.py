@@ -32,6 +32,8 @@ from supabase_client import (
     safe_db, get_portfolio_config,
     get_latest_session, update_session,
 )
+from notification_types import NotifyPayload, classify_label
+from discord_notifier import notify
 
 from AgentUtil import call_agent, load_debug_config
 from log_parser import SessionLogs, find_session_logs, parse_final_judge
@@ -504,6 +506,24 @@ async def run_plan_orchestrator(
             "yaml_full": build_yaml(spec),
         }
         safe_db(update_session, _db_session_id, plan=plan_data)
+
+    # --- 11. Discord 通知 ---
+    monitor_data = (_db_session.get("monitor") or {}) if _db_session else {}
+    if monitor_data:
+        label = classify_label(monitor_data)
+        if label:
+            notify_payload = NotifyPayload(
+                label=label,
+                ticker=spec.ticker,
+                monitor_data=monitor_data,
+                new_plan={
+                    "decision_final": spec.decision_final,
+                    "confidence": spec.confidence,
+                    "allocation_jpy": spec.allocation_jpy,
+                    "quantity": spec.quantity,
+                },
+            )
+            await notify(notify_payload)
 
     return output_path
 

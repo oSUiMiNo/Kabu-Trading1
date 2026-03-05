@@ -94,6 +94,7 @@ _NO_TEMPERATURE_PREFIXES = ("gpt-5", "o1", "o3", "o4")
 
 MAX_RETRIES = 3
 _RETRY_DELAYS = [1, 3, 10]
+_GLM_RATELIMIT_DELAYS = [15, 30, 60]
 
 
 @dataclass
@@ -194,6 +195,7 @@ async def _call_with_retry(coro_factory, provider_label: str):
     from openai import RateLimitError, APITimeoutError, APIConnectionError
 
     retryable = (RateLimitError, APITimeoutError, APIConnectionError)
+    is_glm = provider_label == "GLM"
     last_err = None
     for attempt in range(MAX_RETRIES):
         try:
@@ -202,7 +204,8 @@ async def _call_with_retry(coro_factory, provider_label: str):
             last_err = e
             if attempt == MAX_RETRIES - 1:
                 raise
-            delay = _RETRY_DELAYS[min(attempt, len(_RETRY_DELAYS) - 1)]
+            delays = _GLM_RATELIMIT_DELAYS if (is_glm and isinstance(e, RateLimitError)) else _RETRY_DELAYS
+            delay = delays[min(attempt, len(delays) - 1)]
             print(f"  [{provider_label} リトライ] {type(e).__name__}: {delay}秒後に再試行 ({attempt + 1}/{MAX_RETRIES})")
             await asyncio.sleep(delay)
     raise last_err  # type: ignore[misc]
@@ -509,6 +512,42 @@ async def call_glm(
     return result
 
 
+def _inline_file_refs(prompt: str) -> str:
+    """
+    プロンプト内の絶対ファイルパス（.md/.txt）を検出し、内容をプロンプト末尾に追記する。
+
+    Claude Agent SDK の Read ツールに相当する機能を OpenAI 互換モードで代替する。
+    同一パスは1回だけ読み込む。読み込み失敗時はパスをそのまま残す。
+    """
+    import re
+    pattern = re.compile(r'(?:[A-Za-z]:[/\\]|/)[\w/\\.\-]+\.(?:md|txt)', re.IGNORECASE)
+
+    found: dict[str, Path] = {}
+    for match in pattern.finditer(prompt):
+        path_str = match.group(0)
+        if path_str in found:
+            continue
+        try:
+            p = Path(path_str)
+            if p.exists() and p.is_file():
+                found[path_str] = p
+        except Exception:
+            pass
+
+    if not found:
+        return prompt
+
+    parts = [prompt, "\n\n===== 参照ファイル内容（自動展開） ====="]
+    for path_str, p in found.items():
+        try:
+            content = p.read_text(encoding="utf-8")
+            parts.append(f"\n--- {path_str} ---\n{content}\n--- ここまで ---")
+        except Exception as e:
+            parts.append(f"\n--- {path_str} ---\n(読み込み失敗: {e})\n---")
+    parts.append("===== ここまで =====")
+    return "\n".join(parts)
+
+
 async def call_glm_agent(
     messages,
     file_path: str | Path | None = None,
@@ -520,37 +559,33 @@ async def call_glm_agent(
     show_tools: bool = False,
 ) -> AgentResult:
     """
-    GLM (Z.AI) を Claude Agent SDK 経由で呼び出す。call_agent() と同等のインターフェース。
+    GLM (Z.AI) を OpenAI 互換エンドポイント経由で呼び出す。call_agent() と同等のインターフェース。
 
-    Z.AI の Anthropic 互換エンドポイントに ANTHROPIC_BASE_URL を向けることで GLM を使用する。
-    call_glm() と異なり、Claude Agent SDK のツール（WebSearch 等）をそのまま使用できる。
+    Claude Agent SDK は使わず Z.AI の OpenAI 互換エンドポイントを直接呼ぶ。
+    プロンプト内の絶対ファイルパス参照は自動でインライン展開する（Read ツール相当）。
+    エージェント定義に WebSearch が含まれる場合は Z.AI ネイティブ web_search ツールを使用する。
 
     Args:
         messages: プロンプト文字列、list[dict]（OpenAI形式）、または非同期イテレーター
         file_path: エージェント定義ファイル (.md)。本文が system_prompt、
-                   フロントマターの tools が allowed_tools になる
-        model: GLM モデル名（"glm-5", "glm-4.7", "glm-4.5-air" 等）
+                   フロントマターの tools が使用ツール判定に使われる
+        model: GLM モデル名（"glm-4.7-flash", "glm-4.7", "glm-5" 等）
         show_options: オプション内容をコンソール出力
         show_prompt: プロンプトをコンソール出力
         show_response: レスポンスをコンソール出力
-        show_cost: コストをコンソール出力（SDK が Claude 料金で計算するため実 GLM 料金と異なる場合あり）
+        show_cost: コストをコンソール出力
         show_tools: 使用ツールをコンソール出力
 
     Returns:
         AgentResult (text, cost, tools_used)
     """
     _load_env()
-    from claude_agent_sdk import (
-        query,
-        ClaudeAgentOptions,
-        AssistantMessage,
-        TextBlock,
-        ToolUseBlock,
-        ResultMessage,
-    )
+    from openai import AsyncOpenAI
 
     api_key = os.environ.get("ZHIPUAI_API_KEY", "")
+    client = AsyncOpenAI(api_key=api_key, base_url=_GLM_BASE_URL)
 
+    # プロンプト文字列に正規化
     if isinstance(messages, str):
         prompt = messages
     elif isinstance(messages, list):
@@ -562,35 +597,29 @@ async def call_glm_agent(
         async for msg in messages:
             if isinstance(msg, str):
                 parts.append(msg)
-            elif isinstance(msg, AssistantMessage):
-                for block in msg.content:
-                    if isinstance(block, TextBlock) and block.text:
-                        parts.append(block.text)
         prompt = "\n".join(parts)
 
+    # エージェント定義ファイルを読み込む
     config = parse_agent_file(file_path) if file_path else None
 
-    opt_kwargs: dict = {
-        "env": {
-            "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
-            "ANTHROPIC_AUTH_TOKEN": api_key,
-            "ANTHROPIC_MODEL": model,
-        }
-    }
-    if config and config.system_prompt:
-        opt_kwargs["system_prompt"] = config.system_prompt
-    if config and config.metadata.get("tools"):
-        opt_kwargs["allowed_tools"] = config.metadata["tools"]
+    # プロンプト内のファイルパス参照をインライン展開（Read ツール相当）
+    prompt = _inline_file_refs(prompt)
 
-    options = ClaudeAgentOptions(**opt_kwargs)
+    # メッセージリストを構築
+    msg_list: list[dict] = [{"role": "user", "content": prompt}]
+    if config and config.system_prompt:
+        msg_list.insert(0, {"role": "system", "content": config.system_prompt})
+
+    # エージェント定義に WebSearch が含まれれば Z.AI ネイティブ web_search を有効化
+    agent_tools: list[str] = config.metadata.get("tools", []) if config else []
+    use_web_search = any(t in ("WebSearch", "web_search") for t in agent_tools)
 
     if show_prompt or show_options:
-        print("╔══════════ リク (GLM Agent) ══════════")
+        print("╔══════════ リク (GLM OpenAI) ══════════")
         if show_options:
             print(f"  model: {model}")
-            print(f"  base_url: https://api.z.ai/api/anthropic")
-            if config and config.metadata.get("tools"):
-                print(f"  allowed_tools: {config.metadata['tools']}")
+            print(f"  base_url: {_GLM_BASE_URL}")
+            print(f"  web_search: {'enabled' if use_web_search else 'disabled'}")
         if show_prompt:
             if config and config.system_prompt:
                 preview = config.system_prompt[:200] + "..." if len(config.system_prompt) > 200 else config.system_prompt
@@ -599,38 +628,39 @@ async def call_glm_agent(
             print(f"  [prompt] {preview}")
         print("╚══════════════════════════════════")
 
+    kwargs: dict = {"model": model, "messages": msg_list, "temperature": 0.7}
+    if use_web_search:
+        kwargs["tools"] = [{"type": "web_search", "web_search": {"enable": True}}]
+
+    response = await _call_with_retry(
+        lambda: client.chat.completions.create(**kwargs),
+        "GLM",
+    )
+
     result = AgentResult()
-    text_parts: list[str] = []
+    result.text = response.choices[0].message.content or ""
 
-    try:
-        async for response in query(prompt=prompt, options=options):
-            if isinstance(response, AssistantMessage):
-                for block in response.content:
-                    if isinstance(block, TextBlock) and block.text:
-                        text_parts.append(block.text)
-                    elif isinstance(block, ToolUseBlock):
-                        result.tools_used.append(block.name)
-                        if show_tools:
-                            print(f"[ツール: {block.name}]")
-            elif isinstance(response, ResultMessage):
-                if response.total_cost_usd:
-                    result.cost = response.total_cost_usd
-    except Exception as e:
-        result.text = "\n".join(text_parts)
-        if not result.text:
-            raise
-        print(f"  [GLM Agent 警告] SDK 終了時エラー: {e}")
-        return result
+    if use_web_search:
+        result.tools_used.append("web_search")
+        if show_tools:
+            print("[ツール: web_search]")
 
-    result.text = "\n".join(text_parts)
+    if response.usage:
+        result.cost = _calc_cost(
+            model,
+            response.usage.prompt_tokens,
+            response.usage.completion_tokens,
+            0,
+            _GLM_PRICING,
+        )
 
     if show_response and result.text:
-        print("╔══════════ レス (GLM Agent) ══════════")
+        print("╔══════════ レス (GLM OpenAI) ══════════")
         print(result.text)
         print("╚══════════════════════════════════")
 
     if show_cost and result.cost is not None:
-        print(f"  [コスト] ${result.cost:.6f} ※Claude 料金ベース（GLM 実コストと異なる場合あり）")
+        print(f"  [コスト] ${result.cost:.6f}")
 
     return result
 

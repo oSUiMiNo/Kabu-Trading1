@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 
 from notification_types import NotifyLabel, NotifyPayload, classify_label, LABEL_COLOR
 from discord_notifier import build_embed
@@ -88,8 +89,9 @@ class TestBuildEmbed(unittest.TestCase):
         self.assertEqual(embed["title"], "【警告】NVDA")
         self.assertEqual(embed["color"], LABEL_COLOR[NotifyLabel.WARNING])
         field_names = [f["name"] for f in embed["fields"]]
-        self.assertIn("結果", field_names)
-        self.assertIn("現在価格", field_names)
+        price_field = next(f for f in embed["fields"] if f["name"] == "\u200b")
+        self.assertIn("結果", price_field["value"])
+        self.assertIn("現在価格", price_field["value"])
         self.assertIn("NG理由", field_names)
 
     def test_urgent_with_new_plan(self):
@@ -115,8 +117,9 @@ class TestBuildEmbed(unittest.TestCase):
         self.assertEqual(embed["title"], "【緊急】TSLA")
         field_names = [f["name"] for f in embed["fields"]]
         self.assertIn("── 新プラン ──", field_names)
-        self.assertIn("判定", field_names)
-        self.assertIn("配分額", field_names)
+        plan_field = next(f for f in embed["fields"] if f["name"] == "── 新プラン ──")
+        self.assertIn("判定", plan_field["value"])
+        self.assertIn("配分額", plan_field["value"])
 
     def test_check_embed(self):
         payload = NotifyPayload(
@@ -266,8 +269,9 @@ class TestJapaneseTranslation(unittest.TestCase):
             new_plan={"decision_final": "BUY", "confidence": 0.8},
         )
         embed = build_embed(payload)
-        decision_field = next(f for f in embed["fields"] if f["name"] == "判定")
-        self.assertEqual(decision_field["value"], "買い")
+        plan_field = next(f for f in embed["fields"] if f["name"] == "── 新プラン ──")
+        self.assertIn("判定", plan_field["value"])
+        self.assertIn("買い", plan_field["value"])
 
     def test_confidence_field_name_japanese(self):
         payload = NotifyPayload(
@@ -279,8 +283,10 @@ class TestJapaneseTranslation(unittest.TestCase):
         )
         embed = build_embed(payload)
         field_names = [f["name"] for f in embed["fields"]]
-        self.assertIn("確信度", field_names)
-        self.assertNotIn("confidence", field_names)
+        self.assertIn("── 新プラン ──", field_names)
+        plan_field = next(f for f in embed["fields"] if f["name"] == "── 新プラン ──")
+        self.assertIn("確信度", plan_field["value"])
+        self.assertNotIn("confidence", plan_field["value"])
 
     def test_result_error_translated(self):
         payload = NotifyPayload(
@@ -290,8 +296,9 @@ class TestJapaneseTranslation(unittest.TestCase):
                           "price_change_pct": None, "summary": "失敗"},
         )
         embed = build_embed(payload)
-        result_field = next(f for f in embed["fields"] if f["name"] == "結果")
-        self.assertEqual(result_field["value"], "エラー")
+        price_field = next(f for f in embed["fields"] if f["name"] == "\u200b")
+        self.assertIn("結果", price_field["value"])
+        self.assertIn("エラー", price_field["value"])
 
     def test_watch_kind_translated(self):
         payload = NotifyPayload(

@@ -1,8 +1,8 @@
 """
-Discord 通知モジュール
+Discord 通知モジュール（shared）
 
 Webhook で Embed メッセージを送信する。stdlib のみ使用（新規依存なし）。
-サマリー生成は notify-summarizer サブエージェントを呼び出す。
+サマリー生成は Monitor の notify-summarizer サブエージェントを呼び出す。
 """
 
 from __future__ import annotations
@@ -13,11 +13,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
-
 from notification_types import NotifyLabel, NotifyPayload, LABEL_COLOR, MARKET_JA
 
-AGENTS_DIR = Path(__file__).resolve().parent.parent / ".claude" / "commands"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+AGENTS_DIR = _PROJECT_ROOT / "Monitor" / ".claude" / "commands"
 
 _RESULT_JA = {"OK": "OK", "NG": "NG", "ERROR": "エラー"}
 

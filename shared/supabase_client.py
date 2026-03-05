@@ -205,16 +205,10 @@ def create_session(ticker: str, mode: str, horizon: str) -> dict:
 
 def update_session(session_id: int, **fields) -> dict:
     """セッション更新。jsonb カラム (lanes, final_judge, plan, monitor) は dict で渡す。"""
-    payload = {}
-    for k, v in fields.items():
-        if isinstance(v, dict):
-            payload[k] = json.dumps(v, ensure_ascii=False)
-        else:
-            payload[k] = v
     resp = (
         get_client()
         .from_("sessions")
-        .update(payload)
+        .update(fields)
         .eq("id", session_id)
         .execute()
     )
