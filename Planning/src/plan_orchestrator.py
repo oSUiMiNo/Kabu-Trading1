@@ -19,6 +19,7 @@ Usage:
     python plan_orchestrator.py 楽天 "C:\\...\\Discusion\\logs" 中期 5000000 50000
     python plan_orchestrator.py NVDA "C:\\...\\logs\\260210_1200" 長期 5000000 5% - 135
 """
+import os
 import re
 import sys
 from datetime import datetime
@@ -512,6 +513,14 @@ async def run_plan_orchestrator(
     if monitor_data:
         label = classify_label(monitor_data)
         if label:
+            _event_raw = os.environ.get("EVENT_CONTEXT", "")
+            _event_context = None
+            if _event_raw:
+                try:
+                    import json as _json
+                    _event_context = _json.loads(_event_raw)
+                except (ValueError, TypeError):
+                    pass
             notify_payload = NotifyPayload(
                 label=label,
                 ticker=spec.ticker,
@@ -522,6 +531,7 @@ async def run_plan_orchestrator(
                     "allocation_jpy": spec.allocation_jpy,
                     "quantity": spec.quantity,
                 },
+                event_context=_event_context,
             )
             await notify(notify_payload)
 
