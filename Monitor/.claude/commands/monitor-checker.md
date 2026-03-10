@@ -96,8 +96,8 @@ monitor_result:
   current_price: 115.00
   summary: "大幅な価格下落と新たな規制リスクの出現。"
   risk_flags:
-    - "price_deviation_exceeded"
-    - "new_regulatory_risk"
+    - "価格乖離超過（下落）"
+    - "規制リスク"
   ng_reason: "プラン時135ドルから14.8%下落。中国向け輸出規制の新報道あり。"
 ```
 
@@ -109,8 +109,8 @@ monitor_result:
   current_price: 165.00
   summary: "想定以上の価格上昇。好決算と新製品発表で急騰。"
   risk_flags:
-    - "price_surge_exceeded"
-    - "target_reached"
+    - "価格乖離超過（上昇）"
+    - "目標価格到達"
   ng_reason: "プラン時135ドルから22.2%上昇。利確タイミングの再検討が必要。"
 ```
 
@@ -120,19 +120,19 @@ monitor_result:
 
 1. 推測に基づく判定をしない。WebSearch で確認できた事実のみを根拠とする
 2. 判定に迷う場合は OK とする（保守的判定: NG は確信がある場合のみ）
-3. risk_flags は定義済みのラベルを使用:
+3. risk_flags は以下の定義済みラベルのみ使用すること。このリスト以外の文字列を使ってはならない:
    ネガティブ:
-   - `price_deviation_exceeded` — 価格乖離超過（下落方向）
-   - `basis_invalidated` — 根拠の前提崩壊
-   - `new_regulatory_risk` — 新規規制リスク
-   - `earnings_miss` — 決算未達
-   - `sector_downturn` — セクター全体の悪化
-   - `macro_shock` — マクロ経済ショック
-   - `management_change` — 経営陣変更
+   - `価格乖離超過（下落）`
+   - `根拠崩壊`
+   - `規制リスク`
+   - `決算未達`
+   - `セクター悪化`
+   - `マクロショック`
+   - `経営陣変更`
    ポジティブ:
-   - `price_surge_exceeded` — 価格乖離超過（上昇方向）
-   - `target_reached` — 目標価格到達
-   - `earnings_beat` — 決算好調（想定以上）
-   - `concern_resolved` — 懸念材料の解消
+   - `価格乖離超過（上昇）`
+   - `目標価格到達`
+   - `決算好調`
+   - `懸念材料の解消`
 4. 出力は YAML ブロック（```yaml ... ```）のみ。説明文は不要
 5. WebSearch が失敗した場合は result を "ERROR" とし、summary に理由を記述する
