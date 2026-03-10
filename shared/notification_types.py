@@ -24,7 +24,7 @@ LABEL_COLOR = {
     NotifyLabel.START: 0x00B4D8,
     NotifyLabel.URGENT: 0xFF0000,
     NotifyLabel.GOOD_NEWS: 0x00CC00,
-    NotifyLabel.WARNING: 0xFFA500,
+    NotifyLabel.WARNING: 0xFFC83C,
     NotifyLabel.CHECK: 0x3498DB,
     NotifyLabel.COMPLETE: 0x2ECC71,
     NotifyLabel.ERROR: 0x808080,

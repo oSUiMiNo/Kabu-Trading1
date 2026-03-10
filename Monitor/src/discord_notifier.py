@@ -130,7 +130,7 @@ def build_embed(payload: NotifyPayload) -> dict:
     fields = []
 
     if label == NotifyLabel.ERROR:
-        fields.append({"name": "エラー詳細", "value": payload.error_detail or "不明", "inline": False})
+        fields.append({"name": "エラー詳細", "value": payload.error_detail or "不明"})
         return {"title": title, "color": color, "timestamp": timestamp, "fields": fields}
 
     if label == NotifyLabel.COMPLETE:
@@ -139,9 +139,9 @@ def build_embed(payload: NotifyPayload) -> dict:
         count = len(tickers)
         fields.append({"name": "チェック数", "value": f"{count} 銘柄", "inline": True})
         if tickers:
-            fields.append({"name": "銘柄", "value": ", ".join(tickers), "inline": False})
+            fields.append({"name": "銘柄", "value": ", ".join(tickers)})
         if ng_tickers:
-            fields.append({"name": "NG銘柄（再プラン済み）", "value": ", ".join(ng_tickers), "inline": False})
+            fields.append({"name": "NG銘柄（再プラン済み）", "value": ", ".join(ng_tickers)})
         description = (
             "全銘柄のチェックとプラン更新が完了しました。"
             if ng_tickers
@@ -164,7 +164,7 @@ def build_embed(payload: NotifyPayload) -> dict:
 
         plan_desc = _extract_plan_description(plan)
         if plan_desc:
-            fields.append({"name": "新プラン", "value": f"> {plan_desc}", "inline": False})
+            fields.append({"name": "新プラン", "value": f"> {plan_desc}"})
 
         result_lines = [f"> 判定 : {decision_ja}", f"> 確信度 : {confidence_ja}"]
         alloc = plan.get("allocation_jpy")
@@ -173,21 +173,21 @@ def build_embed(payload: NotifyPayload) -> dict:
         qty = plan.get("quantity")
         if qty is not None:
             result_lines.append(f"> 数量 : {qty}")
-        fields.append({"name": "議論結果", "value": "\n".join(result_lines), "inline": False})
+        fields.append({"name": "議論結果", "value": "\n".join(result_lines)})
 
         fields.append({"name": "株価", "value": (
             f"> 現在価格  : {current_price}\n"
             f"> プラン時  : {plan_price}\n"
             f"> 変動率    : {pct_str}"
-        ), "inline": False})
+        )})
 
         summary = md.get("summary", "")
         if summary:
-            fields.append({"name": "議論サマリ", "value": f"> {summary[:1020]}", "inline": False})
+            fields.append({"name": "議論サマリ", "value": f"> {summary[:1020]}"})
 
         ng_reason = md.get("ng_reason", "")
         if ng_reason:
-            fields.append({"name": "監視時NG理由", "value": f"> {ng_reason[:1020]}", "inline": False})
+            fields.append({"name": "監視時NG理由", "value": f"> {ng_reason[:1020]}"})
 
         embed = {
             "title": title,
@@ -206,20 +206,20 @@ def build_embed(payload: NotifyPayload) -> dict:
             f"> 現在価格  : {current_price}\n"
             f"> プラン時  : {plan_price}\n"
             f"> 変動率    : {pct_str}"
-        ), "inline": False})
+        )})
 
         summary = md.get("summary", "")
         if summary:
-            fields.append({"name": "議論サマリ", "value": f"> {summary[:1020]}", "inline": False})
+            fields.append({"name": "議論サマリ", "value": f"> {summary[:1020]}"})
 
         ng_reason = md.get("ng_reason", "")
         if ng_reason:
-            fields.append({"name": "監視時NG理由", "value": f"> {ng_reason[:1020]}", "inline": False})
+            fields.append({"name": "監視時NG理由", "value": f"> {ng_reason[:1020]}"})
 
         risk_flags = md.get("risk_flags") or []
         if risk_flags:
             flags_ja = [_RISK_FLAG_JA.get(f, f) for f in risk_flags]
-            fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja), "inline": False})
+            fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja)})
 
         embed = {"title": title, "color": color, "timestamp": timestamp, "fields": fields}
         if payload.beginner_summary:
@@ -231,7 +231,7 @@ def build_embed(payload: NotifyPayload) -> dict:
         watch_kind_raw = ec.get("watch_kind", "")
         watch_kind_ja = _WATCH_KIND_JA.get(watch_kind_raw, watch_kind_raw)
         event_str = event_name + (f"（{watch_kind_ja}）" if watch_kind_ja else "")
-        fields.append({"name": "トリガイベント", "value": event_str, "inline": False})
+        fields.append({"name": "トリガイベント", "value": event_str})
 
     return embed
 
