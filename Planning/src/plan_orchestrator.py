@@ -344,6 +344,8 @@ async def run_plan_orchestrator(
         sys.exit(1)
 
     fj_data = _db_session.get("final_judge") or {}
+    if isinstance(fj_data, str):
+        fj_data = json.loads(fj_data)
     if not fj_data:
         print(f"  エラー: {t} のセッションに final_judge がありません")
         sys.exit(1)
