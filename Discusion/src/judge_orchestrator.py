@@ -20,9 +20,9 @@ AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 
-def get_next_judge_num(ticker: str, set_num: int, session_dir: Path | None = None) -> int:
+def get_next_judge_num(ticker: str, set_num: int, discusion_dir: Path | None = None) -> int:
     """既存のjudgeファイルから次の番号を返す"""
-    base = session_dir if session_dir else LOGS_DIR
+    base = discusion_dir if discusion_dir else LOGS_DIR
     pattern = f"{ticker.upper()}_set{set_num}_judge_*.md"
     existing = list(base.glob(pattern))
     if not existing:
@@ -44,11 +44,11 @@ def build_judge_prompt(
     opinion_b_text: str,
     judge_num: int,
     mode: str = "buy",
-    session_dir: Path | None = None,
+    discusion_dir: Path | None = None,
 ) -> str:
     """judgeエージェントに渡すプロンプトを組み立てる（opinionテキストをインライン埋め込み）"""
     t = ticker.upper()
-    base = session_dir if session_dir else LOGS_DIR
+    base = discusion_dir if discusion_dir else LOGS_DIR
     source_log = (base / f"{t}_set{set_num}.md").as_posix()
 
     if mode == "sell":
@@ -94,13 +94,13 @@ async def run_single_judge(
     opinion_b_text: str,
     judge_num: int,
     mode: str = "buy",
-    session_dir: Path | None = None,
+    discusion_dir: Path | None = None,
 ) -> AgentResult:
     """1体のjudgeエージェントを実行し、結果テキストをファイルに書き出す（最大3回リトライ）"""
     label = f"判定#{judge_num} (意見{opinion_a_num} vs 意見{opinion_b_num})"
     print(f"[レーン{set_num}] {label} 起動")
 
-    prompt = build_judge_prompt(ticker, set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text, judge_num, mode, session_dir)
+    prompt = build_judge_prompt(ticker, set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text, judge_num, mode, discusion_dir)
     agent_file = AGENTS_DIR / "judge.md"
 
     dbg = load_debug_config("judge")
@@ -129,7 +129,7 @@ async def run_single_judge(
         print(f"  コスト: ${result.cost:.4f}")
 
     # オーケストレーター側でファイル書き出し
-    base = session_dir if session_dir else LOGS_DIR
+    base = discusion_dir if discusion_dir else LOGS_DIR
     judge_path = base / f"{ticker.upper()}_set{set_num}_judge_{judge_num}.md"
     saved = save_result_log(result, judge_path)
     if saved:

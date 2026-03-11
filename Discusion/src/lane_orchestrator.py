@@ -45,9 +45,9 @@ class LaneResult:
     db_data: dict = field(default_factory=dict)
 
 
-def get_set_log_path(ticker: str, set_num: int, session_dir: Path | None = None) -> Path:
+def get_set_log_path(ticker: str, set_num: int, discusion_dir: Path | None = None) -> Path:
     """レーン番号付きのログパスを返す"""
-    base = session_dir if session_dir else LOGS_DIR
+    base = discusion_dir if discusion_dir else LOGS_DIR
     return base / f"{ticker.upper()}_set{set_num}.md"
 
 
@@ -60,8 +60,8 @@ async def run_lane(
     mode: str = "buy",
     theme: str | None = None,
     horizon: str = "mid",
-    session_dir: Path | None = None,
-    session_id: str | None = None,
+    discusion_dir: Path | None = None,
+    archivelog_id: str | None = None,
 ) -> LaneResult:
     """
     1レーン分のフローを一気通貫で実行する。
@@ -73,7 +73,7 @@ async def run_lane(
       4. LaneResult を返す（DB書き込みは呼び出し元が行う）
     """
     t = ticker.upper()
-    log_path = get_set_log_path(ticker, set_num, session_dir)
+    log_path = get_set_log_path(ticker, set_num, discusion_dir)
     total_cost = 0.0
 
     print(f"\n{'='*60}")
@@ -93,9 +93,9 @@ async def run_lane(
             horizon=horizon,
         )
         print(f"[レーン{set_num}] 議論 完了")
-        if session_id and log_path.exists():
+        if archivelog_id and log_path.exists():
             _disc_text = log_path.read_text(encoding="utf-8")
-            safe_db(write_lane_field, session_id, set_num, "discussion_md", _disc_text)
+            safe_db(write_lane_field, archivelog_id, set_num, "discussion_md", _disc_text)
 
         # --- フェーズ2: 意見生成 ---
         print(f"\n[レーン{set_num}] 意見 ({opinions_per_lane}体) 開始")
@@ -104,7 +104,7 @@ async def run_lane(
         opinion_results: list[AgentResult] = [None] * opinions_per_lane
 
         async def _run_opinion(idx: int, opinion_num: int):
-            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode, session_dir=session_dir)
+            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode, discusion_dir=discusion_dir)
 
         async with anyio.create_task_group() as tg:
             for idx, on in enumerate(opinion_nums):
@@ -113,8 +113,8 @@ async def run_lane(
         for idx2, r in enumerate(opinion_results):
             if r and r.cost:
                 total_cost += r.cost
-            if session_id and r and r.text:
-                safe_db(write_lane_field, session_id, set_num, f"opinion_{opinion_nums[idx2]}", r.text)
+            if archivelog_id and r and r.text:
+                safe_db(write_lane_field, archivelog_id, set_num, f"opinion_{opinion_nums[idx2]}", r.text)
 
         print(f"[レーン{set_num}] 意見 完了")
 
@@ -124,7 +124,7 @@ async def run_lane(
         opinion_a_text = opinion_results[0].text if opinion_results[0] and opinion_results[0].text else ""
         opinion_b_text = opinion_results[1].text if opinion_results[1] and opinion_results[1].text else ""
 
-        judge_num = get_next_judge_num(ticker, set_num, session_dir)
+        judge_num = get_next_judge_num(ticker, set_num, discusion_dir)
         judge_result = await run_single_judge(
             ticker,
             set_num,
@@ -134,15 +134,15 @@ async def run_lane(
             opinion_b_text,
             judge_num,
             mode,
-            session_dir=session_dir,
+            discusion_dir=discusion_dir,
         )
 
         if judge_result and judge_result.cost:
             total_cost += judge_result.cost
 
         print(f"[レーン{set_num}] 判定 完了")
-        if session_id and judge_result and judge_result.text:
-            safe_db(write_lane_field, session_id, set_num, "judge_md", judge_result.text)
+        if archivelog_id and judge_result and judge_result.text:
+            safe_db(write_lane_field, archivelog_id, set_num, "judge_md", judge_result.text)
 
         # --- 結果解析 ---
         content = judge_result.text if judge_result and judge_result.text else ""

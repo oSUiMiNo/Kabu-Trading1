@@ -6,7 +6,7 @@ Discussion / Planning 両プロジェクトから利用する。
 テーブルごとのヘルパー関数を提供する。
 
 テーブル構成:
-  sessions         … 1実行=1行。lanes/final_judge/plan/monitor を JSONB で格納
+  archive          … 1実行=1行。lanes/final_judge/plan/monitor を JSONB で格納
   portfolio_config … 投資設定（シングルトン）
   holdings         … 保有銘柄
 
@@ -14,7 +14,7 @@ Discussion / Planning 両プロジェクトから利用する。
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "shared"))
-    from supabase_client import safe_db, create_session, update_session, ...
+    from supabase_client import safe_db, create_archivelog, update_archivelog, ...
 """
 
 from __future__ import annotations
@@ -185,13 +185,13 @@ def upsert_holding(ticker: str, **fields) -> dict:
     return resp.data[0] if resp.data else {}
 
 
-# ── sessions（統合テーブル） ─────────────────────────────
+# ── archive（統合テーブル） ──────────────────────────────
 
-def create_session(ticker: str, mode: str, horizon: str) -> dict:
+def create_archivelog(ticker: str, mode: str, horizon: str) -> dict:
     """セッション作成。horizon は DB カラム span にマッピングされる。"""
     resp = (
         get_client()
-        .from_("sessions")
+        .from_("archive")
         .insert({
             "ticker": ticker.upper(),
             "mode": mode,
@@ -203,23 +203,23 @@ def create_session(ticker: str, mode: str, horizon: str) -> dict:
     return resp.data[0]
 
 
-def update_session(session_id: int, **fields) -> dict:
+def update_archivelog(archivelog_id: int, **fields) -> dict:
     """セッション更新。jsonb カラム (lanes, final_judge, plan, monitor) は dict で渡す。"""
     resp = (
         get_client()
-        .from_("sessions")
+        .from_("archive")
         .update(fields)
-        .eq("id", session_id)
+        .eq("id", archivelog_id)
         .execute()
     )
     return resp.data[0] if resp.data else {}
 
 
-def get_latest_session(ticker: str) -> dict | None:
+def get_latest_archivelog(ticker: str) -> dict | None:
     """指定銘柄の最新セッションを取得。"""
     resp = (
         get_client()
-        .from_("sessions")
+        .from_("archive")
         .select("*")
         .eq("ticker", ticker.upper())
         .order("created_at", desc=True)
@@ -229,23 +229,23 @@ def get_latest_session(ticker: str) -> dict | None:
     return resp.data[0] if resp.data else None
 
 
-def write_lane_field(session_id: str, lane_num: int, field: str, value: str) -> None:
-    """sessions.lanes[lane_num][field] を atomic に更新する（並列実行安全）。"""
-    get_client().rpc("update_session_lane", {
-        "p_session_id": session_id,
+def write_lane_field(archivelog_id: str, lane_num: int, field: str, value: str) -> None:
+    """archive.lanes[lane_num][field] を atomic に更新する（並列実行安全）。"""
+    get_client().rpc("update_archivelog_lane", {
+        "p_archivelog_id": archivelog_id,
         "p_lane_num": str(lane_num),
         "p_field": field,
         "p_value": value,
     }).execute()
 
 
-def get_lane_field(session_id: str, lane_num: int, field: str):
-    """sessions.lanes[lane_num][field] を取得する。"""
+def get_lane_field(archivelog_id: str, lane_num: int, field: str):
+    """archive.lanes[lane_num][field] を取得する。"""
     resp = (
         get_client()
-        .from_("sessions")
+        .from_("archive")
         .select("lanes")
-        .eq("id", session_id)
+        .eq("id", archivelog_id)
         .limit(1)
         .execute()
     )
@@ -258,11 +258,11 @@ def get_lane_field(session_id: str, lane_num: int, field: str):
     return lane.get(field)
 
 
-def get_latest_session_with_plan(ticker: str) -> dict | None:
+def get_latest_archivelog_with_plan(ticker: str) -> dict | None:
     """指定銘柄で plan が存在する最新の completed セッションを取得。"""
     resp = (
         get_client()
-        .from_("sessions")
+        .from_("archive")
         .select("*")
         .eq("ticker", ticker.upper())
         .eq("status", "completed")
@@ -285,6 +285,18 @@ def list_watchlist(active_only: bool = True, market: str | None = None) -> list[
         q = q.eq("market", market.upper())
     resp = q.order("created_at").execute()
     return resp.data
+
+
+def update_watchlist(ticker: str, **fields) -> dict:
+    """watchlist の指定銘柄を更新する。"""
+    resp = (
+        get_client()
+        .from_("watchlist")
+        .update(fields)
+        .eq("ticker", ticker.upper())
+        .execute()
+    )
+    return resp.data[0] if resp.data else {}
 
 
 # ── event_master ─────────────────────────────────────────

@@ -88,10 +88,10 @@ def run_discuss_and_plan(ticker: str, span: str, mode: str) -> int:
 
     print(f"  [{ticker}] Discussion → Planning 失敗 (exit code: {result.returncode})")
 
-    session_dir = _find_latest_discussion_dir(ticker)
-    if session_dir:
+    discusion_dir = _find_latest_discussion_dir(ticker)
+    if discusion_dir:
         retry_cmd = cmd + ["--planning-only"]
-        print(f"  [{ticker}] Planning のみ再実行（Discussion ログ: {session_dir.name}）")
+        print(f"  [{ticker}] Planning のみ再実行（Discussion ログ: {discusion_dir.name}）")
     else:
         retry_cmd = cmd
         print(f"  [{ticker}] Discussion → Planning 全体リトライ（Discussion ログなし）")

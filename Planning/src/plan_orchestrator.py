@@ -32,7 +32,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
     safe_db, get_portfolio_config,
-    get_latest_session, update_session,
+    get_latest_archivelog, update_archivelog,
 )
 from notification_types import NotifyPayload, classify_label
 from discord_notifier import notify
@@ -338,25 +338,25 @@ async def run_plan_orchestrator(
     print(f"{'='*60}")
 
     # --- 1. DB からセッション取得 ---
-    _db_session = safe_db(get_latest_session, t)
-    if not _db_session:
+    _db_archivelog = safe_db(get_latest_archivelog, t)
+    if not _db_archivelog:
         print(f"  エラー: {t} のセッションが DB に見つかりません")
         sys.exit(1)
 
-    fj_data = _db_session.get("final_judge") or {}
+    fj_data = _db_archivelog.get("final_judge") or {}
     if isinstance(fj_data, str):
         fj_data = json.loads(fj_data)
     if not fj_data:
         print(f"  エラー: {t} のセッションに final_judge がありません")
         sys.exit(1)
 
-    created_at = _db_session.get("created_at", "")
+    created_at = _db_archivelog.get("created_at", "")
     judgment = parse_final_judge_from_db(fj_data, ticker, created_at)
     print(f"  判定: {judgment.decision}（raw: {judgment.decision_raw}）")
     print(f"  投票: for={judgment.vote_for}, against={judgment.vote_against}")
     print(f"  一致度: {judgment.overall_agreement}")
 
-    lanes_raw = _db_session.get("lanes") or {}
+    lanes_raw = _db_archivelog.get("lanes") or {}
     if isinstance(lanes_raw, str):
         lanes_raw = json.loads(lanes_raw)
     additional_texts: list[tuple[str, str]] = []
@@ -505,9 +505,9 @@ async def run_plan_orchestrator(
     print(f"  パス: {output_path}")
     print(f"{'='*60}")
 
-    # --- 10. DB 書き込み（sessions.plan JSONB に格納） ---
-    _db_session_id = _db_session["id"] if _db_session else None
-    if _db_session_id:
+    # --- 10. DB 書き込み（archive.plan JSONB に格納） ---
+    _db_archivelog_id = _db_archivelog["id"] if _db_archivelog else None
+    if _db_archivelog_id:
         plan_data = {
             "plan_id": spec.plan_id,
             "decision_final": spec.decision_final,
@@ -520,10 +520,10 @@ async def run_plan_orchestrator(
             "quantity": spec.quantity,
             "yaml_full": build_yaml(spec),
         }
-        safe_db(update_session, _db_session_id, plan=plan_data)
+        safe_db(update_archivelog, _db_archivelog_id, plan=plan_data)
 
     # --- 11. Discord 通知 ---
-    monitor_data = (_db_session.get("monitor") or {}) if _db_session else {}
+    monitor_data = (_db_archivelog.get("monitor") or {}) if _db_archivelog else {}
     if monitor_data:
         label = classify_label(monitor_data)
         if label:

@@ -25,8 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import (
     safe_db,
     list_watchlist,
-    get_latest_session_with_plan,
-    update_session,
+    get_latest_archivelog_with_plan,
+    update_archivelog,
+    update_watchlist,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -37,9 +38,9 @@ AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 JST = timezone(timedelta(hours=9))
 
 
-def build_check_prompt(ticker: str, session: dict) -> str:
+def build_check_prompt(ticker: str, archivelog: dict) -> str:
     """monitor-checker エージェントに渡すプロンプトを組み立てる。"""
-    plan = session.get("plan", {})
+    plan = archivelog.get("plan", {})
     if isinstance(plan, str):
         plan = json.loads(plan)
 
@@ -137,12 +138,12 @@ async def check_one_ticker(ticker: str) -> dict | None:
     """1銘柄に対する監視チェックを実行する。エージェント呼び出し〜パースを最大3回リトライ。"""
     now = datetime.now(JST)
 
-    session = safe_db(get_latest_session_with_plan, ticker)
-    if not session:
+    archivelog = safe_db(get_latest_archivelog_with_plan, ticker)
+    if not archivelog:
         print(f"  [{ticker}] スキップ: プラン付きセッションが見つかりません")
         return None
 
-    plan = session.get("plan")
+    plan = archivelog.get("plan")
     if not plan:
         print(f"  [{ticker}] スキップ: plan が null")
         return None
@@ -153,7 +154,7 @@ async def check_one_ticker(ticker: str) -> dict | None:
     plan_id = plan.get("plan_id", "N/A")
     print(f"  [{ticker}] チェック開始 (plan: {plan_id})")
 
-    prompt = build_check_prompt(ticker, session)
+    prompt = build_check_prompt(ticker, archivelog)
     agent_file = AGENTS_DIR / "monitor-checker.md"
     dbg = load_debug_config("monitor")
 
@@ -214,8 +215,8 @@ async def check_one_ticker(ticker: str) -> dict | None:
             "retries_exhausted": True,
             "error_detail": last_error,
         }
-        session_id = session["id"]
-        safe_db(update_session, session_id, monitor=error_record)
+        archivelog_id = archivelog["id"]
+        safe_db(update_archivelog, archivelog_id, monitor=error_record)
         return error_record
 
     plan_price = _extract_plan_price(plan)
@@ -239,9 +240,13 @@ async def check_one_ticker(ticker: str) -> dict | None:
 
     if monitor_data.get("result") == "NG":
         monitor_record["ng_reason"] = monitor_data.get("ng_reason", "")
+        safe_db(update_watchlist, ticker,
+                **{"MotivationID": 1, "motivation_summary": monitor_data.get("summary", "")})
+        safe_db(update_archivelog, archivelog["id"],
+                **{"MotivationID": 1, "motivation_full": monitor_data.get("ng_reason", "")})
 
-    session_id = session["id"]
-    safe_db(update_session, session_id, monitor=monitor_record)
+    archivelog_id = archivelog["id"]
+    safe_db(update_archivelog, archivelog_id, monitor=monitor_record)
 
     status = monitor_record["result"]
     print(f"  [{ticker}] 結果: {status}")
@@ -296,10 +301,10 @@ async def run_monitor(
     print()
 
     for ticker in tickers:
-        session = safe_db(get_latest_session_with_plan, ticker)
+        archivelog = safe_db(get_latest_archivelog_with_plan, ticker)
 
-        if skip_spans and session:
-            span = session.get("span", "mid")
+        if skip_spans and archivelog:
+            span = archivelog.get("span", "mid")
             if span in skip_spans:
                 print(f"  [{ticker}] スキップ: {span} は対象外")
                 print()
@@ -309,11 +314,11 @@ async def run_monitor(
         if result:
             summary.results[ticker] = result
             summary.total_cost += result.get("cost_usd", 0) or 0
-            if result.get("result") == "NG" and session:
+            if result.get("result") == "NG" and archivelog:
                 summary.ng_tickers.append({
                     "ticker": ticker,
-                    "mode": session.get("mode", "buy"),
-                    "span": session.get("span", "mid"),
+                    "mode": archivelog.get("mode", "buy"),
+                    "span": archivelog.get("span", "mid"),
                 })
         print()
 

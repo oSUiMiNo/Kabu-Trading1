@@ -15,7 +15,7 @@ from pathlib import Path
 import anyio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
-from supabase_client import safe_db, create_session, update_session, get_discussion_config
+from supabase_client import safe_db, create_archivelog, update_archivelog, get_discussion_config
 
 from discussion_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
@@ -45,13 +45,13 @@ async def run_parallel(
 
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    session_name = datetime.now().strftime("%y%m%d_%H%M")
-    session_dir = LOGS_DIR / session_name
-    session_dir.mkdir(parents=True, exist_ok=True)
+    discusion_name = datetime.now().strftime("%y%m%d_%H%M")
+    discusion_dir = LOGS_DIR / discusion_name
+    discusion_dir.mkdir(parents=True, exist_ok=True)
 
     # DB: セッション作成（1行）
-    _db_session = safe_db(create_session, ticker, mode, horizon)
-    _db_session_id = _db_session["id"] if _db_session else None
+    _db_archivelog = safe_db(create_archivelog, ticker, mode, horizon)
+    _db_archivelog_id = _db_archivelog["id"] if _db_archivelog else None
 
     t = ticker.upper()
 
@@ -62,7 +62,7 @@ async def run_parallel(
     print(f"{'='*70}")
     print(f"=== {t} {num_sets}レーン ===")
     print(f"=== 議論モード: {mode_label} / 投資期間: {horizon_label} ===")
-    print(f"=== セッション: {session_name} ===")
+    print(f"=== セッション: {discusion_name} ===")
     print(f"{'='*70}")
     for i in range(1, num_sets + 1):
         theme = SET_THEMES.get(i) if num_sets >= 2 else None
@@ -84,8 +84,8 @@ async def run_parallel(
             mode=mode,
             theme=theme,
             horizon=horizon,
-            session_dir=session_dir,
-            session_id=_db_session_id,
+            discusion_dir=discusion_dir,
+            archivelog_id=_db_archivelog_id,
         )
 
     async with anyio.create_task_group() as tg:
@@ -130,20 +130,20 @@ async def run_parallel(
         print(f"\n△不一致 レーン {', '.join(map(str, disagreed_sets))} は意見が不一致")
 
     # DB: 全レーンのデータを一括書き込み
-    if _db_session_id:
+    if _db_archivelog_id:
         lanes_data = {}
         for r in lane_results:
             if r and r.db_data:
                 lanes_data[str(r.レーン番号)] = r.db_data
         if lanes_data:
-            safe_db(update_session, _db_session_id, lanes=lanes_data)
+            safe_db(update_archivelog, _db_archivelog_id, lanes=lanes_data)
 
     # --- 最終判定 ---
     if not agreed_sets and not disagreed_sets:
         print()
         print(" ※終了 全レーンがエラーのため、最終判定は実行しません")
-        if _db_session_id:
-            safe_db(update_session, _db_session_id, status="error")
+        if _db_archivelog_id:
+            safe_db(update_archivelog, _db_archivelog_id, status="error")
         return
 
     print()
@@ -163,14 +163,14 @@ async def run_parallel(
     fj_result = await run_final_judge_orchestrator(
         ticker, agreed_sets, mode=mode,
         disagreed_sets=disagreed_sets, set_sides=set_sides,
-        session_dir=session_dir,
-        session_id=_db_session_id,
+        discusion_dir=discusion_dir,
+        archivelog_id=_db_archivelog_id,
     )
 
     # DB: 最終判定 + セッション完了
-    if _db_session_id and fj_result:
+    if _db_archivelog_id and fj_result:
         safe_db(
-            update_session, _db_session_id,
+            update_archivelog, _db_archivelog_id,
             final_judge=fj_result.db_data,
             verdict=fj_result.判定結果,
             status="completed",

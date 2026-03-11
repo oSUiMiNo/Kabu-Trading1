@@ -45,14 +45,14 @@ class ParsedJudgment:
 
 
 @dataclass
-class SessionLogs:
+class DiscusionLogs:
     """指定銘柄のログファイル一式"""
     final_judge: Path | None = None
     set_files: list[Path] = field(default_factory=list)
     judge_files: list[Path] = field(default_factory=list)
 
 
-def find_session_logs(session_dir: Path, ticker: str) -> SessionLogs:
+def find_discusion_logs(discusion_dir: Path, ticker: str) -> DiscusionLogs:
     """
     セッションディレクトリから指定銘柄のログファイルを探索する。
 
@@ -61,23 +61,23 @@ def find_session_logs(session_dir: Path, ticker: str) -> SessionLogs:
     - {TICKER}_set{N}_judge_{K}.md           → judge_files（判定）
     - {TICKER}_final_judge_{K}.md            → final_judge（最大番号を採用）
     """
-    result = SessionLogs()
+    result = DiscusionLogs()
     t = ticker.upper()
 
-    if not session_dir.exists():
+    if not discusion_dir.exists():
         return result
 
-    final_judges = sorted(session_dir.glob(f"{t}_final_judge_*.md"))
+    final_judges = sorted(discusion_dir.glob(f"{t}_final_judge_*.md"))
     if final_judges:
         result.final_judge = final_judges[-1]
 
     result.set_files = sorted(
-        p for p in session_dir.glob(f"{t}_set*.md")
+        p for p in discusion_dir.glob(f"{t}_set*.md")
         if re.search(r"_set\d+\.md$", p.name)
     )
 
     result.judge_files = sorted(
-        p for p in session_dir.glob(f"{t}_set*_judge_*.md")
+        p for p in discusion_dir.glob(f"{t}_set*_judge_*.md")
     )
 
     return result
@@ -317,7 +317,7 @@ def _extract_decision_basis(export: dict | None, full_text: str) -> list[Decisio
 
 def parse_final_judge_from_db(fj_data: dict, ticker: str, created_at: str) -> ParsedJudgment:
     """
-    DB の sessions.final_judge dict から ParsedJudgment を生成する。
+    DB の archive.final_judge dict から ParsedJudgment を生成する。
 
     fj_data の期待キー:
         markdown          : final_judge ログ全文（テキスト解析に使用）
