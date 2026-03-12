@@ -1,0 +1,13 @@
+[project]
+name = "watch"
+version = "0.1.0"
+description = "Watch ブロック — archive サマリー書込 + Discord 通知"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk>=0.1.40",
+    "anyio",
+    "pyyaml",
+    "python-dotenv",
+    "postgrest",
+    "openai>=2.20",
+]
