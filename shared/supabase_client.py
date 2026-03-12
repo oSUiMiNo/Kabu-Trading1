@@ -307,6 +307,70 @@ def get_previous_archivelog_with_newplan(ticker: str, exclude_id: int) -> dict |
     return resp.data[0] if resp.data else None
 
 
+def fetch_pending_planning() -> list[dict]:
+    """Discussion 完了済み（final_judge あり）かつ Planning 未完了（newplan_full なし）のレコードを取得。"""
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("id, ticker, span")
+        .not_.is_("final_judge", "null")
+        .is_("newplan_full", "null")
+        .execute()
+    )
+    return resp.data
+
+
+def fetch_ng_tickers_for_discussion() -> list[dict]:
+    """Monitor NG 判定済み・Discussion 未実施の銘柄を DB から取得する。
+
+    手順:
+    1. monitor JSONB 付きの archive を取得し、result='NG' を Python で抽出
+    2. 銘柄ごとに最新の NG レコードだけ残す
+    3. それより新しい final_judge 付き archive がなければ Discussion 未実施と判定
+    """
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("id, ticker, mode, span, monitor, created_at")
+        .not_.is_("monitor", "null")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    all_monitored = resp.data or []
+
+    seen: dict[str, dict] = {}
+    for r in all_monitored:
+        monitor = r.get("monitor") or {}
+        if isinstance(monitor, str):
+            monitor = json.loads(monitor)
+        if monitor.get("result") != "NG":
+            continue
+        t = r["ticker"]
+        if t not in seen:
+            seen[t] = r
+
+    pending = []
+    for t, r in seen.items():
+        check = (
+            get_client()
+            .from_("archive")
+            .select("id")
+            .eq("ticker", t)
+            .not_.is_("final_judge", "null")
+            .gt("created_at", r["created_at"])
+            .limit(1)
+            .execute()
+        )
+        if not check.data:
+            pending.append({
+                "ticker": t,
+                "mode": r.get("mode", "buy"),
+                "span": r.get("span", "mid"),
+            })
+
+    return pending
+
+
 # ── watchlist ─────────────────────────────────────────
 
 def list_watchlist(active_only: bool = True, market: str | None = None) -> list[dict]:
