@@ -34,8 +34,6 @@ from supabase_client import (
     safe_db, get_portfolio_config,
     get_latest_archivelog, update_archivelog,
 )
-from notification_types import NotifyPayload, classify_label
-from discord_notifier import notify
 
 from AgentUtil import call_agent, load_debug_config
 from log_parser import parse_final_judge_from_db
@@ -505,49 +503,14 @@ async def run_plan_orchestrator(
     print(f"  パス: {output_path}")
     print(f"{'='*60}")
 
-    # --- 10. DB 書き込み（archive.plan JSONB に格納） ---
+    # --- 10. DB 書き込み（archive.newplan_full / verdict） ---
     _db_archivelog_id = _db_archivelog["id"] if _db_archivelog else None
     if _db_archivelog_id:
-        plan_data = {
-            "plan_id": spec.plan_id,
-            "decision_final": spec.decision_final,
-            "vote_for": spec.vote_for,
-            "vote_against": spec.vote_against,
-            "confidence": spec.confidence,
-            "freshness_status": spec.freshness_status,
-            "data_checks_status": spec.data_checks_status,
-            "allocation_jpy": spec.allocation_jpy,
-            "quantity": spec.quantity,
-            "yaml_full": build_yaml(spec),
-        }
-        safe_db(update_archivelog, _db_archivelog_id, plan=plan_data)
-
-    # --- 11. Discord 通知 ---
-    monitor_data = (_db_archivelog.get("monitor") or {}) if _db_archivelog else {}
-    if monitor_data:
-        label = classify_label(monitor_data)
-        if label:
-            _event_raw = os.environ.get("EVENT_CONTEXT", "")
-            _event_context = None
-            if _event_raw:
-                try:
-                    import json as _json
-                    _event_context = _json.loads(_event_raw)
-                except (ValueError, TypeError):
-                    pass
-            notify_payload = NotifyPayload(
-                label=label,
-                ticker=spec.ticker,
-                monitor_data=monitor_data,
-                new_plan={
-                    "decision_final": spec.decision_final,
-                    "confidence": spec.confidence,
-                    "allocation_jpy": spec.allocation_jpy,
-                    "quantity": spec.quantity,
-                },
-                event_context=_event_context,
-            )
-            await notify(notify_payload)
+        yaml_full = build_yaml(spec)
+        safe_db(update_archivelog, _db_archivelog_id,
+                newplan_full=yaml_full,
+                verdict=spec.decision_final,
+                status="completed")
 
     return output_path
 

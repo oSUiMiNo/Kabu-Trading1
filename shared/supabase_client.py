@@ -274,6 +274,39 @@ def get_latest_archivelog_with_plan(ticker: str) -> dict | None:
     return resp.data[0] if resp.data else None
 
 
+def get_latest_archivelog_with_newplan(ticker: str) -> dict | None:
+    """newplan_full が存在する最新の completed アーカイブログを取得。"""
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("*")
+        .eq("ticker", ticker.upper())
+        .eq("status", "completed")
+        .not_.is_("newplan_full", "null")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+def get_previous_archivelog_with_newplan(ticker: str, exclude_id: int) -> dict | None:
+    """plan_comparison 用：指定 id を除いた直前の newplan_full 付きレコードを返す。"""
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("*")
+        .eq("ticker", ticker.upper())
+        .eq("status", "completed")
+        .not_.is_("newplan_full", "null")
+        .neq("id", exclude_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
 # ── watchlist ─────────────────────────────────────────
 
 def list_watchlist(active_only: bool = True, market: str | None = None) -> list[dict]:
