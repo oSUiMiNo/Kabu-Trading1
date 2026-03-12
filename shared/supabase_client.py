@@ -287,22 +287,6 @@ def list_watchlist(active_only: bool = True, market: str | None = None) -> list[
     return resp.data
 
 
-def list_watchlist_with_motivation(market: str | None = None) -> list[dict]:
-    """MotivationID != 0 の active 銘柄を返す。"""
-    q = (
-        get_client().from_("watchlist")
-        .select("*").eq("active", True).neq("MotivationID", 0)
-    )
-    if market:
-        q = q.eq("market", market.upper())
-    return q.order("created_at").execute().data
-
-
-def reset_motivation(ticker: str) -> dict:
-    """Watch 完了後に MotivationID を 0 に戻す。"""
-    return update_watchlist(ticker, **{"MotivationID": 0})
-
-
 def update_watchlist(ticker: str, **fields) -> dict:
     """watchlist の指定銘柄を更新する。"""
     resp = (

@@ -300,29 +300,27 @@ async def run_monitor(
 
     print()
 
-    lock = anyio.Lock()
-
-    async def _check_and_collect(ticker: str):
+    for ticker in tickers:
         archivelog = safe_db(get_latest_archivelog_with_plan, ticker)
+
         if skip_spans and archivelog:
-            if archivelog.get("span", "mid") in skip_spans:
-                print(f"  [{ticker}] スキップ")
-                return
+            span = archivelog.get("span", "mid")
+            if span in skip_spans:
+                print(f"  [{ticker}] スキップ: {span} は対象外")
+                print()
+                continue
+
         result = await check_one_ticker(ticker)
         if result:
-            async with lock:
-                summary.results[ticker] = result
-                summary.total_cost += result.get("cost_usd", 0) or 0
-                if result.get("result") == "NG" and archivelog:
-                    summary.ng_tickers.append({
-                        "ticker": ticker,
-                        "mode": archivelog.get("mode", "buy"),
-                        "span": archivelog.get("span", "mid"),
-                    })
-
-    async with anyio.create_task_group() as tg:
-        for ticker in tickers:
-            tg.start_soon(_check_and_collect, ticker)
+            summary.results[ticker] = result
+            summary.total_cost += result.get("cost_usd", 0) or 0
+            if result.get("result") == "NG" and archivelog:
+                summary.ng_tickers.append({
+                    "ticker": ticker,
+                    "mode": archivelog.get("mode", "buy"),
+                    "span": archivelog.get("span", "mid"),
+                })
+        print()
 
     ok_count = sum(1 for r in summary.results.values() if r.get("result") == "OK")
     ng_count = len(summary.ng_tickers)

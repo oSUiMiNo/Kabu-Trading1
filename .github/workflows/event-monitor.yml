@@ -113,11 +113,6 @@ jobs:
         working-directory: Planning/src
         run: uv sync
 
-      - name: Install Watch dependencies
-        if: steps.resolve.outputs.should_run == 'true'
-        working-directory: Watch/src
-        run: uv sync
-
       # 対象市場ごとに Monitor パイプラインを実行。
       # イベント watch 由来の場合は EVENT_CONTEXT を渡し、Discord 通知にトリガ名を表示。
       # 定期スケジュール由来の場合は skip_spans を --skip-span 引数として渡す。
@@ -144,12 +139,12 @@ jobs:
             echo "============================================"
             echo "=== Monitor: all markets ==="
             echo "============================================"
-            uv run python pipeline_orchestrator.py $SKIP_ARGS
+            uv run python ng_dispatch.py $SKIP_ARGS
           else
             for MARKET in $MARKETS; do
               echo "============================================"
               echo "=== Monitor: ${MARKET} market ==="
               echo "============================================"
-              uv run python pipeline_orchestrator.py --market "$MARKET" $SKIP_ARGS
+              uv run python ng_dispatch.py --market "$MARKET" $SKIP_ARGS
             done
           fi
