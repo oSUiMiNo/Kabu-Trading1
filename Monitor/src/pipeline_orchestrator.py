@@ -26,8 +26,9 @@ import anyio
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
     safe_db,
-    fetch_pending_planning,
-    fetch_ng_tickers_for_discussion,
+    fetch_active_for_discussion,
+    fetch_active_for_planning,
+    propagate_active_after_discussion,
 )
 
 from monitor_orchestrator import run_monitor
@@ -130,7 +131,7 @@ async def run_discussion_batch(event_context: dict | None) -> None:
     print(f"=== Phase 2: Discussion ===")
     print(f"{'='*60}")
 
-    pending = safe_db(fetch_ng_tickers_for_discussion) or []
+    pending = safe_db(fetch_active_for_discussion) or []
     if not pending:
         print("  Discussion 対象なし。")
         return
@@ -143,9 +144,11 @@ async def run_discussion_batch(event_context: dict | None) -> None:
         ticker = row["ticker"]
         span = row["span"]
         mode = row["mode"]
+        old_archive_id = row["id"]
 
         exit_code = _run_discussion_with_retry(ticker, span, mode)
         if exit_code == 0:
+            safe_db(propagate_active_after_discussion, ticker, old_archive_id)
             print(f"  [{ticker}] Discussion 完了")
         else:
             print(f"  [{ticker}] Discussion 全リトライ失敗 (exit code: {exit_code})")
@@ -171,7 +174,7 @@ async def run_planning_batch(event_context: dict | None) -> None:
     print(f"=== Phase 3: Planning ===")
     print(f"{'='*60}")
 
-    pending = safe_db(fetch_pending_planning) or []
+    pending = safe_db(fetch_active_for_planning) or []
     if not pending:
         print("  Planning 対象なし。")
         return
@@ -261,7 +264,7 @@ async def run_pipeline(
             await notify(payload)
 
     # NG 銘柄の有無を DB から確認（伝言板方式）
-    ng_tickers = safe_db(fetch_ng_tickers_for_discussion) or []
+    ng_tickers = safe_db(fetch_active_for_discussion) or []
 
     if not ng_tickers:
         print("\nNG 銘柄なし。Discussion/Planning/Watch は起動しません。")

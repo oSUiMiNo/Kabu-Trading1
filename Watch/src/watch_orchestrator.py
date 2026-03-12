@@ -5,7 +5,7 @@ archive テーブルの情報を読み取り、watchlist を更新し、Discord 
 パイプラインの Phase 4 に相当する。
 
 Usage:
-    python watch_orchestrator.py                  # MotivationID!=0 の全銘柄を処理
+    python watch_orchestrator.py                  # archive.active=True の全銘柄を処理
     python watch_orchestrator.py --ticker NVDA    # 指定銘柄のみ
 """
 import argparse
@@ -21,8 +21,9 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
     safe_db,
-    list_watchlist,
     update_watchlist,
+    update_archivelog,
+    fetch_active_for_watch,
     get_latest_archivelog_with_newplan,
     get_previous_archivelog_with_newplan,
 )
@@ -175,7 +176,8 @@ async def process_one_ticker(ticker: str) -> bool:
     else:
         print(f"  [{ticker}] monitor データなし。通知スキップ。")
 
-    print(f"  [{ticker}] 処理完了")
+    safe_db(update_archivelog, archivelog["id"], active=False)
+    print(f"  [{ticker}] 処理完了（active=False）")
     return True
 
 
@@ -183,10 +185,9 @@ async def run_watch(target_ticker: str | None = None):
     if target_ticker:
         tickers = [target_ticker.upper()]
     else:
-        rows = safe_db(list_watchlist, active_only=True) or []
-        tickers = [r["ticker"] for r in rows if r.get("MotivationID", 0) != 0]
+        tickers = safe_db(fetch_active_for_watch) or []
         if not tickers:
-            print("[Watch] MotivationID != 0 の銘柄がありません。終了。")
+            print("[Watch] active な対象銘柄がありません。終了。")
             return
 
     print(f"[Watch] 対象銘柄: {', '.join(tickers)}")
@@ -200,7 +201,7 @@ async def run_watch(target_ticker: str | None = None):
 
 async def main():
     parser = argparse.ArgumentParser(description="Watch ブロック：watchlist 更新 + Discord 通知")
-    parser.add_argument("--ticker", help="処理対象の銘柄（省略時は MotivationID!=0 の全銘柄）")
+    parser.add_argument("--ticker", help="処理対象の銘柄（省略時は archive.active=True の全銘柄）")
     args = parser.parse_args()
     await run_watch(target_ticker=args.ticker)
 

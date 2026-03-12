@@ -307,68 +307,82 @@ def get_previous_archivelog_with_newplan(ticker: str, exclude_id: int) -> dict |
     return resp.data[0] if resp.data else None
 
 
-def fetch_pending_planning() -> list[dict]:
-    """Discussion 完了済み（final_judge あり）かつ Planning 未完了（newplan_full なし）のレコードを取得。"""
+def fetch_active_for_discussion() -> list[dict]:
+    """active=True かつ Discussion 未完了（final_judge なし）のレコードを取得。"""
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("id, ticker, mode, span, MotivationID, motivation_full")
+        .eq("active", True)
+        .is_("final_judge", "null")
+        .execute()
+    )
+    return resp.data or []
+
+
+def fetch_active_for_planning() -> list[dict]:
+    """active=True かつ Discussion 完了済み・Planning 未完了のレコードを取得。"""
     resp = (
         get_client()
         .from_("archive")
         .select("id, ticker, span")
+        .eq("active", True)
         .not_.is_("final_judge", "null")
         .is_("newplan_full", "null")
         .execute()
     )
-    return resp.data
+    return resp.data or []
 
 
-def fetch_ng_tickers_for_discussion() -> list[dict]:
-    """Monitor NG 判定済み・Discussion 未実施の銘柄を DB から取得する。
-
-    手順:
-    1. monitor JSONB 付きの archive を取得し、result='NG' を Python で抽出
-    2. 銘柄ごとに最新の NG レコードだけ残す
-    3. それより新しい final_judge 付き archive がなければ Discussion 未実施と判定
-    """
+def fetch_active_for_watch() -> list[str]:
+    """active=True かつ Planning 完了済みの銘柄リストを取得。"""
     resp = (
         get_client()
         .from_("archive")
-        .select("id, ticker, mode, span, monitor, created_at")
-        .not_.is_("monitor", "null")
-        .order("created_at", desc=True)
+        .select("ticker")
+        .eq("active", True)
+        .eq("status", "completed")
+        .not_.is_("newplan_full", "null")
         .execute()
     )
-    all_monitored = resp.data or []
+    return list({r["ticker"] for r in (resp.data or [])})
 
-    seen: dict[str, dict] = {}
-    for r in all_monitored:
-        monitor = r.get("monitor") or {}
-        if isinstance(monitor, str):
-            monitor = json.loads(monitor)
-        if monitor.get("result") != "NG":
-            continue
-        t = r["ticker"]
-        if t not in seen:
-            seen[t] = r
 
-    pending = []
-    for t, r in seen.items():
-        check = (
-            get_client()
-            .from_("archive")
-            .select("id")
-            .eq("ticker", t)
-            .not_.is_("final_judge", "null")
-            .gt("created_at", r["created_at"])
-            .limit(1)
-            .execute()
-        )
-        if not check.data:
-            pending.append({
-                "ticker": t,
-                "mode": r.get("mode", "buy"),
-                "span": r.get("span", "mid"),
-            })
+def propagate_active_after_discussion(ticker: str, old_archive_id: int) -> dict | None:
+    """Discussion 完了後：新レコードに active+MotivationID を引き継ぎ、旧レコードを非活性化。"""
+    old = (
+        get_client()
+        .from_("archive")
+        .select("MotivationID, motivation_full")
+        .eq("id", old_archive_id)
+        .execute()
+    )
+    old_data = old.data[0] if old.data else {}
 
-    return pending
+    new = (
+        get_client()
+        .from_("archive")
+        .select("id")
+        .eq("ticker", ticker.upper())
+        .not_.is_("final_judge", "null")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not new.data:
+        return None
+
+    new_id = new.data[0]["id"]
+
+    update_archivelog(new_id,
+        active=True,
+        MotivationID=old_data.get("MotivationID", 1),
+        motivation_full=old_data.get("motivation_full", ""),
+    )
+
+    update_archivelog(old_archive_id, active=False)
+
+    return new.data[0]
 
 
 # ── watchlist ─────────────────────────────────────────

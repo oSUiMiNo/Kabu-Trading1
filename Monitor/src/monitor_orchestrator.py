@@ -230,7 +230,8 @@ async def check_one_ticker(ticker: str) -> dict | None:
         safe_db(update_watchlist, ticker,
                 **{"MotivationID": 1, "motivation_summary": monitor_data.get("summary", "")})
         safe_db(update_archivelog, archivelog["id"],
-                **{"MotivationID": 1, "motivation_full": monitor_data.get("ng_reason", "")})
+                **{"MotivationID": 1, "motivation_full": monitor_data.get("ng_reason", ""),
+                   "active": True})
 
     archivelog_id = archivelog["id"]
     safe_db(update_archivelog, archivelog_id, monitor=monitor_record)
