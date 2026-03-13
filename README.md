@@ -1,0 +1,171 @@
+# 投資パイプライン（Kabu-Trading1）
+
+銘柄の監視 → 議論 → プラン生成 → watchlist 更新を自動化するシステム。
+Claude Code / GLM のマルチエージェント構成で運用する。
+
+---
+
+## システム全体像
+
+```
+[Monitor] → [Discussion] → [Planning] → [Watch]
+   ↑                                        |
+   └────────── archive テーブル ←────────────┘
+```
+
+1. **Monitor** が watchlist 銘柄の現状をチェックし OK/NG/ERROR を判定
+2. **Discussion** が NG 銘柄を複数エージェントで議論し最終判定を出す
+3. **Planning** が最終判定からプラン YAML を生成
+4. **Watch** がプラン結果をもとに watchlist を更新し、Discord に業務通知を送信
+
+ブロック間の情報伝達は **DB（archive テーブル）経由の伝言板方式** で疎結合。
+各ブロック内では銘柄ごとに `asyncio.gather()` で並列処理する。
+
+---
+
+## モジュール構成
+
+| モジュール | 役割 | 主要ファイル |
+|-----------|------|------------|
+| **Monitor** | 市場チェック + パイプライン制御 | `Monitor/src/pipeline_orchestrator.py`<br>`Monitor/src/monitor_orchestrator.py` |
+| **Discussion** | 複数レーン並列議論 + 最終判定 | `Discusion/src/parallel_orchestrator.py` |
+| **Planning** | プラン YAML 生成 | `Planning/src/plan_orchestrator.py` |
+| **Watch** | watchlist 更新 + Discord 業務通知 | `Watch/src/watch_orchestrator.py` |
+| **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/scheduler_orchestrator.py` |
+| **ArchiveReview** | archive 品質レビュー + Issue 作成 | `ArchiveReview/src/review_orchestrator.py` |
+| **shared** | DB・通知・LLM クライアント共通 | `shared/supabase_client.py`<br>`shared/discord_notifier.py`<br>`shared/llm_client.py` |
+
+---
+
+## 実行方法
+
+```bash
+# 全パイプライン（Monitor → Discussion → Planning → Watch）
+python Monitor/src/pipeline_orchestrator.py
+
+# 特定銘柄のみ
+python Monitor/src/pipeline_orchestrator.py --ticker NVDA
+
+# 監視のみ（Discussion/Planning/Watch 起動しない）
+python Monitor/src/pipeline_orchestrator.py --monitor-only
+
+# 米国株のみ
+python Monitor/src/pipeline_orchestrator.py --market US
+
+# 監視単体実行
+python Monitor/src/monitor_orchestrator.py
+```
+
+---
+
+## 自動実行（GitHub Actions）
+
+| ワークフロー | スケジュール | 内容 |
+|-------------|------------|------|
+| `event-monitor.yml` | 5分間隔 24時間稼働 | イベント watch + 定期スケジュール検出 → パイプライン起動 |
+| `monitor.yml` | 手動（workflow_dispatch） | テスト・特定銘柄の手動チェック |
+| `event-scheduler.yml` | 年1回・月1回 | FOMC・雇用統計等の経済イベント取得・DB登録 |
+| `archive-review.yml` | JST 3:05 / 4:05 / 5:05 | archive 品質レビュー → GitHub Issue 作成 |
+| `sync-config.yml` | push 時自動 | `config/portfolio_config.yml` → DB 反映 |
+
+### 定期 Monitor スケジュール（pg_cron）
+
+| ジョブ | 発火時刻（UTC） | 対象（JST） |
+|--------|---------------|------------|
+| monitor_JP_AM | 月〜金 01:10 | 日本株 10:10 |
+| monitor_JP_PM | 月〜金 07:00 | 日本株 16:00 |
+| monitor_US_AM | 日〜木 15:00 | 米国株 0:00 |
+| monitor_US_PM | 日〜木 21:30 | 米国株 6:30 |
+
+メイン経路は pg_cron → pg_net → GitHub Actions workflow_dispatch。
+フォールバックとして GitHub Actions 5分ポーリングが二重化カバーする。
+
+---
+
+## Discord 通知
+
+| ラベル | 送信元 | 条件 |
+|--------|--------|------|
+| 開始 | pipeline_orchestrator | パイプライン開始時 |
+| 確認 | pipeline_orchestrator | OK だがリスクフラグあり |
+| 緊急 | Watch | NG かつ変動率 ≤ -10% |
+| 朗報 | Watch | NG かつ変動率 ≥ +10% |
+| 警告 | Watch | NG（変動率 -10%〜+10%） |
+| 完了 | pipeline_orchestrator | 全銘柄チェック完了時 |
+| エラー | pipeline_orchestrator | リトライ上限到達 / 失敗 |
+
+---
+
+## Discussion の LLM バックエンド
+
+Discussion ブロックは Claude Code と Z.AI GLM の2つのバックエンドに対応している。
+`.env.local` の環境変数で切り替える。
+
+```env
+# バックエンド選択（claude / glm）
+DISCUSSION_LLM_PROVIDER=glm
+
+# GLM モデル指定
+DISCUSSION_GLM_MODEL=glm-5
+```
+
+### Z.AI GLM の利用
+
+| 項目 | 内容 |
+|------|------|
+| 現在のモデル | **GLM-5**（744B MoE、最大 205K コンテキスト） |
+| 課金形態 | **年間サブスクリプション**（Pro プラン） |
+| API キー | `.env.local` の `ZHIPUAI_API_KEY` に設定済み |
+| エンドポイント | `https://api.z.ai/api/paas/v4/`（国際版） |
+| 切り替え方法 | `DISCUSSION_GLM_MODEL` の値を変更するだけ（コード変更不要） |
+
+利用可能なモデル：`glm-5`、`glm-4.7`、`glm-4.7-flash`（無料）
+
+---
+
+## 設定管理
+
+`config/portfolio_config.yml` を編集して push すると、`sync-config.yml` ワークフロー経由で自動的に DB に反映される。
+
+主要設定：
+- 投資パラメータ（total_budget_jpy, risk_limit_pct, stop_loss_pct 等）
+- Discussion パラメータ（num_lanes, max_rounds 等）
+- Monitor 定期スケジュール
+- 緊急停止スイッチ（`monitor_schedule_enabled: false` で全スケジュール一時停止）
+
+---
+
+## DB 構造（主要テーブル）
+
+| テーブル | 用途 |
+|---------|------|
+| `archive` | パイプライン出力の蓄積（monitor, lanes, final_judge, newplan_full, verdict） |
+| `watchlist` | 監視対象銘柄と最新サマリー |
+| `event_master` | 経済イベントのマスター |
+| `event_watch` | イベント watch スケジュール |
+| `portfolio_config` | 全設定値（YAML → DB 同期） |
+| `archive_reviews` | archive 品質レビュー結果 |
+
+### 伝言板方式の開始条件
+
+| ブロック | DB クエリ条件 |
+|---------|-------------|
+| Discussion | `active = True AND final_judge IS NULL` |
+| Planning | `active = True AND final_judge IS NOT NULL AND newplan_full IS NULL` |
+| Watch | `active = True AND status = 'completed' AND newplan_full IS NOT NULL` |
+
+---
+
+## ドキュメント
+
+詳細な設計・運用ドキュメントは `MyDocs/` に集約している。
+
+| ファイル | 内容 |
+|---------|------|
+| パイプライン総則.md | ブロック間・ブロック内の構造原則 |
+| 新アーキテクチャ設計.md | 現行アーキテクチャの設計書 |
+| Discord通知.md | 通知ラベルの種類・色・送信タイミング |
+| リスクフラグ.md | monitor-checker が付与するタグ定義 |
+| 監視スケジューリング.md | 定期スケジュールのポーリング設計 |
+| pgcronトリガー.md | pg_cron + pg_net による二重化トリガー |
+| 設定管理.md | portfolio_config テーブルの管理方法 |

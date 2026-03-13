@@ -29,7 +29,6 @@ from supabase_client import (
     get_latest_archivelog_with_newplan,
     create_archivelog,
     update_archivelog,
-    update_watchlist,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -230,8 +229,6 @@ async def check_one_ticker(ticker: str) -> dict | None:
 
     if monitor_data.get("result") == "NG":
         monitor_record["ng_reason"] = monitor_data.get("ng_reason", "")
-        safe_db(update_watchlist, ticker,
-                **{"MotivationID": 1, "motivation_summary": monitor_data.get("summary", "")})
         safe_db(update_archivelog, archivelog["id"], active=False)
         new_record = safe_db(create_archivelog, ticker,
                              archivelog.get("mode", "buy"),

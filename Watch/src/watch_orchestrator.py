@@ -140,6 +140,7 @@ async def process_one_ticker(ticker: str) -> bool:
         print(f"  警告: エージェント応答なし。サマリーなしで続行。")
 
     update_fields = {
+        "MotivationID": archivelog.get("MotivationID"),
         "motivation_summary": monitor_data.get("ng_reason") or monitor_data.get("summary", ""),
         "discussion_result": verdict,
         "discussion_summary": discussion_summary,
