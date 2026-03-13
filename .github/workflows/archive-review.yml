@@ -1,0 +1,61 @@
+##
+# Archive 品質レビュー
+#
+# 深夜帯（JST 3:05 / 4:05 / 5:05）に archive テーブルのレビュー未済レコードを
+# 自動レビューし、品質問題があれば GitHub Issue を作成する。
+#
+# 3回の cron 設定は冗長性のため。1回目で全件レビュー済みになれば
+# 2・3回目は対象0件で即終了する。
+##
+name: Archive Review
+
+on:
+  schedule:
+    - cron: '5 18 * * *'    # JST 3:05
+    - cron: '5 19 * * *'    # JST 4:05（予備）
+    - cron: '5 20 * * *'    # JST 5:05（予備）
+  workflow_dispatch:
+    inputs:
+      max_reviews:
+        description: 'レビュー上限数（デフォルト20）'
+        type: number
+        default: 20
+      dry_run:
+        description: 'Issue作成なし（プレビューのみ）'
+        type: boolean
+        default: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Setup Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        working-directory: ArchiveReview/src
+        run: uv sync
+
+      - name: Run Archive Review
+        working-directory: ArchiveReview/src
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAX="${{ inputs.max_reviews || '20' }}"
+          DRY_RUN="${{ inputs.dry_run }}"
+          ARGS="--max-reviews $MAX"
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          uv run python review_orchestrator.py $ARGS

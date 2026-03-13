@@ -565,3 +565,37 @@ def update_scheduler_log(run_id: int, **fields) -> dict:
         .execute()
     )
     return resp.data[0] if resp.data else {}
+
+
+# ── archive_reviews（品質レビュー追跡） ──────────────────
+
+def fetch_unreviewed_archives(limit: int = 20) -> list[dict]:
+    """レビュー未済の completed archive を取得する（作成から6時間以上経過）。"""
+    from datetime import datetime, timezone, timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
+    resp = get_client().rpc("fetch_unreviewed_archives", {
+        "p_cutoff": cutoff,
+        "p_limit": limit,
+    }).execute()
+    return resp.data or []
+
+
+def create_archive_review(
+    archive_id: int,
+    overall_quality: str,
+    issues_json: list[dict],
+    issue_url: str | None = None,
+    review_cost_usd: float | None = None,
+) -> dict:
+    """レビュー結果を archive_reviews テーブルに記録する。"""
+    row = {
+        "archive_id": archive_id,
+        "overall_quality": overall_quality,
+        "issues_json": issues_json,
+    }
+    if issue_url:
+        row["issue_url"] = issue_url
+    if review_cost_usd is not None:
+        row["review_cost_usd"] = review_cost_usd
+    resp = get_client().from_("archive_reviews").insert(row).execute()
+    return resp.data[0] if resp.data else {}

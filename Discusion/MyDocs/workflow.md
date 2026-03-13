@@ -37,7 +37,3 @@ flowchart LR
     FJ --> P[プラン]
     P --> out((out))
 ```
-
-# aa
-- a
-- b
