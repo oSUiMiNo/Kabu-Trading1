@@ -190,6 +190,11 @@ def build_embed(payload: NotifyPayload) -> dict:
         if ng_reason:
             fields.append({"name": "監視時NG理由", "value": f"> {ng_reason[:1020]}"})
 
+        risk_flags = md.get("risk_flags") or []
+        if risk_flags:
+            flags_ja = [_RISK_FLAG_JA.get(f, f) for f in risk_flags]
+            fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja)})
+
         embed = {
             "title": title,
             "description": "プラン続行がNGと判断し再議論しました",

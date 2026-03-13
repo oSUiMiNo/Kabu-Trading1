@@ -5,11 +5,12 @@
 # このワークフローはテスト実行や特定銘柄の手動チェック用に残す。
 #
 # パイプライン:
-#   ng_dispatch.py が以下を順に実行する
+#   pipeline_orchestrator.py が以下を順に実行する
 #     1. Monitor  … 各銘柄の現在価格 vs plan 想定価格を比較 → OK/NG 判定
 #     2. Discussion（NG時のみ）… Analyst / Devil's Advocate / Judge による多角的議論
 #     3. Planning（NG時のみ）… 新 plan の生成・DB 登録
-#     4. Discord 通知 … 結果をラベル付き Embed で送信
+#     4. Watch … プラン結果をもとに watchlist サマリーを更新
+#     5. Discord 通知 … 結果をラベル付き Embed で送信
 ##
 name: Monitor
 
@@ -57,7 +58,11 @@ jobs:
         working-directory: Planning/src
         run: uv sync
 
-      - name: Run Monitor → Discussion → Planning pipeline
+      - name: Install Watch dependencies
+        working-directory: Watch/src
+        run: uv sync
+
+      - name: Run Monitor → Discussion → Planning → Watch pipeline
         working-directory: Monitor/src
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -75,4 +80,4 @@ jobs:
           if [ "${{ inputs.monitor_only }}" = "true" ]; then
             ARGS="$ARGS --monitor-only"
           fi
-          uv run python ng_dispatch.py $ARGS
+          uv run python pipeline_orchestrator.py $ARGS
