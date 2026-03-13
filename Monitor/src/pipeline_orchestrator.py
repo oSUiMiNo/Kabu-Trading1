@@ -260,7 +260,7 @@ async def run_pipeline(
 
     summary = await run_monitor(target_ticker, market=market, skip_spans=skip_spans)
 
-    # Monitor ERROR 通知（パイプラインレベルのエラーハンドリング）
+    # Monitor ERROR / CHECK 通知（パイプラインレベル）
     for ticker, monitor_data in summary.results.items():
         if monitor_data.get("retries_exhausted"):
             payload = NotifyPayload(
@@ -269,6 +269,14 @@ async def run_pipeline(
                 monitor_data=monitor_data,
                 event_context=event_context,
                 error_detail=monitor_data.get("error_detail", "Monitor リトライ上限到達"),
+            )
+            await notify(payload)
+        elif classify_label(monitor_data) == NotifyLabel.CHECK:
+            payload = NotifyPayload(
+                label=NotifyLabel.CHECK,
+                ticker=ticker,
+                monitor_data=monitor_data,
+                event_context=event_context,
             )
             await notify(payload)
 
