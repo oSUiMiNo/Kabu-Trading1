@@ -27,6 +27,7 @@ from supabase_client import (
     safe_db,
     list_watchlist,
     get_latest_archivelog_with_newplan,
+    create_archivelog,
     update_archivelog,
     update_watchlist,
 )
@@ -231,12 +232,17 @@ async def check_one_ticker(ticker: str) -> dict | None:
         monitor_record["ng_reason"] = monitor_data.get("ng_reason", "")
         safe_db(update_watchlist, ticker,
                 **{"MotivationID": 1, "motivation_summary": monitor_data.get("summary", "")})
-        safe_db(update_archivelog, archivelog["id"],
-                **{"MotivationID": 1, "motivation_full": monitor_data.get("ng_reason", ""),
-                   "active": True})
-
-    archivelog_id = archivelog["id"]
-    safe_db(update_archivelog, archivelog_id, monitor=monitor_record)
+        safe_db(update_archivelog, archivelog["id"], active=False)
+        new_record = safe_db(create_archivelog, ticker,
+                             archivelog.get("mode", "buy"),
+                             archivelog.get("span", "中期"))
+        safe_db(update_archivelog, new_record["id"],
+                MotivationID=1,
+                motivation_full=monitor_data.get("ng_reason", ""),
+                active=True,
+                monitor=monitor_record)
+    else:
+        safe_db(update_archivelog, archivelog["id"], monitor=monitor_record)
 
     status = monitor_record["result"]
     print(f"  [{ticker}] 結果: {status}")

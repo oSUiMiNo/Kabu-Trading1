@@ -34,18 +34,18 @@ _CONFIDENCE_JA = {
     "low": "低",
 }
 
-_RISK_FLAG_JA = {
-    "price_deviation_exceeded": "価格乖離超過（下落）",
-    "basis_invalidated": "根拠崩壊",
-    "new_regulatory_risk": "規制リスク",
-    "earnings_miss": "決算未達",
-    "sector_downturn": "セクター悪化",
-    "macro_shock": "マクロショック",
-    "management_change": "経営陣変更",
-    "price_surge_exceeded": "価格乖離超過（上昇）",
-    "target_reached": "目標価格到達",
-    "earnings_beat": "決算好調",
-    "concern_resolved": "懸念材料の解消",
+_VALID_RISK_FLAGS = {
+    "価格乖離超過（下落）",
+    "根拠崩壊",
+    "規制リスク",
+    "決算未達",
+    "セクター悪化",
+    "マクロショック",
+    "経営陣変更",
+    "価格乖離超過（上昇）",
+    "目標価格到達",
+    "決算好調",
+    "懸念材料の解消",
 }
 
 _WATCH_KIND_JA = {
@@ -192,7 +192,7 @@ def build_embed(payload: NotifyPayload) -> dict:
 
         risk_flags = md.get("risk_flags") or []
         if risk_flags:
-            flags_ja = [_RISK_FLAG_JA.get(f, f) for f in risk_flags]
+            flags_ja = [f for f in risk_flags if f in _VALID_RISK_FLAGS]
             fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja)})
 
         embed = {
@@ -224,7 +224,7 @@ def build_embed(payload: NotifyPayload) -> dict:
 
         risk_flags = md.get("risk_flags") or []
         if risk_flags:
-            flags_ja = [_RISK_FLAG_JA.get(f, f) for f in risk_flags]
+            flags_ja = [f for f in risk_flags if f in _VALID_RISK_FLAGS]
             fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja)})
 
         embed = {"title": title, "color": color, "timestamp": timestamp, "fields": fields}
