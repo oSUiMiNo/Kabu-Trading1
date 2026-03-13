@@ -14,6 +14,7 @@ Usage:
     python pipeline_orchestrator.py --skip-span long   # 長期スキップ
     python pipeline_orchestrator.py --monitor-only     # Monitor のみ
 """
+import asyncio
 import json
 import os
 import re
@@ -92,20 +93,21 @@ def _load_event_context() -> dict | None:
 # Discussion ブロックはバッチ実行モードを持たないため、
 # DB から対象銘柄を検出し、各銘柄の Discussion subprocess を起動するアダプタ。
 
-def _run_discussion_subprocess(ticker: str, span: str, mode: str) -> int:
-    """Discussion を subprocess で実行する。"""
+async def _run_discussion_subprocess(ticker: str, span: str, mode: str) -> int:
+    """Discussion を subprocess で実行する（非同期）。"""
     python = _find_venv_python(DISCUSSION_DIR)
     script = str(DISCUSSION_DIR / "parallel_orchestrator.py")
     cmd = [python, script, ticker, span, MODE_TO_CLI.get(mode, "buy")]
 
     print(f"  [{ticker}] Discussion 起動: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(DISCUSSION_DIR))
-    return result.returncode
+    proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(DISCUSSION_DIR))
+    await proc.wait()
+    return proc.returncode
 
 
-def _run_discussion_with_retry(ticker: str, span: str, mode: str) -> int:
+async def _run_discussion_with_retry(ticker: str, span: str, mode: str) -> int:
     """Discussion を実行し、失敗時はリトライする。"""
-    exit_code = _run_discussion_subprocess(ticker, span, mode)
+    exit_code = await _run_discussion_subprocess(ticker, span, mode)
     if exit_code == 0:
         return 0
 
@@ -117,7 +119,7 @@ def _run_discussion_with_retry(ticker: str, span: str, mode: str) -> int:
     else:
         print(f"  [{ticker}] Discussion ログなし → 全体リトライ")
 
-    exit_code = _run_discussion_subprocess(ticker, span, mode)
+    exit_code = await _run_discussion_subprocess(ticker, span, mode)
     if exit_code == 0:
         return 0
 
@@ -140,27 +142,30 @@ async def run_discussion_batch(event_context: dict | None) -> None:
     for row in pending:
         print(f"    - {row['ticker']} (mode={row['mode']}, span={row['span']})")
 
-    for row in pending:
+    async def _process_one(row):
         ticker = row["ticker"]
         span = row["span"]
         mode = row["mode"]
         old_archive_id = row["id"]
+        try:
+            exit_code = await _run_discussion_with_retry(ticker, span, mode)
+            if exit_code == 0:
+                safe_db(propagate_active_after_discussion, ticker, old_archive_id)
+                print(f"  [{ticker}] Discussion 完了")
+            else:
+                print(f"  [{ticker}] Discussion 全リトライ失敗 (exit code: {exit_code})")
+                payload = NotifyPayload(
+                    label=NotifyLabel.ERROR,
+                    ticker=ticker,
+                    monitor_data={},
+                    event_context=event_context,
+                    error_detail=f"Discussion 失敗 (exit code: {exit_code})",
+                )
+                await notify(payload)
+        except Exception as e:
+            print(f"  [{ticker}] 予期しないエラー: {e}")
 
-        exit_code = _run_discussion_with_retry(ticker, span, mode)
-        if exit_code == 0:
-            safe_db(propagate_active_after_discussion, ticker, old_archive_id)
-            print(f"  [{ticker}] Discussion 完了")
-        else:
-            print(f"  [{ticker}] Discussion 全リトライ失敗 (exit code: {exit_code})")
-            payload = NotifyPayload(
-                label=NotifyLabel.ERROR,
-                ticker=ticker,
-                monitor_data={},
-                event_context=event_context,
-                error_detail=f"Discussion 失敗 (exit code: {exit_code})",
-            )
-            await notify(payload)
-        print()
+    await asyncio.gather(*[_process_one(row) for row in pending])
 
 
 # ── Planning バッチアダプタ ───────────────────────────────
@@ -183,7 +188,7 @@ async def run_planning_batch(event_context: dict | None) -> None:
     for row in pending:
         print(f"    - {row['ticker']} (span={row['span']})")
 
-    for row in pending:
+    async def _process_one(row):
         ticker = row["ticker"]
         span = row["span"]
 
@@ -193,21 +198,25 @@ async def run_planning_batch(event_context: dict | None) -> None:
         cmd = [python, script, ticker, horizon_jp]
 
         print(f"  [{ticker}] Planning 起動: {' '.join(cmd)}")
-        result = subprocess.run(cmd, cwd=str(PLANNING_DIR))
+        try:
+            proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(PLANNING_DIR))
+            await proc.wait()
+            if proc.returncode == 0:
+                print(f"  [{ticker}] Planning 完了")
+            else:
+                print(f"  [{ticker}] Planning 失敗 (exit code: {proc.returncode})")
+                payload = NotifyPayload(
+                    label=NotifyLabel.ERROR,
+                    ticker=ticker,
+                    monitor_data={},
+                    event_context=event_context,
+                    error_detail=f"Planning 失敗 (exit code: {proc.returncode})",
+                )
+                await notify(payload)
+        except Exception as e:
+            print(f"  [{ticker}] 予期しないエラー: {e}")
 
-        if result.returncode == 0:
-            print(f"  [{ticker}] Planning 完了")
-        else:
-            print(f"  [{ticker}] Planning 失敗 (exit code: {result.returncode})")
-            payload = NotifyPayload(
-                label=NotifyLabel.ERROR,
-                ticker=ticker,
-                monitor_data={},
-                event_context=event_context,
-                error_detail=f"Planning 失敗 (exit code: {result.returncode})",
-            )
-            await notify(payload)
-        print()
+    await asyncio.gather(*[_process_one(row) for row in pending])
 
 
 # ── Watch ────────────────────────────────────────────────

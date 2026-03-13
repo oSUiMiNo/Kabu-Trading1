@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+import asyncio
+
 import anyio
 import yaml
 
@@ -288,27 +290,31 @@ async def run_monitor(
 
     print()
 
+    filtered = []
+    archivelog_map = {}
     for ticker in tickers:
         archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
-
+        archivelog_map[ticker] = archivelog
         if skip_spans and archivelog:
             span = archivelog.get("span", "mid")
             if span in skip_spans:
                 print(f"  [{ticker}] スキップ: {span} は対象外")
-                print()
                 continue
+        filtered.append(ticker)
 
-        result = await check_one_ticker(ticker)
-        if result:
-            summary.results[ticker] = result
-            summary.total_cost += result.get("cost_usd", 0) or 0
-            if result.get("result") == "NG" and archivelog:
-                summary.ng_tickers.append({
-                    "ticker": ticker,
-                    "mode": archivelog.get("mode", "buy"),
-                    "span": archivelog.get("span", "mid"),
-                })
-        print()
+    if filtered:
+        results = await asyncio.gather(*[check_one_ticker(t) for t in filtered])
+        for ticker, result in zip(filtered, results):
+            if result:
+                summary.results[ticker] = result
+                summary.total_cost += result.get("cost_usd", 0) or 0
+                archivelog = archivelog_map.get(ticker)
+                if result.get("result") == "NG" and archivelog:
+                    summary.ng_tickers.append({
+                        "ticker": ticker,
+                        "mode": archivelog.get("mode", "buy"),
+                        "span": archivelog.get("span", "mid"),
+                    })
 
     ok_count = sum(1 for r in summary.results.values() if r.get("result") == "OK")
     ng_count = len(summary.ng_tickers)

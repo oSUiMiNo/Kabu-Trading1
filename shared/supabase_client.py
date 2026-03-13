@@ -308,12 +308,13 @@ def get_previous_archivelog_with_newplan(ticker: str, exclude_id: int) -> dict |
 
 
 def fetch_active_for_discussion() -> list[dict]:
-    """active=True のレコードを取得（Discussion dispatch 用）。"""
+    """active=True かつ Discussion 未実施のレコードを取得（Discussion dispatch 用）。"""
     resp = (
         get_client()
         .from_("archive")
         .select("id, ticker, mode, span, MotivationID, motivation_full")
         .eq("active", True)
+        .is_("final_judge", "null")
         .execute()
     )
     return resp.data or []
