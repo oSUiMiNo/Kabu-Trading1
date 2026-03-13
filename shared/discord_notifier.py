@@ -119,13 +119,14 @@ async def generate_beginner_summary(payload: NotifyPayload) -> str:
 
 def build_embed(payload: NotifyPayload) -> dict:
     """Discord Embed dict を構築する。"""
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
+    JST = timezone(timedelta(hours=9))
     md = payload.monitor_data
     label = payload.label
     color = LABEL_COLOR.get(label, 0x808080)
     emoji = _LABEL_EMOJI.get(label, "")
     title = f"{emoji} [ {label.value} ]　{payload.ticker}"
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(JST).isoformat()
     fields = []
 
     if label == NotifyLabel.ERROR:
