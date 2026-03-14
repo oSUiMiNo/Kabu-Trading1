@@ -84,7 +84,7 @@ _GLM_PRICING: dict[str, tuple[float, float, float]] = {
 }
 
 # GLM: 国際 (Z.AI) / 中国本土 (bigmodel.cn) のエンドポイント
-_GLM_BASE_URL = "https://api.z.ai/api/paas/v4/"
+_GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 _GLM_BASE_URL_CN = "https://open.bigmodel.cn/api/paas/v4"
 
 _WEB_SEARCH_COST_PER_CALL = 0.01  # $10 / 1,000 calls

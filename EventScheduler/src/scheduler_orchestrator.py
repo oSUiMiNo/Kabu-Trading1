@@ -11,8 +11,10 @@ Usage:
 """
 
 import json
+import os
 import re
 import sys
+import urllib.request
 from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
 
@@ -38,6 +40,34 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 
 JST = timezone(timedelta(hours=9))
+
+
+def _notify_scheduler_errors(
+    run_type: str, run_id: int | None, fail_count: int, errors: list[str]
+) -> None:
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
+    if not webhook_url:
+        return
+    error_text = "\n".join(errors)[:1000]
+    msg = (
+        "**[EventScheduler エラー]**\n"
+        f"run_type: {run_type}  /  run_id: {run_id or '?'}\n"
+        f"失敗件数: {fail_count}\n"
+        f"エラー詳細:\n```\n{error_text}\n```"
+    )
+    body = json.dumps({"content": msg}).encode("utf-8")
+    req = urllib.request.Request(
+        webhook_url,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        data=body,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+        print("[通知] EventScheduler エラーを Discord に送信")
+    except Exception as e:
+        print(f"[通知] Discord 送信失敗: {e}")
 
 
 def seed_event_master() -> int:
@@ -258,6 +288,9 @@ async def run_scheduler(run_type: str, months_ahead: int = 2) -> None:
             fail_count=fail_count,
             error_summary="\n".join(errors) if errors else None,
         )
+
+    if fail_count > 0:
+        _notify_scheduler_errors(run_type, run_id, fail_count, errors)
 
     print(f"{'='*60}")
     print(f"[4/4] 完了")

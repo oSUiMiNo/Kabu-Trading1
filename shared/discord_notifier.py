@@ -67,19 +67,6 @@ _LABEL_EMOJI = {
 }
 
 
-def _extract_plan_description(plan: dict) -> str:
-    """yaml_full から monitoring_hint.reason を取得する。"""
-    plan_yaml = plan.get("yaml_full", "")
-    if not plan_yaml:
-        return ""
-    try:
-        import yaml
-        parsed = yaml.safe_load(plan_yaml)
-        return parsed.get("monitoring_hint", {}).get("reason", "")
-    except Exception:
-        return ""
-
-
 def _build_summary_prompt(payload: NotifyPayload) -> str:
     """notify-summarizer に渡すプロンプトを組み立てる。"""
     md = payload.monitor_data
@@ -95,6 +82,12 @@ def _build_summary_prompt(payload: NotifyPayload) -> str:
         plan = payload.new_plan
         parts.append(f"新プラン判定: {plan.get('decision_final', '不明')}")
         parts.append(f"confidence: {plan.get('confidence', '不明')}")
+        alloc = plan.get("allocation_jpy")
+        if alloc is not None:
+            parts.append(f"配分額: ¥{alloc:,.0f}")
+        qty = plan.get("quantity")
+        if qty is not None:
+            parts.append(f"数量: {qty}")
     if payload.event_context:
         ec = payload.event_context
         parts.append(f"トリガイベント: {ec.get('name_ja', ec.get('event_id', ''))}")
@@ -161,9 +154,7 @@ def build_embed(payload: NotifyPayload) -> dict:
         confidence_raw = str(plan.get("confidence", "?"))
         confidence_ja = _CONFIDENCE_JA.get(confidence_raw.lower(), confidence_raw)
 
-        plan_desc = _extract_plan_description(plan)
-        if plan_desc:
-            fields.append({"name": "新プラン", "value": f"> {plan_desc}"})
+        action_summary = payload.beginner_summary or ""
 
         result_lines = [f"> 判定 : {decision_ja}", f"> 確信度 : {confidence_ja}"]
         alloc = plan.get("allocation_jpy")
@@ -195,7 +186,7 @@ def build_embed(payload: NotifyPayload) -> dict:
 
         embed = {
             "title": title,
-            "description": "プラン続行がNGと判断し再議論しました",
+            "description": action_summary or "プラン続行がNGと判断し再議論しました",
             "color": color,
             "timestamp": timestamp,
             "fields": fields,

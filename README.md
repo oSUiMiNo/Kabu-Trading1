@@ -106,20 +106,23 @@ Discussion ブロックは Claude Code と Z.AI GLM の2つのバックエンド
 DISCUSSION_LLM_PROVIDER=glm
 
 # GLM モデル指定
-DISCUSSION_GLM_MODEL=glm-5
+DISCUSSION_GLM_MODEL=glm-4.7
 ```
 
 ### Z.AI GLM の利用
 
 | 項目 | 内容 |
 |------|------|
-| 現在のモデル | **GLM-5**（744B MoE、最大 205K コンテキスト） |
-| 課金形態 | **年間サブスクリプション**（Pro プラン） |
+| アカウント | osuimino@gmail.com |
+| 現在のプラン | **Coding Plan Lite**（年間） |
+| 現在のモデル | **GLM-4.7**（推論モデル、最大 128K コンテキスト） |
 | API キー | `.env.local` の `ZHIPUAI_API_KEY` に設定済み |
-| エンドポイント | `https://api.z.ai/api/paas/v4/`（国際版） |
+| エンドポイント | `https://api.z.ai/api/coding/paas/v4/`（Coding Plan 用） |
 | 切り替え方法 | `DISCUSSION_GLM_MODEL` の値を変更するだけ（コード変更不要） |
+| クォータ | 5時間あたり 80〜120 プロンプト / 週間上限 約400 |
 
-利用可能なモデル：`glm-5`、`glm-4.7`、`glm-4.7-flash`（無料）
+Lite プランで利用可能なモデル：`glm-4.7`、`glm-4.7-flash`（無料）
+GLM-5 を使うには Pro 以上へのアップグレードが必要
 
 ---
 
