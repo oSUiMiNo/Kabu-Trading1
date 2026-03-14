@@ -255,6 +255,7 @@ class MonitorSummary:
     results: dict = field(default_factory=dict)
     ng_tickers: list[dict] = field(default_factory=list)
     total_cost: float = 0.0
+    display_names: dict = field(default_factory=dict)
 
 
 async def run_monitor(
@@ -287,6 +288,10 @@ async def run_monitor(
             print(f"  watchlist に active な銘柄がありません{market_label}。終了します。")
             return summary
         tickers = [w["ticker"] for w in watchlist]
+        summary.display_names = {
+            w["ticker"]: w.get("display_name") or w["ticker"]
+            for w in watchlist
+        }
         print(f"  対象: {len(tickers)} 銘柄{market_label}")
         for t in tickers:
             print(f"    - {t}")

@@ -71,7 +71,7 @@ def _build_summary_prompt(payload: NotifyPayload) -> str:
     """notify-summarizer に渡すプロンプトを組み立てる。"""
     md = payload.monitor_data
     parts = [
-        f"銘柄: {payload.ticker}",
+        f"銘柄: {payload.display_name or payload.ticker}",
         f"判定: {md.get('result', '不明')}",
         f"変動率: {md.get('price_change_pct', '不明')}%",
         f"サマリー: {md.get('summary', '')}",
@@ -118,7 +118,8 @@ def build_embed(payload: NotifyPayload) -> dict:
     label = payload.label
     color = LABEL_COLOR.get(label, 0x808080)
     emoji = _LABEL_EMOJI.get(label, "")
-    title = f"{emoji} [ {label.value} ]　{payload.ticker}"
+    name = payload.display_name or payload.ticker
+    title = f"{emoji} [ {label.value} ]　{name}"
     timestamp = datetime.now(JST).isoformat()
     fields = []
 

@@ -127,7 +127,7 @@ async def _run_discussion_with_retry(ticker: str, span: str, mode: str) -> int:
     return exit_code
 
 
-async def run_discussion_batch(event_context: dict | None) -> None:
+async def run_discussion_batch(event_context: dict | None, display_names: dict | None = None) -> None:
     """Discussion ブロックのバッチ実行。DB から NG 銘柄を検出し、各銘柄の Discussion を実行する。"""
     print(f"\n{'='*60}")
     print(f"=== Phase 2: Discussion ===")
@@ -154,12 +154,14 @@ async def run_discussion_batch(event_context: dict | None) -> None:
                 print(f"  [{ticker}] Discussion 完了")
             else:
                 print(f"  [{ticker}] Discussion 全リトライ失敗 (exit code: {exit_code})")
+                dn = (display_names or {}).get(ticker, ticker)
                 payload = NotifyPayload(
                     label=NotifyLabel.ERROR,
                     ticker=ticker,
                     monitor_data={},
                     event_context=event_context,
                     error_detail=f"Discussion 失敗 (exit code: {exit_code})",
+                    display_name=dn,
                 )
                 await notify(payload)
         except Exception as e:
@@ -173,7 +175,7 @@ async def run_discussion_batch(event_context: dict | None) -> None:
 # Planning ブロックもバッチ実行モードを持たないため、
 # DB から対象銘柄を検出し、各銘柄の Planning subprocess を起動するアダプタ。
 
-async def run_planning_batch(event_context: dict | None) -> None:
+async def run_planning_batch(event_context: dict | None, display_names: dict | None = None) -> None:
     """Planning ブロックのバッチ実行。DB から対象銘柄を検出し、各銘柄の Planning を実行する。"""
     print(f"\n{'='*60}")
     print(f"=== Phase 3: Planning ===")
@@ -205,12 +207,14 @@ async def run_planning_batch(event_context: dict | None) -> None:
                 print(f"  [{ticker}] Planning 完了")
             else:
                 print(f"  [{ticker}] Planning 失敗 (exit code: {proc.returncode})")
+                dn = (display_names or {}).get(ticker, ticker)
                 payload = NotifyPayload(
                     label=NotifyLabel.ERROR,
                     ticker=ticker,
                     monitor_data={},
                     event_context=event_context,
                     error_detail=f"Planning 失敗 (exit code: {proc.returncode})",
+                    display_name=dn,
                 )
                 await notify(payload)
         except Exception as e:
@@ -259,6 +263,7 @@ async def run_pipeline(
     print(f"{'='*60}")
 
     summary = await run_monitor(target_ticker, market=market, skip_spans=skip_spans)
+    dn_map = summary.display_names
 
     # Monitor ERROR / CHECK 通知（パイプラインレベル）
     for ticker, monitor_data in summary.results.items():
@@ -269,6 +274,7 @@ async def run_pipeline(
                 monitor_data=monitor_data,
                 event_context=event_context,
                 error_detail=monitor_data.get("error_detail", "Monitor リトライ上限到達"),
+                display_name=dn_map.get(ticker, ticker),
             )
             await notify(payload)
         elif classify_label(monitor_data) == NotifyLabel.CHECK:
@@ -277,6 +283,7 @@ async def run_pipeline(
                 ticker=ticker,
                 monitor_data=monitor_data,
                 event_context=event_context,
+                display_name=dn_map.get(ticker, ticker),
             )
             await notify(payload)
 
@@ -302,8 +309,8 @@ async def run_pipeline(
         return
 
     # ── Phase 2〜4: 各ブロックを順番に呼び出す ──
-    await run_discussion_batch(event_context)
-    await run_planning_batch(event_context)
+    await run_discussion_batch(event_context, dn_map)
+    await run_planning_batch(event_context, dn_map)
     run_watch()
 
     # ── COMPLETE 通知 ──
