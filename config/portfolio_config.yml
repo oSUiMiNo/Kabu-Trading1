@@ -94,7 +94,7 @@ monitor_schedules:
     description: "テスト用"
     market: JP
     hour_jst: 12
-    minute_jst: 25
+    minute_jst: 33
     days_of_week: [0, 1, 2, 3, 4, 5, 6]
     skip_spans: []
     test: true

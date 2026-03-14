@@ -172,7 +172,7 @@ async def _fetch_current_price(ticker: str, market: Market) -> float | None:
         if attempt > 1:
             print(f"  価格取得 リトライ {attempt}/{MAX_AGENT_RETRIES}")
         try:
-            result = await call_agent(prompt, file_path=str(agent_file), show_cost=True, **dbg)
+            result = await call_agent(prompt, file_path=str(agent_file), **{**dbg, "show_cost": True})
 
             if result and result.cost:
                 print(f"  コスト: ${result.cost:.4f}")
@@ -477,7 +477,7 @@ async def run_plan_orchestrator(
         if attempt > 1:
             print(f"  commentary 生成 リトライ {attempt}/{MAX_AGENT_RETRIES}")
         try:
-            result = await call_agent(prompt, file_path=str(agent_file), show_cost=True, **dbg)
+            result = await call_agent(prompt, file_path=str(agent_file), **{**dbg, "show_cost": True})
             if result and result.cost:
                 print(f"  コスト: ${result.cost:.4f}")
             if result and result.text:

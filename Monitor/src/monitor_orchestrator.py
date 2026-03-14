@@ -159,7 +159,7 @@ async def check_one_ticker(ticker: str) -> dict | None:
 
         try:
             result = await call_agent(
-                prompt, file_path=str(agent_file), show_cost=True, **dbg,
+                prompt, file_path=str(agent_file), **{**dbg, "show_cost": True},
             )
         except Exception as e:
             last_error = f"エージェント呼び出し例外: {e}"
