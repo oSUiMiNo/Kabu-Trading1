@@ -34,7 +34,7 @@ def should_create_issue(issues: list[dict], overall_quality: str) -> bool:
     return high >= 1 or mid >= 2
 
 
-def _check_existing_issue(archive_id: int) -> bool:
+def _check_existing_issue(archive_id: str) -> bool:
     """同一 archive_id の Issue が既に存在するか確認する。"""
     try:
         result = subprocess.run(
@@ -50,7 +50,7 @@ def _check_existing_issue(archive_id: int) -> bool:
 
 
 def _build_issue_body(
-    archive_id: int,
+    archive_id: str,
     ticker: str,
     record: dict,
     issues: list[dict],
@@ -99,7 +99,7 @@ def _build_issue_body(
 
 
 def create_issue(
-    archive_id: int,
+    archive_id: str,
     ticker: str,
     record: dict,
     issues: list[dict],

@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+_JST = timezone(timedelta(hours=9))
 
 from dotenv import load_dotenv
 from postgrest import SyncPostgrestClient
@@ -189,10 +191,12 @@ def upsert_holding(ticker: str, **fields) -> dict:
 
 def create_archivelog(ticker: str, mode: str, horizon: str) -> dict:
     """セッション作成。horizon は DB カラム span にマッピングされる。"""
+    ts_id = datetime.now(_JST).strftime("%Y%m%d%H%M%S")
     resp = (
         get_client()
         .from_("archive")
         .insert({
+            "id": ts_id,
             "ticker": ticker.upper(),
             "mode": mode,
             "span": horizon,
@@ -203,7 +207,7 @@ def create_archivelog(ticker: str, mode: str, horizon: str) -> dict:
     return resp.data[0]
 
 
-def update_archivelog(archivelog_id: int, **fields) -> dict:
+def update_archivelog(archivelog_id: str, **fields) -> dict:
     """セッション更新。jsonb カラム (lanes, final_judge, plan, monitor) は dict で渡す。"""
     resp = (
         get_client()
@@ -290,7 +294,7 @@ def get_latest_archivelog_with_newplan(ticker: str) -> dict | None:
     return resp.data[0] if resp.data else None
 
 
-def get_previous_archivelog_with_newplan(ticker: str, exclude_id: int) -> dict | None:
+def get_previous_archivelog_with_newplan(ticker: str, exclude_id: str) -> dict | None:
     """plan_comparison 用：指定 id を除いた直前の newplan_full 付きレコードを返す。"""
     resp = (
         get_client()
@@ -348,7 +352,7 @@ def fetch_active_for_watch() -> list[str]:
     return list({r["ticker"] for r in (resp.data or [])})
 
 
-def propagate_active_after_discussion(ticker: str, old_archive_id: int) -> dict | None:
+def propagate_active_after_discussion(ticker: str, old_archive_id: str) -> dict | None:
     """Discussion 完了後：新レコードに active+MotivationID+monitor を引き継ぎ、旧レコードを非活性化。"""
     old = (
         get_client()
@@ -582,7 +586,7 @@ def fetch_unreviewed_archives(limit: int = 20) -> list[dict]:
 
 
 def create_archive_review(
-    archive_id: int,
+    archive_id: str,
     overall_quality: str,
     issues_json: list[dict],
     issue_url: str | None = None,
