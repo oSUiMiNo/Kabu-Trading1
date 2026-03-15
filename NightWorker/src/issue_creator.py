@@ -38,7 +38,7 @@ def _check_existing_issue(archive_id: int) -> bool:
     """同一 archive_id の Issue が既に存在するか確認する。"""
     try:
         result = subprocess.run(
-            ["gh", "issue", "list", "--label", "archive-review",
+            ["gh", "issue", "list", "--label", "night-worker",
              "--search", f"archive #{archive_id}", "--state", "all", "--json", "number"],
             capture_output=True, text=True, timeout=15,
         )
@@ -110,7 +110,7 @@ def create_issue(
         print(f"  Issue 既存のためスキップ（archive #{archive_id}）")
         return None
 
-    labels = ["archive-review"]
+    labels = ["night-worker"]
     high = sum(1 for i in issues if i.get("severity") == "高")
     if high > 0:
         labels.append("severity:high")

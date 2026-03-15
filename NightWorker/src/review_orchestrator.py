@@ -274,15 +274,15 @@ async def run_review(max_reviews: int = 20, dry_run: bool = False):
     """メインのレビュー実行ループ。"""
     JST = timezone(timedelta(hours=9))
     now = datetime.now(JST)
-    print(f"[ArchiveReview] 開始 {now.strftime('%Y-%m-%d %H:%M %Z')}")
+    print(f"[NightWorker] 開始 {now.strftime('%Y-%m-%d %H:%M %Z')}")
     print(f"  max_reviews={max_reviews}, dry_run={dry_run}")
 
     records = safe_db(fetch_unreviewed_archives, max_reviews)
     if not records:
-        print("[ArchiveReview] レビュー対象なし。終了。")
+        print("[NightWorker] レビュー対象なし。終了。")
         return
 
-    print(f"[ArchiveReview] 対象：{len(records)}件")
+    print(f"[NightWorker] 対象：{len(records)}件")
 
     results = []
     issues_created = 0
@@ -300,7 +300,7 @@ async def run_review(max_reviews: int = 20, dry_run: bool = False):
     needs_work = sum(1 for r in results if r["overall_quality"] == "要改善")
     problematic = sum(1 for r in results if r["overall_quality"] == "問題あり")
 
-    print(f"\n[ArchiveReview] 完了")
+    print(f"\n[NightWorker] 完了")
     print(f"  良好：{good}件 / 要改善：{needs_work}件 / 問題あり：{problematic}件")
     print(f"  Issue作成：{issues_created}件")
 

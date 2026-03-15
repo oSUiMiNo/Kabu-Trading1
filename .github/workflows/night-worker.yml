@@ -1,13 +1,14 @@
 ##
-# Archive 品質レビュー
+# Night Worker
 #
-# 深夜帯（JST 3:05 / 4:05 / 5:05）に archive テーブルのレビュー未済レコードを
-# 自動レビューし、品質問題があれば GitHub Issue を作成する。
+# 深夜帯（JST 3:05 / 4:05 / 5:05）に以下のメンテナンスタスクを実行する。
+#   1. archive 品質レビュー → GitHub Issue 作成
+#   2. glossary 重複統合
 #
-# 3回の cron 設定は冗長性のため。1回目で全件レビュー済みになれば
+# 3回の cron 設定は冗長性のため。1回目で全件処理済みになれば
 # 2・3回目は対象0件で即終了する。
 ##
-name: Archive Review
+name: Night Worker
 
 on:
   schedule:
@@ -41,11 +42,11 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        working-directory: ArchiveReview/src
+        working-directory: NightWorker/src
         run: uv sync
 
-      - name: Run Archive Review
-        working-directory: ArchiveReview/src
+      - name: Run Night Worker
+        working-directory: NightWorker/src
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -59,3 +60,16 @@ jobs:
             ARGS="$ARGS --dry-run"
           fi
           uv run python review_orchestrator.py $ARGS
+
+      - name: Glossary Consolidation
+        working-directory: NightWorker/src
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          DRY_RUN="${{ inputs.dry_run }}"
+          if [ "$DRY_RUN" = "true" ]; then
+            uv run python glossary_consolidator.py --dry-run
+          else
+            uv run python glossary_consolidator.py
+          fi

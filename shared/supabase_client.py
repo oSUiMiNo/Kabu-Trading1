@@ -600,3 +600,44 @@ def create_archive_review(
         row["review_cost_usd"] = review_cost_usd
     resp = get_client().from_("archive_reviews").insert(row).execute()
     return resp.data[0] if resp.data else {}
+
+
+# ── glossary（用語集） ──────────────────────────────────
+
+def fetch_all_glossary() -> list[dict]:
+    """glossary テーブルの全エントリを取得する。"""
+    resp = (
+        get_client()
+        .from_("glossary")
+        .select("id, term, explanation, aliases")
+        .order("id")
+        .execute()
+    )
+    return resp.data or []
+
+
+def update_glossary_entry(
+    entry_id: int,
+    term: str,
+    explanation: str,
+    aliases: list[str],
+) -> dict:
+    """glossary エントリを更新する。"""
+    row = {
+        "term": term,
+        "explanation": explanation,
+        "aliases": aliases,
+    }
+    resp = (
+        get_client()
+        .from_("glossary")
+        .update(row)
+        .eq("id", entry_id)
+        .execute()
+    )
+    return resp.data[0] if resp.data else {}
+
+
+def delete_glossary_entry(entry_id: int) -> None:
+    """glossary エントリを削除する。"""
+    get_client().from_("glossary").delete().eq("id", entry_id).execute()

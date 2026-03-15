@@ -13,4 +13,4 @@ archive テーブルに蓄積されたパイプライン出力（Discussion/Plan
 |----------|------|
 | src/review_orchestrator.py | メインオーケストレーター |
 | src/issue_creator.py | GitHub Issue 作成ロジック |
-| .claude/commands/archive-reviewer.md | レビュー用サブエージェント |
+| .claude/commands/archive-reviewer.md | レビュー用サブエージェント（archive品質レビュー） |

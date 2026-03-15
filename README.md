@@ -32,7 +32,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 | **Planning** | プラン YAML 生成 | `Planning/src/plan_orchestrator.py` |
 | **Watch** | watchlist 更新 + Discord 業務通知 | `Watch/src/watch_orchestrator.py` |
 | **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/scheduler_orchestrator.py` |
-| **ArchiveReview** | archive 品質レビュー + Issue 作成 | `ArchiveReview/src/review_orchestrator.py` |
+| **NightWorker** | archive 品質レビュー + Issue 作成 + 用語集統合 | `NightWorker/src/review_orchestrator.py`<br>`NightWorker/src/glossary_consolidator.py` |
 | **shared** | DB・通知・LLM クライアント共通 | `shared/supabase_client.py`<br>`shared/discord_notifier.py`<br>`shared/llm_client.py` |
 
 ---
@@ -65,7 +65,7 @@ python Monitor/src/monitor_orchestrator.py
 | `event-monitor.yml` | 5分間隔 24時間稼働 | イベント watch + 定期スケジュール検出 → パイプライン起動 |
 | `monitor.yml` | 手動（workflow_dispatch） | テスト・特定銘柄の手動チェック |
 | `event-scheduler.yml` | 年1回・月1回 | FOMC・雇用統計等の経済イベント取得・DB登録 |
-| `archive-review.yml` | JST 3:05 / 4:05 / 5:05 | archive 品質レビュー → GitHub Issue 作成 |
+| `night-worker.yml` | JST 3:05 / 4:05 / 5:05 | archive 品質レビュー → GitHub Issue 作成 |
 | `sync-config.yml` | push 時自動 | `config/portfolio_config.yml` → DB 反映 |
 
 ### 定期 Monitor スケジュール（pg_cron）
