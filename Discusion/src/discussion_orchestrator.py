@@ -64,12 +64,21 @@ def check_convergence(export: dict | None, prev_export: dict | None) -> bool:
 
 
 def _mode_directive(mode: str) -> str:
-    """議論モードをプロンプト先頭に挿入する指示行を返す"""
-    if mode == "sell":
-        return "【議論モード: 売る】保有中の銘柄を「売るべきか・売らないべきか（保有継続）」で議論してください。\n\n"
-    if mode == "add":
-        return "【議論モード: 買い増し】保有中の銘柄を「買い増すべきか・買い増さないべきか（現状維持）」で議論してください。\n\n"
-    return "【議論モード: 買う】この銘柄を「買うべきか・買わないべきか」で議論してください。\n\n"
+    """議論のスタンス指示行を返す（5択統一）"""
+    if mode in ("sell", "add"):
+        holding = "※ この銘柄は現在保有中です。\n"
+    else:
+        holding = "※ この銘柄は現在未保有です。\n"
+    return (
+        "【アクション判定】\n"
+        f"{holding}"
+        "この銘柄に対して最適なアクションを、以下の5つから1つ選んでスタンスとしてください。\n"
+        "- 買う（BUY）: 新規に購入する\n"
+        "- 売る（SELL）: 保有分を全て売却する\n"
+        "- 買い増す（ADD）: 保有分に追加購入する\n"
+        "- 売り減らす（REDUCE）: 保有分の一部を売却する\n"
+        "- 現状維持（HOLD）: 何もしない\n\n"
+    )
 
 
 _HORIZON_LABELS: dict[str, str] = {
@@ -121,7 +130,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
                 f"{theme_dir}"
                 f"銘柄「{ticker.upper()}」の分析を続けてください。\n"
                 f"ログファイル（参照用）: {log_abs}\n"
-                f"前回のDevil's Advocateが反対側の立場から出した反論Claimsを読み、\n"
+                f"前回のDevil's Advocateが異なるスタンスから出した反論Claimsを読み、\n"
                 f"Round {round_num} の内容を**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
             )
     else:  # devils-advocate
@@ -129,9 +138,9 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
             f"{directive}"
             f"{horizon_dir}"
             f"{theme_dir}"
-            f"銘柄「{ticker.upper()}」のログを読み、最新のAnalystのstanceの反対側に立ってください。\n"
+            f"銘柄「{ticker.upper()}」のログを読み、最新のAnalystのstanceとは異なるスタンスを取ってください。\n"
             f"ログファイル（参照用）: {log_abs}\n"
-            f"Analystのstanceを反転し、反対側の立場から反論Claims（C#）を組み立てて、\n"
+            f"Analystが選ばなかった残りのスタンスの中から最も妥当なものを選び、その立場から反論Claims（C#）を組み立てて、\n"
             f"Round {round_num} の内容を**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
         )
 
@@ -153,7 +162,7 @@ async def run_discussion(
         max_rounds: 最大ラウンド数（Analyst + Devil's Advocate で2ラウンド = 1サイクル）
         initial_prompt: 初回Analystへの追加指示（省略可）
         log_path: ログファイルパス（省略時は logs/{TICKER}.md）
-        mode: 議論モード（"buy" = 買う/買わない、"sell" = 売る/売らない、"add" = 買い増す/買い増さない）
+        mode: 保有状況（"buy" = 未保有、"sell" / "add" = 保有中）
     """
     if log_path is None:
         log_path = get_log_path(ticker)
@@ -242,7 +251,7 @@ async def run_discussion(
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("使い方: python discussion_orchestrator.py <銘柄コード> [モード] [最大ラウンド数] [追加指示]")
-        print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
+        print("  モード: '買う'(未保有) / '売る'(保有中) / '買い増す'(保有中) (デフォルト: 買う)")
         print("例: python discussion_orchestrator.py NVDA 買う 4 '特にAI市場の競合状況に注目して'")
         print("例: python discussion_orchestrator.py NVDA 売る 4")
         print("例: python discussion_orchestrator.py NVDA 買い増す 4")

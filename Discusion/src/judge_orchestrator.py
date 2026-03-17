@@ -51,12 +51,10 @@ def build_judge_prompt(
     base = discusion_dir if discusion_dir else LOGS_DIR
     source_log = (base / f"{t}_set{set_num}.md").as_posix()
 
-    if mode == "sell":
-        mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
-    elif mode == "add":
-        mode_line = "【議論モード: 買い増し】買い増すべきか・買い増さないべきか（現状維持）の議論です。\n\n"
+    if mode in ("sell", "add"):
+        mode_line = "【アクション判定】保有中の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
     else:
-        mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論です。\n\n"
+        mode_line = "【アクション判定】未保有の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
 
     return (
         f"{mode_line}"

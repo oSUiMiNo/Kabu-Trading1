@@ -21,14 +21,11 @@ model: claude-haiku-4-5
 
 ---
 
-## 議論モード
+## スタンス
 
-プロンプトに `【議論モード】` が指定される。
+プロンプトに `【アクション判定】` が指定される。supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 
-- **買うモード**（`【議論モード: 買う】`）: supported_side は `BUY` / `NOT_BUY_WAIT`
-- **売るモード**（`【議論モード: 売る】`）: supported_side は `SELL` / `NOT_SELL_HOLD`
-
-> モードに関わらず、一致判定のロジック（両方同じ→AGREED）は同一。
+一致判定のロジック（両方同じ→AGREED）は共通。
 
 ---
 
@@ -59,12 +56,12 @@ model: claude-haiku-4-5
 3) 各 opinion から情報抽出（優先順位あり）
    - 最優先：末尾の `## EXPORT（yaml）` ブロック
      - 取得するキー（存在する範囲でOK）：
-       - supported_side / 支持側（BUY / NOT_BUY_WAIT）
-       - scores / スコア（買い支持 / 買わない支持 / 差分）
+       - supported_side / 支持側（BUY / SELL / ADD / REDUCE / HOLD）
+       - confidence / 確信度（0-100）
        - winner_agent / 勝者エージェント / win_basis / 勝因
        - summary.one_liner / サマリー.一行要約
        - reasons / 理由（配列）
-       - flip_conditions / 反転条件 / entry_guideline / エントリー目安
+       - flip_conditions / スタンス変更条件 / entry_guideline / エントリー目安
        - next_to_clarify / 次に明確化 / data_limits / データ制限
    - EXPORT が無い/壊れている場合のみ本文から補完
 4) 一致判定
@@ -96,16 +93,16 @@ model: claude-haiku-4-5
 
 ## 解析結果
 ### 意見A
-- 支持側: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
+- 支持側: {BUY|SELL|ADD|REDUCE|HOLD|UNKNOWN}
 - 一行要約: "{要約テキスト}"
-- スコア: 買い支持={x} 買わない支持={y} 差分={d}  （売るモード時は 売り支持={x} 売らない支持={y}）
+- 確信度: {0-100|null}
 - 勝者エージェント: {analyst|devils-advocate|unknown}
 - 勝因: {conclusion|debate_operation|unknown}
 
 ### 意見B
-- 支持側: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|UNKNOWN}
+- 支持側: {BUY|SELL|ADD|REDUCE|HOLD|UNKNOWN}
 - 一行要約: "{要約テキスト}"
-- スコア: 買い支持={x} 買わない支持={y} 差分={d}
+- 確信度: {0-100|null}
 - 勝者エージェント: {analyst|devils-advocate|unknown}
 - 勝因: {conclusion|debate_operation|unknown}
 
@@ -113,7 +110,7 @@ model: claude-haiku-4-5
 
 ## 判定
 - 一致度: **AGREED** | **DISAGREED** | **INCOMPLETE**
-- 一致支持側: {BUY|NOT_BUY_WAIT|SELL|NOT_SELL_HOLD|null}
+- 一致支持側: {BUY|SELL|ADD|REDUCE|HOLD|null}
 - 理由（要約）:
   - 2〜5個。判定理由を短く。
   - **理由は意見由来のみ**で構成（推測しない）。
@@ -125,7 +122,7 @@ model: claude-haiku-4-5
 - 共通して強い根拠（2〜4）
   - 意見A/B の理由から **共通点**を抽出して要約
 - 補助情報（任意・最大2）
-  - 両者の反転条件 / データ制限の共通点があれば短く
+  - 両者のスタンス変更条件 / データ制限の共通点があれば短く
 
 ### 不一致の場合（DISAGREED）
 - どこで割れているか（2〜4）
@@ -156,29 +153,21 @@ model: claude-haiku-4-5
 
 解析結果:
   意見A:
-    支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD | UNKNOWN
+    支持側: BUY | SELL | ADD | REDUCE | HOLD | UNKNOWN
     一行要約: "{...}"
-    スコア:
-      # 買うモード: 買い支持 / 買わない支持
-      # 売るモード: 売り支持 / 売らない支持
-      買い支持: {0-100|null}
-      買わない支持: {0-100|null}
-      差分: {int|null}
+    確信度: {0-100|null}
     勝者エージェント: analyst | devils-advocate | unknown
     勝因: conclusion | debate_operation | unknown
   意見B:
-    支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD | UNKNOWN
+    支持側: BUY | SELL | ADD | REDUCE | HOLD | UNKNOWN
     一行要約: "{...}"
-    スコア:
-      買い支持: {0-100|null}
-      買わない支持: {0-100|null}
-      差分: {int|null}
+    確信度: {0-100|null}
     勝者エージェント: analyst | devils-advocate | unknown
     勝因: conclusion | debate_operation | unknown
 
 判定:
   一致度: AGREED | DISAGREED | INCOMPLETE
-  一致支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD | null
+  一致支持側: BUY | SELL | ADD | REDUCE | HOLD | null
 
 理由:
   - "{短い理由1}"

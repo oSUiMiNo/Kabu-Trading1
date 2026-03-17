@@ -32,10 +32,12 @@ from claude_agent_sdk import (
 
 _SIDE_JA: dict[str, str] = {
     "BUY": "買い",
-    "NOT_BUY_WAIT": "買わない（様子見）",
     "SELL": "売り",
-    "NOT_SELL_HOLD": "売らない（保有継続）",
     "ADD": "買い増し",
+    "REDUCE": "売り減らし",
+    "HOLD": "現状維持",
+    "NOT_BUY_WAIT": "買わない（様子見）",
+    "NOT_SELL_HOLD": "売らない（保有継続）",
     "NOT_ADD_HOLD": "買い増さない（現状維持）",
 }
 

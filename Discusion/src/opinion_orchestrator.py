@@ -2,8 +2,7 @@
 意見オーケストレーター
 
 各セットの議論ログ（銘柄名_setN.md）に対して2体のopinionサブエージェントを
-並行起動し、買う/買わないの意見を独立に出させる。
-3セット × 2体 = 合計6体を同時に走らせる。
+並行起動し、5択スタンス（BUY/SELL/ADD/REDUCE/HOLD）の意見を独立に出させる。
 全opinionが完了したら、各セットのペアをjudgeに渡して一致/不一致を判定させる。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
@@ -32,12 +31,10 @@ def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str 
     base = discusion_dir if discusion_dir else LOGS_DIR
     log_abs = (base / f"{ticker.upper()}_set{set_num}.md").as_posix()
 
-    if mode == "sell":
-        mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論ログです。\n\n"
-    elif mode == "add":
-        mode_line = "【議論モード: 買い増し】買い増すべきか・買い増さないべきか（現状維持）の議論ログです。\n\n"
+    if mode in ("sell", "add"):
+        mode_line = "【アクション判定】保有中の銘柄に対する議論ログです。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
     else:
-        mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論ログです。\n\n"
+        mode_line = "【アクション判定】未保有の銘柄に対する議論ログです。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
 
     return (
         f"{mode_line}"
@@ -155,32 +152,18 @@ async def run_opinion_orchestrator(
         cost = r.cost if r and r.cost else 0.0
         total_cost += cost
 
-        # result.text からEXPORTを簡易読み取り（日本語フィールド対応）
         content = r.text if r and r.text else ""
         side = "N/A"
-        pos_score = "?"
-        neg_score = "?"
+        confidence = "?"
         winner = "?"
         basis = "?"
         if content:
-            # 日本語フィールド名を優先、フォールバックで英語も対応
             m_side = re.search(r"(?:支持側|supported_side):\s*(\S+)", content)
             if m_side:
                 side = m_side.group(1)
-            # buy mode: 買い支持 / 買わない支持
-            m_buy = re.search(r"(?:買い支持|buy_support):\s*(\d+)", content)
-            m_notbuy = re.search(r"(?:買わない支持|not_buy_support):\s*(\d+)", content)
-            # sell mode: 売り支持 / 売らない支持
-            m_sell = re.search(r"(?:売り支持|sell_support):\s*(\d+)", content)
-            m_notsell = re.search(r"(?:売らない支持|not_sell_support):\s*(\d+)", content)
-            if m_buy:
-                pos_score = m_buy.group(1)
-            elif m_sell:
-                pos_score = m_sell.group(1)
-            if m_notbuy:
-                neg_score = m_notbuy.group(1)
-            elif m_notsell:
-                neg_score = m_notsell.group(1)
+            m_conf = re.search(r"(?:確信度|confidence):\s*(\d+)", content)
+            if m_conf:
+                confidence = m_conf.group(1)
             m_winner = re.search(r"(?:勝者エージェント|winner_agent):\s*(\S+)", content)
             if m_winner:
                 winner = m_winner.group(1)
@@ -188,13 +171,8 @@ async def run_opinion_orchestrator(
             if m_basis:
                 basis = m_basis.group(1)
 
-        # モードに応じた表示ラベル
-        if side in ("SELL", "NOT_SELL_HOLD"):
-            pos_label, neg_label = "売り", "売らない"
-        else:
-            pos_label, neg_label = "買い", "買わない"
         cost_suffix = f"  ${cost:.4f}" if show_cost else ""
-        print(f"  レーン{sn} 意見#{on}: {side_ja(side)}  ({pos_label}:{pos_score} / {neg_label}:{neg_score})  勝者={winner}({basis}){cost_suffix}")
+        print(f"  レーン{sn} 意見#{on}: {side_ja(side)}  (確信度:{confidence})  勝者={winner}({basis}){cost_suffix}")
 
     if show_cost:
         print(f"\n  合計コスト: ${total_cost:.4f}")
@@ -226,7 +204,7 @@ async def run_opinion_orchestrator(
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("使い方: python opinion_orchestrator.py <銘柄コード> [モード] [意見数]")
-        print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
+        print("  モード: '買う'(未保有) / '売る'(保有中) / '買い増す'(保有中) (デフォルト: 買う)")
         print("例: python opinion_orchestrator.py GOOGL 買う 2")
         sys.exit(1)
 

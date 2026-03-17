@@ -56,12 +56,12 @@ async def run_parallel(
     t = ticker.upper()
 
     from discussion_orchestrator import _HORIZON_LABELS
-    _mode_labels = {"sell": "売る/売らない", "add": "買い増す/買い増さない", "buy": "買う/買わない"}
-    mode_label = _mode_labels.get(mode, "買う/買わない")
+    _mode_labels = {"sell": "保有中", "add": "保有中", "buy": "未保有"}
+    mode_label = _mode_labels.get(mode, "未保有")
     horizon_label = _HORIZON_LABELS.get(horizon, horizon)
     print(f"{'='*70}")
     print(f"=== {t} {num_sets}レーン ===")
-    print(f"=== 議論モード: {mode_label} / 投資期間: {horizon_label} ===")
+    print(f"=== 保有状況: {mode_label} / 投資期間: {horizon_label} ===")
     print(f"=== セッション: {discusion_name} ===")
     print(f"{'='*70}")
     for i in range(1, num_sets + 1):

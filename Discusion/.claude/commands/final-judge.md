@@ -27,12 +27,9 @@ model: claude-haiku-4-5
 
 ---
 
-## 議論モード
+## スタンス
 
-プロンプトに `【議論モード】` が指定される。
-
-- **買うモード**（`【議論モード: 買う】`）: supported_side は `BUY` / `NOT_BUY_WAIT`。安全側（同数/不確実時）: `NOT_BUY_WAIT`
-- **売るモード**（`【議論モード: 売る】`）: supported_side は `SELL` / `NOT_SELL_HOLD`。安全側（同数/不確実時）: `NOT_SELL_HOLD`
+プロンプトに `【アクション判定】` が指定される。supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。同数/不確実時は `HOLD` に倒す。
 
 ---
 
@@ -66,16 +63,13 @@ model: claude-haiku-4-5
 5) 最終判定を決める（投票閾値ルール）
    - 各opinion の supported_side を **1票** として数える
      - AGREEDレーン: 同じ side に **2票**
-     - DISAGREEDレーン: 各 side に **1票ずつ**（split）
+     - DISAGREEDレーン: HOLD に **1票**（意見が割れたため保守的に扱う）
    - **オーケストレーターがプロンプトで投票集計と確定判定を提供する** → その判定に従うこと
-   - 投票閾値:
-     - **買うモード**: **全会一致（反対 0票）** の場合のみ BUY。1票でも反対 → NOT_BUY_WAIT
-     - **売るモード**: **SELL票 ≥ 全票数の 2/3（切り上げ）** なら SELL。未満 → NOT_SELL_HOLD
-       - 6票の例: 6-0, 5-1, 4-2 → SELL / 3-3以下 → NOT_SELL_HOLD
+   - 判定ルール: 最多得票のスタンスが勝ち。同数の場合は HOLD 優先
    - **overall_agreement**：
      - 全レーンAGREEDかつ同じ supported_side → AGREED_STRONG
-     - 閾値を超えたがDISAGREEDやAGREED内の割れがある → MIXED
-     - 閾値を超えない → INCOMPLETE
+     - 最多得票が勝ったがDISAGREEDやAGREED内の割れがある → MIXED
+     - 明確な多数派なし → INCOMPLETE
 6) 理由の要約
    - 「最終 supported_side を支持する理由」を set別の why / reasons から **共通点優先**で 3〜6 個
    - set間で割れた場合は「割れてるポイント」を 2〜4 個（推測禁止）
@@ -105,15 +99,15 @@ model: claude-haiku-4-5
 ## レーン別判定
 ### set{N}（対象レーンごとに記載）
 - 判定一致度: AGREED | DISAGREED
-- 支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
+- 支持側: BUY | SELL | ADD | REDUCE | HOLD
 - 一行要約: "{judgeの一行要約}"
 - 補足: "{特記事項があれば短く。DISAGREEDの場合は両論の概要を記載}"
 
 ---
 
 ## 最終判定
-- 支持側（表示）: **BUY** or **NOT_BUY (WAIT)** （売るモード: **SELL** or **NOT_SELL (HOLD)**）
-- 支持側（機械）: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
+- 支持側（表示）: **BUY** / **SELL** / **ADD** / **REDUCE** / **HOLD**
+- 支持側（機械）: BUY | SELL | ADD | REDUCE | HOLD
 - 総合一致度: **AGREED_STRONG** | **MIXED** | **INCOMPLETE**
 - 根拠（要約）:
   - 3〜6個（最終結論を支持する理由。set由来のみ、推測禁止）
@@ -152,11 +146,11 @@ model: claude-haiku-4-5
 レーン別結果:
   set{N}:  # 対象レーンごとに記載
     judge一致度: AGREED | DISAGREED
-    支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
+    支持側: BUY | SELL | ADD | REDUCE | HOLD
     一行要約: "{...}"
 
 最終判定:
-  支持側: BUY | NOT_BUY_WAIT | SELL | NOT_SELL_HOLD
+  支持側: BUY | SELL | ADD | REDUCE | HOLD
   総合一致度: AGREED_STRONG | MIXED | INCOMPLETE
 
 根拠:

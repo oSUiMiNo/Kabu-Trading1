@@ -4,8 +4,6 @@
 各レーンの judge 結果を集約し、銘柄ごとに1つの最終結論を出す。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
-import json
-import math
 import re
 import sys
 from dataclasses import dataclass, field
@@ -16,12 +14,14 @@ import anyio
 from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log, side_ja
 
 
+VALID_STANCES = ("BUY", "SELL", "ADD", "REDUCE", "HOLD")
+
+
 @dataclass
 class FinalJudgeResult:
     """Final Judge の実行結果（呼び出し元へ返すシンプルな構造体）"""
-    判定結果: str       # "BUY" | "NOT_BUY_WAIT" | "SELL" | "NOT_SELL_HOLD"
-    賛成票: int         # アクション側（BUY/SELL）の票数
-    反対票: int         # 安全側（NOT_BUY_WAIT/NOT_SELL_HOLD）の票数
+    判定結果: str       # "BUY" | "SELL" | "ADD" | "REDUCE" | "HOLD"
+    得票: dict          # {stance: vote_count} 例: {"BUY": 4, "HOLD": 2}
     ログパス: Path      # 生成された final judge ログのパス
     db_data: dict = field(default_factory=dict)
 
@@ -46,62 +46,42 @@ def get_next_final_judge_num(ticker: str, discusion_dir: Path | None = None) -> 
     return max(nums) + 1 if nums else 1
 
 
-def _is_action_vote(side: str, mode: str) -> bool:
-    """supported_side がアクション側（BUY/SELL/ADD）かどうかを判定"""
-    s = side.upper()
-    if mode == "buy":
-        return "BUY" in s and "NOT_BUY" not in s
-    elif mode == "add":
-        return "ADD" in s and "NOT_ADD" not in s
-    else:
-        return "SELL" in s and "NOT_SELL" not in s
-
-
 def compute_vote_tally(
     agreed_sets: list[int],
     disagreed_sets: list[int],
     set_sides: dict[int, str],
     mode: str,
-) -> tuple[int, int, int, str]:
+) -> tuple[dict[str, int], int, str]:
     """
-    投票集計と判定を行う。
+    投票集計と判定を行う（5択対応）。
 
     AGREED レーン: supported_side に2票
-    DISAGREED レーン: 各 side に1票ずつ（split）
+    DISAGREED レーン: HOLD に1票（意見が割れたため保守的に扱う）
 
-    閾値:
-      買うモード: 全会一致のみ BUY
-      買い増しモード: 全会一致のみ ADD
-      売るモード: SELL票 ≥ ceil(全票数 × 2/3) なら SELL
+    判定: 最多得票のスタンスが勝ち。同数の場合は HOLD が優先。
 
     Returns:
-        (action_votes, safe_votes, total_votes, verdict)
+        (vote_counts, total_votes, verdict)
     """
-    action_votes = 0
-    safe_votes = 0
+    votes: dict[str, int] = {s: 0 for s in VALID_STANCES}
 
     for sn in agreed_sets:
-        side = set_sides.get(sn, "")
-        if _is_action_vote(side, mode):
-            action_votes += 2
+        side = set_sides.get(sn, "HOLD").upper()
+        if side in votes:
+            votes[side] += 2
         else:
-            safe_votes += 2
+            votes["HOLD"] += 2
 
     for sn in disagreed_sets:
-        action_votes += 1
-        safe_votes += 1
+        votes["HOLD"] += 1
 
-    total = action_votes + safe_votes
+    total = sum(votes.values())
 
-    if mode == "buy":
-        verdict = "BUY" if safe_votes == 0 and total > 0 else "NOT_BUY_WAIT"
-    elif mode == "add":
-        verdict = "ADD" if safe_votes == 0 and total > 0 else "NOT_ADD_HOLD"
-    else:
-        threshold = math.ceil(total * 2 / 3) if total > 0 else 1
-        verdict = "SELL" if action_votes >= threshold else "NOT_SELL_HOLD"
+    max_count = max(votes.values()) if total > 0 else 0
+    top_stances = [s for s, c in votes.items() if c == max_count]
+    verdict = "HOLD" if "HOLD" in top_stances else top_stances[0] if top_stances else "HOLD"
 
-    return action_votes, safe_votes, total, verdict
+    return votes, total, verdict
 
 
 def _read_latest_judge(ticker: str, set_num: int, discusion_dir: Path | None = None) -> str:
@@ -170,32 +150,24 @@ def build_final_judge_prompt(
         agreement_info_lines.append(f"  不一致(DISAGREED): {', '.join(f'set{sn}' for sn in disagreed_sets)} — 2体のopinionが不一致。両論を参考材料として扱う。")
     agreement_info = "\n".join(agreement_info_lines)
 
-    if mode == "sell":
-        mode_line = "【議論モード: 売る】売るべきか・売らないべきか（保有継続）の議論です。\n\n"
-    elif mode == "add":
-        mode_line = "【議論モード: 買い増し】買い増すべきか・買い増さないべきか（現状維持）の議論です。\n\n"
+    if mode in ("sell", "add"):
+        mode_line = "【アクション判定】保有中の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
     else:
-        mode_line = "【議論モード: 買う】買うべきか・買わないべきかの議論です。\n\n"
+        mode_line = "【アクション判定】未保有の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
 
-    # 投票集計（set_sides が渡された場合のみ）
     vote_section = ""
     if set_sides is not None:
-        action, safe, total, verdict = compute_vote_tally(
+        votes, total, verdict = compute_vote_tally(
             agreed_sets, disagreed_sets, set_sides, mode
         )
-        action_label = "BUY" if mode == "buy" else "SELL"
-        safe_label = "NOT_BUY_WAIT" if mode == "buy" else "NOT_SELL_HOLD"
-        if mode == "buy":
-            rule_desc = "全会一致のみ BUY（1票でも反対 → NOT_BUY_WAIT）"
-        else:
-            rule_desc = f"SELL票 ≥ {math.ceil(total * 2 / 3) if total > 0 else 1}/{total} で SELL（2/3以上）"
+        vote_lines = " / ".join(f"{s}: {c}票" for s, c in votes.items() if c > 0)
         vote_section = (
             f"\n"
             f"【投票集計（オーケストレーター算出・確定値）】\n"
-            f"  {action_label}票: {action} / {safe_label}票: {safe} / 合計: {total}票\n"
-            f"  適用ルール: {rule_desc}\n"
+            f"  {vote_lines} / 合計: {total}票\n"
+            f"  適用ルール: 最多得票が勝ち。同数の場合は HOLD 優先\n"
             f"  → **確定判定: {verdict}**\n"
-            f"  ※ この判定は投票閾値ルールに基づく確定値です。最終判定（supported_side）はこれに従ってください。\n"
+            f"  ※ この判定は投票ルールに基づく確定値です。最終判定（supported_side）はこれに従ってください。\n"
         )
 
     # 各レーンの judge 内容と議論結論をインライン埋め込み
@@ -264,13 +236,12 @@ async def run_final_judge_orchestrator(
     all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
     target_sets_str = ", ".join(f"set{sn}" for sn in all_sets)
 
-    # 投票集計
     if set_sides is not None:
-        action_votes, safe_votes, _total, verdict = compute_vote_tally(
+        votes, _total, verdict = compute_vote_tally(
             agreed_sets, disagreed_sets, set_sides, mode
         )
     else:
-        action_votes, safe_votes, verdict = 0, 0, "UNKNOWN"
+        votes, verdict = {}, "UNKNOWN"
 
     print(f"=== {t} 最終判定オーケストレーター ===")
     print(f"  対象レーン: {target_sets_str}")
@@ -279,9 +250,8 @@ async def run_final_judge_orchestrator(
     if disagreed_sets:
         print(f"    不一致: {', '.join(f'set{sn}' for sn in disagreed_sets)}")
     if set_sides is not None:
-        action_ja = side_ja("BUY") if mode == "buy" else side_ja("SELL")
-        safe_ja = side_ja("NOT_BUY_WAIT") if mode == "buy" else side_ja("NOT_SELL_HOLD")
-        print(f"  投票: {action_ja} {action_votes} / {safe_ja} {safe_votes} (計{action_votes + safe_votes}票)")
+        vote_str = " / ".join(f"{side_ja(s)} {c}" for s, c in votes.items() if c > 0)
+        print(f"  投票: {vote_str} (計{sum(votes.values())}票)")
         print(f"  確定判定: {side_ja(verdict)}")
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
@@ -345,10 +315,8 @@ async def run_final_judge_orchestrator(
 
     print("=" * 60)
 
-    # DB用データを構築（書き込みは parallel_orchestrator が行う）
     fj_db_data = {
-        "action_votes": action_votes,
-        "safe_votes": safe_votes,
+        "votes": votes if set_sides is not None else {},
         "overall_agreement": agree,
         "lane_results": {
             "agreed_sets": agreed_sets,
@@ -360,8 +328,7 @@ async def run_final_judge_orchestrator(
 
     return FinalJudgeResult(
         判定結果=verdict,
-        賛成票=action_votes,
-        反対票=safe_votes,
+        得票=votes if set_sides is not None else {},
         ログパス=final_path,
         db_data=fj_db_data,
     )
