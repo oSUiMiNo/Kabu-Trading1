@@ -17,9 +17,6 @@ from pathlib import Path
 
 import anyio
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
-from supabase_client import safe_db, write_lane_field
-
 from discussion_orchestrator import (
     LOGS_DIR,
     run_discussion,
@@ -61,7 +58,6 @@ async def run_lane(
     theme: str | None = None,
     horizon: str = "mid",
     discusion_dir: Path | None = None,
-    archivelog_id: str | None = None,
 ) -> LaneResult:
     """
     1レーン分のフローを一気通貫で実行する。
@@ -93,9 +89,6 @@ async def run_lane(
             horizon=horizon,
         )
         print(f"[レーン{set_num}] 議論 完了")
-        if archivelog_id and log_path.exists():
-            _disc_text = log_path.read_text(encoding="utf-8")
-            safe_db(write_lane_field, archivelog_id, set_num, "discussion_md", _disc_text)
 
         # --- フェーズ2: 意見生成 ---
         print(f"\n[レーン{set_num}] 意見 ({opinions_per_lane}体) 開始")
@@ -113,8 +106,6 @@ async def run_lane(
         for idx2, r in enumerate(opinion_results):
             if r and r.cost:
                 total_cost += r.cost
-            if archivelog_id and r and r.text:
-                safe_db(write_lane_field, archivelog_id, set_num, f"opinion_{opinion_nums[idx2]}", r.text)
 
         print(f"[レーン{set_num}] 意見 完了")
 
@@ -141,8 +132,6 @@ async def run_lane(
             total_cost += judge_result.cost
 
         print(f"[レーン{set_num}] 判定 完了")
-        if archivelog_id and judge_result and judge_result.text:
-            safe_db(write_lane_field, archivelog_id, set_num, "judge_md", judge_result.text)
 
         # --- 結果解析 ---
         content = judge_result.text if judge_result and judge_result.text else ""

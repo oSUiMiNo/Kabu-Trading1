@@ -13,9 +13,6 @@ from pathlib import Path
 
 import anyio
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
-from supabase_client import safe_db, get_lane_field
-
 from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_log, side_ja
 
 
@@ -149,7 +146,6 @@ def build_final_judge_prompt(
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
     discusion_dir: Path | None = None,
-    archivelog_id: str | None = None,
 ) -> str:
     """final_judgeエージェントに渡すプロンプトを組み立てる（ファイル内容インライン埋め込み）"""
     t = ticker.upper()
@@ -206,13 +202,8 @@ def build_final_judge_prompt(
     inline_sections = []
     for sn in all_sets:
         label = "AGREED" if sn in agreed_sets else "DISAGREED"
-        if archivelog_id:
-            judge_content = safe_db(get_lane_field, archivelog_id, sn, "judge_md") or ""
-            disc_full = safe_db(get_lane_field, archivelog_id, sn, "discussion_md") or ""
-            discussion_export = _extract_discussion_summary(disc_full)
-        else:
-            judge_content = _read_latest_judge(ticker, sn, discusion_dir)
-            discussion_export = _read_discussion_export(ticker, sn, discusion_dir)
+        judge_content = _read_latest_judge(ticker, sn, discusion_dir)
+        discussion_export = _read_discussion_export(ticker, sn, discusion_dir)
 
         section = f"--- set{sn} [{label}] ここから ---\n"
         if discussion_export:
@@ -252,7 +243,6 @@ async def run_final_judge_orchestrator(
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
     discusion_dir: Path | None = None,
-    archivelog_id: str | None = None,
 ) -> FinalJudgeResult:
     """
     最終判定オーケストレーターを実行。
@@ -296,7 +286,7 @@ async def run_final_judge_orchestrator(
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
-    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, discusion_dir, archivelog_id)
+    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, discusion_dir)
     agent_file = AGENTS_DIR / "final-judge.md"
 
     MAX_AGENT_RETRIES = 3

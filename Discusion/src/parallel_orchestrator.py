@@ -85,7 +85,6 @@ async def run_parallel(
             theme=theme,
             horizon=horizon,
             discusion_dir=discusion_dir,
-            archivelog_id=_db_archivelog_id,
         )
 
     async with anyio.create_task_group() as tg:
@@ -164,7 +163,6 @@ async def run_parallel(
         ticker, agreed_sets, mode=mode,
         disagreed_sets=disagreed_sets, set_sides=set_sides,
         discusion_dir=discusion_dir,
-        archivelog_id=_db_archivelog_id,
     )
 
     # DB: 最終判定 + セッション完了
