@@ -295,10 +295,11 @@ async def run_pipeline(
         ok_tickers = [t for t, r in summary.results.items() if r.get("result") == "OK"]
         if ok_tickers:
             market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+            ok_names = [dn_map.get(t, t) for t in ok_tickers]
             payload = NotifyPayload(
                 label=NotifyLabel.COMPLETE,
                 ticker=f"{market_name} 全銘柄OK",
-                monitor_data={"tickers": ok_tickers},
+                monitor_data={"tickers": ok_names},
                 event_context=event_context,
             )
             await notify(payload)
@@ -321,12 +322,14 @@ async def run_pipeline(
     all_tickers = list(summary.results.keys())
     ng_ticker_names = [ng["ticker"] for ng in ng_tickers]
     market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+    all_names = [dn_map.get(t, t) for t in all_tickers]
+    ng_names = [dn_map.get(t, t) for t in ng_ticker_names]
     payload = NotifyPayload(
         label=NotifyLabel.COMPLETE,
         ticker=f"{market_name} 全銘柄チェック完了",
         monitor_data={
-            "tickers": all_tickers,
-            "ng_tickers": ng_ticker_names,
+            "tickers": all_names,
+            "ng_tickers": ng_names,
         },
         event_context=event_context,
     )

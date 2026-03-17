@@ -48,7 +48,7 @@ class TestClassifyLabel(unittest.TestCase):
         self.assertEqual(classify_label(data), NotifyLabel.WARNING)
 
     def test_ok_with_risk_flags_returns_check(self):
-        data = {"result": "OK", "risk_flags": ["price_deviation_exceeded"]}
+        data = {"result": "OK", "risk_flags": ["価格乖離超過（下落）"]}
         self.assertEqual(classify_label(data), NotifyLabel.CHECK)
 
     def test_ok_no_flags_returns_none(self):
@@ -82,17 +82,16 @@ class TestBuildEmbed(unittest.TestCase):
                 "price_change_pct": -14.81,
                 "summary": "大幅下落",
                 "ng_reason": "価格乖離",
-                "risk_flags": ["price_deviation_exceeded"],
+                "risk_flags": ["価格乖離超過（下落）"],
             },
         )
         embed = build_embed(payload)
-        self.assertEqual(embed["title"], "【警告】NVDA")
+        self.assertEqual(embed["title"], "⚠️ [ 警告 ]　NVDA")
         self.assertEqual(embed["color"], LABEL_COLOR[NotifyLabel.WARNING])
         field_names = [f["name"] for f in embed["fields"]]
-        price_field = next(f for f in embed["fields"] if f["name"] == "\u200b")
-        self.assertIn("結果", price_field["value"])
+        price_field = next(f for f in embed["fields"] if f["name"] == "株価")
         self.assertIn("現在価格", price_field["value"])
-        self.assertIn("NG理由", field_names)
+        self.assertIn("監視時NG理由", field_names)
 
     def test_urgent_with_new_plan(self):
         payload = NotifyPayload(
@@ -114,10 +113,10 @@ class TestBuildEmbed(unittest.TestCase):
             },
         )
         embed = build_embed(payload)
-        self.assertEqual(embed["title"], "【緊急】TSLA")
+        self.assertEqual(embed["title"], "🚨 [ 緊急 ]　TSLA")
         field_names = [f["name"] for f in embed["fields"]]
-        self.assertIn("── 新プラン ──", field_names)
-        plan_field = next(f for f in embed["fields"] if f["name"] == "── 新プラン ──")
+        self.assertIn("議論結果", field_names)
+        plan_field = next(f for f in embed["fields"] if f["name"] == "議論結果")
         self.assertIn("判定", plan_field["value"])
         self.assertIn("配分額", plan_field["value"])
 
@@ -131,14 +130,14 @@ class TestBuildEmbed(unittest.TestCase):
                 "plan_price": 175.0,
                 "price_change_pct": 2.86,
                 "summary": "概ね問題なし",
-                "risk_flags": ["macro_shock"],
+                "risk_flags": ["マクロショック"],
             },
         )
         embed = build_embed(payload)
-        self.assertEqual(embed["title"], "【確認】AAPL")
+        self.assertEqual(embed["title"], "🔍 [ 確認 ]　AAPL")
         field_names = [f["name"] for f in embed["fields"]]
         self.assertIn("リスクフラグ", field_names)
-        self.assertNotIn("── 新プラン ──", field_names)
+        self.assertNotIn("議論結果", field_names)
 
     def test_error_embed(self):
         payload = NotifyPayload(
@@ -148,7 +147,7 @@ class TestBuildEmbed(unittest.TestCase):
             error_detail="Monitor リトライ上限到達",
         )
         embed = build_embed(payload)
-        self.assertEqual(embed["title"], "【エラー】GOOG")
+        self.assertEqual(embed["title"], "❌ [ エラー ]　GOOG")
         field_names = [f["name"] for f in embed["fields"]]
         self.assertIn("エラー詳細", field_names)
         self.assertEqual(len(embed["fields"]), 1)
@@ -204,7 +203,7 @@ class TestCompleteEmbed(unittest.TestCase):
             monitor_data={"tickers": ["NVDA", "AAPL", "TSLA"]},
         )
         embed = build_embed(payload)
-        self.assertEqual(embed["title"], "【完了】米国株 全銘柄OK")
+        self.assertEqual(embed["title"], "✅ [ 完了 ]　米国株 全銘柄OK")
         self.assertEqual(embed["color"], LABEL_COLOR[NotifyLabel.COMPLETE])
         self.assertIn("全銘柄のプランが現在の市場状況に対して有効です。", embed["description"])
         field_names = [f["name"] for f in embed["fields"]]
@@ -222,7 +221,7 @@ class TestCompleteEmbed(unittest.TestCase):
             monitor_data={"tickers": ["7203", "9984"]},
         )
         embed = build_embed(payload)
-        self.assertEqual(embed["title"], "【完了】日本株 全銘柄OK")
+        self.assertEqual(embed["title"], "✅ [ 完了 ]　日本株 全銘柄OK")
         count_field = next(f for f in embed["fields"] if f["name"] == "チェック数")
         self.assertEqual(count_field["value"], "2 銘柄")
 
@@ -241,7 +240,7 @@ class TestCompleteEmbed(unittest.TestCase):
 class TestJapaneseTranslation(unittest.TestCase):
     """英語値が日本語に翻訳されているかのテスト"""
 
-    def test_risk_flags_translated(self):
+    def test_risk_flags_displayed(self):
         payload = NotifyPayload(
             label=NotifyLabel.WARNING,
             ticker="NVDA",
@@ -251,14 +250,13 @@ class TestJapaneseTranslation(unittest.TestCase):
                 "plan_price": 110.0,
                 "price_change_pct": -9.0,
                 "summary": "下落",
-                "risk_flags": ["price_deviation_exceeded", "earnings_miss"],
+                "risk_flags": ["価格乖離超過（下落）", "決算未達"],
             },
         )
         embed = build_embed(payload)
         flag_field = next(f for f in embed["fields"] if f["name"] == "リスクフラグ")
-        self.assertIn("価格乖離超過", flag_field["value"])
+        self.assertIn("価格乖離超過（下落）", flag_field["value"])
         self.assertIn("決算未達", flag_field["value"])
-        self.assertNotIn("price_deviation_exceeded", flag_field["value"])
 
     def test_decision_final_translated(self):
         payload = NotifyPayload(
@@ -269,7 +267,7 @@ class TestJapaneseTranslation(unittest.TestCase):
             new_plan={"decision_final": "BUY", "confidence": 0.8},
         )
         embed = build_embed(payload)
-        plan_field = next(f for f in embed["fields"] if f["name"] == "── 新プラン ──")
+        plan_field = next(f for f in embed["fields"] if f["name"] == "議論結果")
         self.assertIn("判定", plan_field["value"])
         self.assertIn("買い", plan_field["value"])
 
@@ -283,8 +281,8 @@ class TestJapaneseTranslation(unittest.TestCase):
         )
         embed = build_embed(payload)
         field_names = [f["name"] for f in embed["fields"]]
-        self.assertIn("── 新プラン ──", field_names)
-        plan_field = next(f for f in embed["fields"] if f["name"] == "── 新プラン ──")
+        self.assertIn("議論結果", field_names)
+        plan_field = next(f for f in embed["fields"] if f["name"] == "議論結果")
         self.assertIn("確信度", plan_field["value"])
         self.assertNotIn("confidence", plan_field["value"])
 
@@ -296,7 +294,7 @@ class TestJapaneseTranslation(unittest.TestCase):
                           "price_change_pct": None, "summary": "失敗"},
         )
         embed = build_embed(payload)
-        price_field = next(f for f in embed["fields"] if f["name"] == "\u200b")
+        price_field = next(f for f in embed["fields"] if f["name"] == "株価")
         self.assertIn("結果", price_field["value"])
         self.assertIn("エラー", price_field["value"])
 

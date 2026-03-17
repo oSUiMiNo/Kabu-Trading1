@@ -26,6 +26,7 @@ from supabase_client import (
     fetch_active_for_watch,
     get_latest_archivelog_with_newplan,
     get_previous_archivelog_with_newplan,
+    list_watchlist,
 )
 from notification_types import NotifyPayload, classify_label
 from discord_notifier import notify
@@ -163,12 +164,15 @@ async def process_one_ticker(ticker: str) -> bool:
                 except (ValueError, TypeError):
                     pass
             new_plan = _build_new_plan_dict(newplan_full, verdict)
+            wl = safe_db(list_watchlist)
+            dn = next((w.get("display_name") or ticker for w in wl if w["ticker"] == ticker), ticker)
             payload = NotifyPayload(
                 label=label,
                 ticker=ticker,
                 monitor_data=monitor_data,
                 new_plan=new_plan,
                 event_context=event_context,
+                display_name=dn,
             )
             await notify(payload)
             print(f"  [{ticker}] Discord 通知送信完了 (label={label.value})")
