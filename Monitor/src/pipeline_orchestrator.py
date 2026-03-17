@@ -14,7 +14,6 @@ Usage:
     python pipeline_orchestrator.py --skip-span long   # 長期スキップ
     python pipeline_orchestrator.py --monitor-only     # Monitor のみ
 """
-import asyncio
 import json
 import os
 import re
@@ -42,7 +41,6 @@ PLANNING_DIR = PROJECT_ROOT / "Planning" / "src"
 WATCH_DIR = PROJECT_ROOT / "Watch" / "src"
 
 SPAN_TO_JP = {"short": "短期", "mid": "中期", "long": "長期"}
-MODE_TO_CLI = {"buy": "buy", "sell": "sell", "add": "add"}
 
 
 # ── ユーティリティ ───────────────────────────────────────
@@ -58,24 +56,6 @@ def _find_venv_python(src_dir: Path) -> str:
     return "python"
 
 
-def _find_latest_discussion_dir(ticker: str) -> Path | None:
-    """銘柄の最新 Discussion ログディレクトリを返す。"""
-    logs_dir = PROJECT_ROOT / "Discusion" / "logs"
-    if not logs_dir.exists():
-        return None
-    pattern = re.compile(r"^\d{6}_\d{4}$")
-    candidates = sorted(
-        (d for d in logs_dir.iterdir()
-         if d.is_dir() and pattern.match(d.name)),
-        key=lambda d: d.name,
-        reverse=True,
-    )
-    t = ticker.upper()
-    for d in candidates:
-        if list(d.glob(f"{t}_final_judge_*.md")):
-            return d
-    return None
-
 
 def _load_event_context() -> dict | None:
     """環境変数 EVENT_CONTEXT から JSON を読み取る。"""
@@ -88,148 +68,42 @@ def _load_event_context() -> dict | None:
         return None
 
 
-# ── Discussion バッチアダプタ ─────────────────────────────
-#
-# Discussion ブロックはバッチ実行モードを持たないため、
-# DB から対象銘柄を検出し、各銘柄の Discussion subprocess を起動するアダプタ。
+# ── Discussion ────────────────────────────────────────────
 
-async def _run_discussion_subprocess(
-    ticker: str, span: str, mode: str, display_name: str = "",
-) -> int:
-    """Discussion を subprocess で実行する（非同期）。"""
-    python = _find_venv_python(DISCUSSION_DIR)
-    script = str(DISCUSSION_DIR / "parallel_orchestrator.py")
-    cmd = [python, script, ticker, span, MODE_TO_CLI.get(mode, "buy")]
-
-    env = {**os.environ}
-    if display_name:
-        env["DISPLAY_NAME"] = display_name
-
-    print(f"  [{ticker}] Discussion 起動: {' '.join(cmd)}")
-    proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(DISCUSSION_DIR), env=env)
-    await proc.wait()
-    return proc.returncode
-
-
-async def _run_discussion_with_retry(
-    ticker: str, span: str, mode: str, display_name: str = "",
-) -> int:
-    """Discussion を実行し、失敗時はリトライする。"""
-    exit_code = await _run_discussion_subprocess(ticker, span, mode, display_name)
-    if exit_code == 0:
-        return 0
-
-    print(f"  [{ticker}] Discussion 失敗 (exit code: {exit_code})")
-
-    discussion_dir = _find_latest_discussion_dir(ticker)
-    if discussion_dir:
-        print(f"  [{ticker}] Discussion ログ検出（{discussion_dir.name}）→ リトライ")
-    else:
-        print(f"  [{ticker}] Discussion ログなし → 全体リトライ")
-
-    exit_code = await _run_discussion_subprocess(ticker, span, mode, display_name)
-    if exit_code == 0:
-        return 0
-
-    print(f"  [{ticker}] Discussion リトライ失敗 (exit code: {exit_code})")
-    return exit_code
-
-
-async def run_discussion_batch(event_context: dict | None, display_names: dict | None = None) -> None:
-    """Discussion ブロックのバッチ実行。DB から NG 銘柄を検出し、各銘柄の Discussion を実行する。"""
+def run_discussion() -> int:
+    """Discussion を subprocess で実行する。Discussion が内部で全対象銘柄を自動検出・処理する。"""
     print(f"\n{'='*60}")
     print(f"=== Phase 2: Discussion ===")
     print(f"{'='*60}")
 
-    pending = safe_db(fetch_active_for_discussion) or []
-    if not pending:
-        print("  Discussion 対象なし。")
-        return
+    python = _find_venv_python(DISCUSSION_DIR)
+    script = str(DISCUSSION_DIR / "parallel_orchestrator.py")
+    cmd = [python, script]
 
-    print(f"  対象: {len(pending)} 銘柄")
-    for row in pending:
-        print(f"    - {row['ticker']} (mode={row['mode']}, span={row['span']})")
-
-    async def _process_one(row):
-        ticker = row["ticker"]
-        span = row["span"]
-        mode = row["mode"]
-        old_archive_id = row["id"]
-        try:
-            dn = (display_names or {}).get(ticker, "")
-            exit_code = await _run_discussion_with_retry(ticker, span, mode, dn)
-            if exit_code == 0:
-                safe_db(propagate_active_after_discussion, ticker, old_archive_id)
-                print(f"  [{ticker}] Discussion 完了")
-            else:
-                print(f"  [{ticker}] Discussion 全リトライ失敗 (exit code: {exit_code})")
-                dn = (display_names or {}).get(ticker, ticker)
-                payload = NotifyPayload(
-                    label=NotifyLabel.ERROR,
-                    ticker=ticker,
-                    monitor_data={},
-                    event_context=event_context,
-                    error_detail=f"Discussion 失敗 (exit code: {exit_code})",
-                    display_name=dn,
-                )
-                await notify(payload)
-        except Exception as e:
-            print(f"  [{ticker}] 予期しないエラー: {e}")
-
-    await asyncio.gather(*[_process_one(row) for row in pending])
+    print(f"  Discussion 起動: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(DISCUSSION_DIR))
+    if result.returncode != 0:
+        print(f"  Discussion 失敗 (exit code: {result.returncode})")
+    return result.returncode
 
 
-# ── Planning バッチアダプタ ───────────────────────────────
-#
-# Planning ブロックもバッチ実行モードを持たないため、
-# DB から対象銘柄を検出し、各銘柄の Planning subprocess を起動するアダプタ。
+# ── Planning ─────────────────────────────────────────────
 
-async def run_planning_batch(event_context: dict | None, display_names: dict | None = None) -> None:
-    """Planning ブロックのバッチ実行。DB から対象銘柄を検出し、各銘柄の Planning を実行する。"""
+def run_planning() -> int:
+    """Planning を subprocess で実行する。Planning が内部で全対象銘柄を自動検出・処理する。"""
     print(f"\n{'='*60}")
     print(f"=== Phase 3: Planning ===")
     print(f"{'='*60}")
 
-    pending = safe_db(fetch_active_for_planning) or []
-    if not pending:
-        print("  Planning 対象なし。")
-        return
+    python = _find_venv_python(PLANNING_DIR)
+    script = str(PLANNING_DIR / "plan_orchestrator.py")
+    cmd = [python, script]
 
-    print(f"  対象: {len(pending)} 銘柄")
-    for row in pending:
-        print(f"    - {row['ticker']} (span={row['span']})")
-
-    async def _process_one(row):
-        ticker = row["ticker"]
-        span = row["span"]
-
-        python = _find_venv_python(PLANNING_DIR)
-        script = str(PLANNING_DIR / "plan_orchestrator.py")
-        horizon_jp = SPAN_TO_JP.get(span, "中期")
-        cmd = [python, script, ticker, horizon_jp]
-
-        print(f"  [{ticker}] Planning 起動: {' '.join(cmd)}")
-        try:
-            proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(PLANNING_DIR))
-            await proc.wait()
-            if proc.returncode == 0:
-                print(f"  [{ticker}] Planning 完了")
-            else:
-                print(f"  [{ticker}] Planning 失敗 (exit code: {proc.returncode})")
-                dn = (display_names or {}).get(ticker, ticker)
-                payload = NotifyPayload(
-                    label=NotifyLabel.ERROR,
-                    ticker=ticker,
-                    monitor_data={},
-                    event_context=event_context,
-                    error_detail=f"Planning 失敗 (exit code: {proc.returncode})",
-                    display_name=dn,
-                )
-                await notify(payload)
-        except Exception as e:
-            print(f"  [{ticker}] 予期しないエラー: {e}")
-
-    await asyncio.gather(*[_process_one(row) for row in pending])
+    print(f"  Planning 起動: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(PLANNING_DIR))
+    if result.returncode != 0:
+        print(f"  Planning 失敗 (exit code: {result.returncode})")
+    return result.returncode
 
 
 # ── Watch ────────────────────────────────────────────────
@@ -318,9 +192,51 @@ async def run_pipeline(
         print("\n--monitor-only: Discussion/Planning/Watch は起動しません。")
         return
 
-    # ── Phase 2〜4: 各ブロックを順番に呼び出す ──
-    await run_discussion_batch(event_context, dn_map)
-    await run_planning_batch(event_context, dn_map)
+    # ── Phase 2: Discussion ──
+    run_discussion()
+
+    # Post-Discussion: propagate active flags + エラー検出
+    ng_ticker_names = []
+    for row in ng_tickers:
+        ticker = row["ticker"]
+        old_id = row["id"]
+        propagated = safe_db(propagate_active_after_discussion, ticker, old_id)
+        if propagated:
+            ng_ticker_names.append(ticker)
+            print(f"  [{ticker}] Discussion 完了 → Planning に引き継ぎ")
+        else:
+            print(f"  [{ticker}] Discussion 失敗（final_judge 未生成）")
+            dn = dn_map.get(ticker, ticker)
+            payload = NotifyPayload(
+                label=NotifyLabel.ERROR,
+                ticker=ticker,
+                monitor_data={},
+                event_context=event_context,
+                error_detail="Discussion で final_judge が生成されませんでした",
+                display_name=dn,
+            )
+            await notify(payload)
+
+    # ── Phase 3: Planning ──
+    run_planning()
+
+    # Post-Planning: エラー検出
+    planning_failed = safe_db(fetch_active_for_planning) or []
+    for row in planning_failed:
+        ticker = row["ticker"]
+        print(f"  [{ticker}] Planning 失敗（newplan_full 未生成）")
+        dn = dn_map.get(ticker, ticker)
+        payload = NotifyPayload(
+            label=NotifyLabel.ERROR,
+            ticker=ticker,
+            monitor_data={},
+            event_context=event_context,
+            error_detail="Planning で newplan_full が生成されませんでした",
+            display_name=dn,
+        )
+        await notify(payload)
+
+    # ── Phase 4: Watch ──
     run_watch()
 
     # ── COMPLETE 通知 ──
@@ -329,7 +245,6 @@ async def run_pipeline(
     print(f"{'='*60}")
 
     all_tickers = list(summary.results.keys())
-    ng_ticker_names = [ng["ticker"] for ng in ng_tickers]
     market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
     all_names = [dn_map.get(t, t) for t in all_tickers]
     ng_names = [dn_map.get(t, t) for t in ng_ticker_names]

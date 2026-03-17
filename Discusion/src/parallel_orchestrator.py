@@ -15,7 +15,14 @@ from pathlib import Path
 import anyio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
-from supabase_client import safe_db, create_archivelog, update_archivelog, get_discussion_config
+from supabase_client import (
+    safe_db,
+    create_archivelog,
+    update_archivelog,
+    get_discussion_config,
+    fetch_active_for_discussion,
+    list_watchlist,
+)
 
 from discussion_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
@@ -36,6 +43,7 @@ async def run_parallel(
     opinions_per_set: int | None = None,
     mode: str = "buy",
     horizon: str = "mid",
+    display_name: str = "",
 ):
     if num_sets is None or max_rounds is None or opinions_per_set is None:
         disc_cfg = safe_db(get_discussion_config) or {}
@@ -85,6 +93,7 @@ async def run_parallel(
             theme=theme,
             horizon=horizon,
             discusion_dir=discusion_dir,
+            display_name=display_name,
         )
 
     async with anyio.create_task_group() as tg:
@@ -175,18 +184,56 @@ async def run_parallel(
         )
 
 
+async def run_batch():
+    """DB から全 active 銘柄を自動検出し、並列で Discussion を実行する。"""
+    pending = safe_db(fetch_active_for_discussion) or []
+    if not pending:
+        print("[Discussion] active な対象銘柄がありません。終了。")
+        return
+
+    # watchlist から display_name を取得
+    wl = safe_db(list_watchlist, active_only=False) or []
+    dn_map = {w["ticker"]: w.get("display_name") or "" for w in wl}
+
+    tickers = [row["ticker"] for row in pending]
+    print(f"[Discussion] 対象銘柄: {', '.join(tickers)}")
+
+    async def _process_one(row):
+        ticker = row["ticker"]
+        mode = row.get("mode", "buy")
+        span = row.get("span", "mid")
+        dn = dn_map.get(ticker, "")
+        try:
+            await run_parallel(
+                ticker, mode=mode, horizon=span,
+                display_name=dn,
+            )
+        except Exception as e:
+            print(f"  [{ticker}] 予期しないエラー: {e}")
+
+    async with anyio.create_task_group() as tg:
+        for row in pending:
+            tg.start_soon(_process_one, row)
+
+    print(f"\n[Discussion] 全銘柄処理完了")
+
+
 if __name__ == "__main__":
     _horizon_map = {"短期": "short", "中期": "mid", "長期": "long",
                     "short": "short", "mid": "mid", "long": "long"}
 
+    # 引数なし → バッチモード（DB から全 active 銘柄を自動検出）
+    if len(sys.argv) <= 1:
+        anyio.run(run_batch)
+        sys.exit(0)
+
     if len(sys.argv) < 3 or sys.argv[2] not in _horizon_map:
-        print("使い方: python parallel_orchestrator.py <銘柄コード> <投資期間> [モード] [レーン数] [最大ラウンド数] [意見数] [追加指示]")
+        print("使い方:")
+        print("  python parallel_orchestrator.py                          # バッチモード（DB から自動検出）")
+        print("  python parallel_orchestrator.py <銘柄> <投資期間> [モード]  # 手動指定")
         print()
         print("  投資期間（必須）: '短期' / '中期' / '長期'")
         print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
-        if len(sys.argv) >= 2 and (len(sys.argv) < 3 or sys.argv[2] not in _horizon_map):
-            print()
-            print(f"⚠ 投資期間が指定されていません。銘柄の直後に '短期' '中期' '長期' のいずれかを指定してください。")
         sys.exit(1)
 
     ticker = sys.argv[1]

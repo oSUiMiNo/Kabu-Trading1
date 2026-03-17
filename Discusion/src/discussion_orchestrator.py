@@ -5,7 +5,6 @@ analyst と devils-advocate を交互に呼び出し、
 筆談ログ（logs/{TICKER}.md）上で議論させる。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
-import os
 import sys
 import re
 from pathlib import Path
@@ -106,20 +105,19 @@ def _theme_directive(theme: str | None) -> str:
     )
 
 
-def _ticker_label(ticker: str) -> str:
+def _ticker_label(ticker: str, display_name: str = "") -> str:
     """ティッカーに display_name があれば併記する（例: 'U (Unity)'）。"""
-    display_name = os.environ.get("DISPLAY_NAME", "")
     t = ticker.upper()
     return f"{t} ({display_name})" if display_name else t
 
 
-def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None, horizon: str = "mid") -> str:
+def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None, horizon: str = "mid", display_name: str = "") -> str:
     """各エージェントに渡すプロンプトを組み立てる"""
     log_abs = log_path.as_posix()
     directive = _mode_directive(mode)
     horizon_dir = _horizon_directive(horizon)
     theme_dir = _theme_directive(theme)
-    label = _ticker_label(ticker)
+    label = _ticker_label(ticker, display_name)
 
     if role == "analyst":
         if round_num == 1:
@@ -162,6 +160,7 @@ async def run_discussion(
     mode: str = "buy",
     theme: str | None = None,
     horizon: str = "mid",
+    display_name: str = "",
 ):
     """
     オーケストレーターのメインループ。
@@ -207,7 +206,7 @@ async def run_discussion(
         print(f"---{lane_label} ラウンド{round_num}: {label} {'-' * 30}")
 
         # プロンプト組み立て
-        prompt = build_prompt(ticker, role, round_num, log_path, mode, theme, horizon)
+        prompt = build_prompt(ticker, role, round_num, log_path, mode, theme, horizon, display_name)
         if initial_prompt and round_num == start_round and role == "analyst":
             prompt = f"{initial_prompt}\n\n{prompt}"
 

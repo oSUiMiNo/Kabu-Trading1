@@ -58,6 +58,7 @@ async def run_lane(
     theme: str | None = None,
     horizon: str = "mid",
     discusion_dir: Path | None = None,
+    display_name: str = "",
 ) -> LaneResult:
     """
     1レーン分のフローを一気通貫で実行する。
@@ -87,6 +88,7 @@ async def run_lane(
             mode=mode,
             theme=theme,
             horizon=horizon,
+            display_name=display_name,
         )
         print(f"[レーン{set_num}] 議論 完了")
 
