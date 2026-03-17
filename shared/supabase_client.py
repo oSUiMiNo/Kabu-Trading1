@@ -191,17 +191,21 @@ def upsert_holding(ticker: str, **fields) -> dict:
 
 def create_archivelog(ticker: str, mode: str, horizon: str) -> dict:
     """セッション作成。horizon は DB カラム span にマッピングされる。"""
-    ts_id = datetime.now(_JST).strftime("%Y%m%d%H%M%S")
+    ts_id = datetime.now(_JST).strftime("%Y%m%d%H%M%S") + "_" + ticker.upper()
+    prev = get_latest_archivelog_with_newplan(ticker)
+    row = {
+        "id": ts_id,
+        "ticker": ticker.upper(),
+        "mode": mode,
+        "span": horizon,
+        "status": "running",
+    }
+    if prev:
+        row["prev_plan_ids"] = (prev.get("prev_plan_ids") or []) + [prev["id"]]
     resp = (
         get_client()
         .from_("archive")
-        .insert({
-            "id": ts_id,
-            "ticker": ticker.upper(),
-            "mode": mode,
-            "span": horizon,
-            "status": "running",
-        })
+        .insert(row)
         .execute()
     )
     return resp.data[0]

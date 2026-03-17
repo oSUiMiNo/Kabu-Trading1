@@ -13,8 +13,6 @@ name: Night Worker
 on:
   schedule:
     - cron: '5 18 * * *'    # JST 3:05
-    - cron: '5 19 * * *'    # JST 4:05（予備）
-    - cron: '5 20 * * *'    # JST 5:05（予備）
   workflow_dispatch:
     inputs:
       max_reviews:
