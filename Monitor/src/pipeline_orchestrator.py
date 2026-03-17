@@ -93,21 +93,29 @@ def _load_event_context() -> dict | None:
 # Discussion ブロックはバッチ実行モードを持たないため、
 # DB から対象銘柄を検出し、各銘柄の Discussion subprocess を起動するアダプタ。
 
-async def _run_discussion_subprocess(ticker: str, span: str, mode: str) -> int:
+async def _run_discussion_subprocess(
+    ticker: str, span: str, mode: str, display_name: str = "",
+) -> int:
     """Discussion を subprocess で実行する（非同期）。"""
     python = _find_venv_python(DISCUSSION_DIR)
     script = str(DISCUSSION_DIR / "parallel_orchestrator.py")
     cmd = [python, script, ticker, span, MODE_TO_CLI.get(mode, "buy")]
 
+    env = {**os.environ}
+    if display_name:
+        env["DISPLAY_NAME"] = display_name
+
     print(f"  [{ticker}] Discussion 起動: {' '.join(cmd)}")
-    proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(DISCUSSION_DIR))
+    proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(DISCUSSION_DIR), env=env)
     await proc.wait()
     return proc.returncode
 
 
-async def _run_discussion_with_retry(ticker: str, span: str, mode: str) -> int:
+async def _run_discussion_with_retry(
+    ticker: str, span: str, mode: str, display_name: str = "",
+) -> int:
     """Discussion を実行し、失敗時はリトライする。"""
-    exit_code = await _run_discussion_subprocess(ticker, span, mode)
+    exit_code = await _run_discussion_subprocess(ticker, span, mode, display_name)
     if exit_code == 0:
         return 0
 
@@ -119,7 +127,7 @@ async def _run_discussion_with_retry(ticker: str, span: str, mode: str) -> int:
     else:
         print(f"  [{ticker}] Discussion ログなし → 全体リトライ")
 
-    exit_code = await _run_discussion_subprocess(ticker, span, mode)
+    exit_code = await _run_discussion_subprocess(ticker, span, mode, display_name)
     if exit_code == 0:
         return 0
 
@@ -148,7 +156,8 @@ async def run_discussion_batch(event_context: dict | None, display_names: dict |
         mode = row["mode"]
         old_archive_id = row["id"]
         try:
-            exit_code = await _run_discussion_with_retry(ticker, span, mode)
+            dn = (display_names or {}).get(ticker, "")
+            exit_code = await _run_discussion_with_retry(ticker, span, mode, dn)
             if exit_code == 0:
                 safe_db(propagate_active_after_discussion, ticker, old_archive_id)
                 print(f"  [{ticker}] Discussion 完了")

@@ -5,6 +5,7 @@ analyst と devils-advocate を交互に呼び出し、
 筆談ログ（logs/{TICKER}.md）上で議論させる。
 オーケストレーター自体はLLMを使わず、プログラムだけで制御する。
 """
+import os
 import sys
 import re
 from pathlib import Path
@@ -105,12 +106,20 @@ def _theme_directive(theme: str | None) -> str:
     )
 
 
+def _ticker_label(ticker: str) -> str:
+    """ティッカーに display_name があれば併記する（例: 'U (Unity)'）。"""
+    display_name = os.environ.get("DISPLAY_NAME", "")
+    t = ticker.upper()
+    return f"{t} ({display_name})" if display_name else t
+
+
 def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None, horizon: str = "mid") -> str:
     """各エージェントに渡すプロンプトを組み立てる"""
     log_abs = log_path.as_posix()
     directive = _mode_directive(mode)
     horizon_dir = _horizon_directive(horizon)
     theme_dir = _theme_directive(theme)
+    label = _ticker_label(ticker)
 
     if role == "analyst":
         if round_num == 1:
@@ -118,7 +127,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
                 f"{directive}"
                 f"{horizon_dir}"
                 f"{theme_dir}"
-                f"銘柄「{ticker.upper()}」の初回分析を行ってください。\n"
+                f"銘柄「{label}」の初回分析を行ってください。\n"
                 f"ログファイル（参照用）: {log_abs}\n"
                 f"ログの初期構造（メタ情報、Sources表、Facts、Claims）と Round {round_num} の内容を含めて、\n"
                 f"**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
@@ -128,7 +137,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
                 f"{directive}"
                 f"{horizon_dir}"
                 f"{theme_dir}"
-                f"銘柄「{ticker.upper()}」の分析を続けてください。\n"
+                f"銘柄「{label}」の分析を続けてください。\n"
                 f"ログファイル（参照用）: {log_abs}\n"
                 f"前回のDevil's Advocateが異なるスタンスから出した反論Claimsを読み、\n"
                 f"Round {round_num} の内容を**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
@@ -138,7 +147,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
             f"{directive}"
             f"{horizon_dir}"
             f"{theme_dir}"
-            f"銘柄「{ticker.upper()}」のログを読み、最新のAnalystのstanceとは異なるスタンスを取ってください。\n"
+            f"銘柄「{label}」のログを読み、最新のAnalystのstanceとは異なるスタンスを取ってください。\n"
             f"ログファイル（参照用）: {log_abs}\n"
             f"Analystが選ばなかった残りのスタンスの中から最も妥当なものを選び、その立場から反論Claims（C#）を組み立てて、\n"
             f"Round {round_num} の内容を**テキスト応答として出力**してください。ファイルへの書き込みは不要です。"
