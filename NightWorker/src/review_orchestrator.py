@@ -206,6 +206,7 @@ async def review_one_archive(record: dict, dry_run: bool = False) -> dict:
             print(f"    - [{si['severity']}] {si['title']}")
 
     llm_review = None
+    llm_result = None
     has_discussion = bool(record.get("lanes"))
 
     if has_discussion:
@@ -214,9 +215,9 @@ async def review_one_archive(record: dict, dry_run: bool = False) -> dict:
         agent_file = AGENTS_DIR / "archive-reviewer.md"
 
         for attempt in range(1, MAX_REVIEW_RETRIES + 1):
-            result = await call_agent(prompt, file_path=str(agent_file), show_cost=True)
-            if result and result.text:
-                llm_review = _parse_review_result(result.text)
+            llm_result = await call_agent(prompt, file_path=str(agent_file), show_cost=True)
+            if llm_result and llm_result.text:
+                llm_review = _parse_review_result(llm_result.text)
                 if llm_review:
                     print(f"  LLMレビュー完了：{llm_review.get('overall_quality', '?')}")
                     break
@@ -248,8 +249,8 @@ async def review_one_archive(record: dict, dry_run: bool = False) -> dict:
                 print(f"  Issue作成：{issue_url}")
 
     cost = None
-    if result and hasattr(result, "cost"):
-        cost = result.cost
+    if llm_result and hasattr(llm_result, "cost"):
+        cost = llm_result.cost
 
     safe_db(
         create_archive_review,
