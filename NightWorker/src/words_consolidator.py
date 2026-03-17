@@ -1,7 +1,7 @@
 """
 用語集メンテナンス
 
-glossary テーブルのエントリを走査し、term や aliases が重複するエントリを検出・統合する。
+words テーブルのエントリを走査し、term や aliases が重複するエントリを検出・統合する。
 
 統合ルール：
 - 全エントリの term と aliases を小文字で正規化して比較
@@ -16,9 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
     safe_db,
-    fetch_all_glossary,
-    update_glossary_entry,
-    delete_glossary_entry,
+    fetch_all_words,
+    update_words_entry,
+    delete_words_entry,
 )
 
 
@@ -127,12 +127,12 @@ def run_glossary_consolidation(dry_run: bool = False) -> dict:
     """用語集の重複統合を実行する。"""
     print("[NightWorker] 用語集メンテナンス開始")
 
-    entries = safe_db(fetch_all_glossary)
+    entries = safe_db(fetch_all_words)
     if not entries:
-        print("  glossary エントリなし。スキップ。")
+        print("  words エントリなし。スキップ。")
         return {"groups_found": 0, "merged": 0, "deleted": 0}
 
-    print(f"  glossary エントリ数：{len(entries)}")
+    print(f"  words エントリ数：{len(entries)}")
 
     groups = find_duplicate_groups(entries)
     if not groups:
@@ -156,14 +156,14 @@ def run_glossary_consolidation(dry_run: bool = False) -> dict:
             continue
 
         safe_db(
-            update_glossary_entry,
+            update_words_entry,
             entry_id=merged["id"],
             term=merged["term"],
             explanation=merged["explanation"],
             aliases=merged["aliases"],
         )
         for did in delete_ids:
-            safe_db(delete_glossary_entry, entry_id=did)
+            safe_db(delete_words_entry, entry_id=did)
         total_deleted += len(delete_ids)
         print(f"    統合完了")
 

@@ -33,7 +33,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 | **Planning** | プラン YAML 生成 | `Planning/src/plan_orchestrator.py` |
 | **Watch** | watchlist 更新 + Discord 業務通知 | `Watch/src/watch_orchestrator.py` |
 | **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/scheduler_orchestrator.py` |
-| **NightWorker** | archive 品質レビュー + Issue 作成 + 用語集統合 | `NightWorker/src/review_orchestrator.py`<br>`NightWorker/src/glossary_consolidator.py` |
+| **NightWorker** | archive 品質レビュー + Issue 作成 + 用語集統合 | `NightWorker/src/review_orchestrator.py`<br>`NightWorker/src/words_consolidator.py` |
 | **shared** | DB・通知・LLM クライアント共通 | `shared/supabase_client.py`<br>`shared/discord_notifier.py`<br>`shared/llm_client.py` |
 
 ---

@@ -610,13 +610,13 @@ def create_archive_review(
     return resp.data[0] if resp.data else {}
 
 
-# ── glossary（用語集） ──────────────────────────────────
+# ── words（用語集） ──────────────────────────────────
 
-def fetch_all_glossary() -> list[dict]:
-    """glossary テーブルの全エントリを取得する。"""
+def fetch_all_words() -> list[dict]:
+    """words テーブルの全エントリを取得する。"""
     resp = (
         get_client()
-        .from_("glossary")
+        .from_("words")
         .select("id, term, explanation, aliases")
         .order("id")
         .execute()
@@ -624,13 +624,13 @@ def fetch_all_glossary() -> list[dict]:
     return resp.data or []
 
 
-def update_glossary_entry(
+def update_words_entry(
     entry_id: int,
     term: str,
     explanation: str,
     aliases: list[str],
 ) -> dict:
-    """glossary エントリを更新する。"""
+    """words エントリを更新する。"""
     row = {
         "term": term,
         "explanation": explanation,
@@ -638,7 +638,7 @@ def update_glossary_entry(
     }
     resp = (
         get_client()
-        .from_("glossary")
+        .from_("words")
         .update(row)
         .eq("id", entry_id)
         .execute()
@@ -646,6 +646,6 @@ def update_glossary_entry(
     return resp.data[0] if resp.data else {}
 
 
-def delete_glossary_entry(entry_id: int) -> None:
-    """glossary エントリを削除する。"""
-    get_client().from_("glossary").delete().eq("id", entry_id).execute()
+def delete_words_entry(entry_id: int) -> None:
+    """words エントリを削除する。"""
+    get_client().from_("words").delete().eq("id", entry_id).execute()

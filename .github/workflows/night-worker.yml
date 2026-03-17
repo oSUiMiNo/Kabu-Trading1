@@ -3,7 +3,7 @@
 #
 # 深夜帯（JST 3:05 / 4:05 / 5:05）に以下のメンテナンスタスクを実行する。
 #   1. archive 品質レビュー → GitHub Issue 作成
-#   2. glossary 重複統合
+#   2. words 重複統合
 #
 # 3回の cron 設定は冗長性のため。1回目で全件処理済みになれば
 # 2・3回目は対象0件で即終了する。
@@ -59,7 +59,7 @@ jobs:
           fi
           uv run python review_orchestrator.py $ARGS
 
-      - name: Glossary Consolidation
+      - name: Words Consolidation
         working-directory: NightWorker/src
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -67,7 +67,7 @@ jobs:
         run: |
           DRY_RUN="${{ inputs.dry_run }}"
           if [ "$DRY_RUN" = "true" ]; then
-            uv run python glossary_consolidator.py --dry-run
+            uv run python words_consolidator.py --dry-run
           else
-            uv run python glossary_consolidator.py
+            uv run python words_consolidator.py
           fi

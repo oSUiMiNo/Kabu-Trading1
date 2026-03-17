@@ -190,7 +190,9 @@ def _parse_review_result(agent_output: str) -> dict | None:
     return None
 
 
-async def review_one_archive(record: dict, dry_run: bool = False) -> dict:
+async def review_one_archive(
+    record: dict, dry_run: bool = False, comments_only: bool = False,
+) -> dict:
     """1件のarchiveをレビューする。"""
     archive_id = record["id"]
     ticker = record.get("ticker", "?")
@@ -244,7 +246,10 @@ async def review_one_archive(record: dict, dry_run: bool = False) -> dict:
         if dry_run:
             print(f"  [dry-run] Issue作成対象（スキップ）")
         else:
-            issue_url = create_issue(archive_id, ticker, record, all_issues, overall)
+            issue_url = create_issue(
+                archive_id, ticker, record, all_issues, overall,
+                comments_only=comments_only,
+            )
             if issue_url:
                 print(f"  Issue作成：{issue_url}")
 
@@ -289,10 +294,13 @@ async def run_review(max_reviews: int = 20, dry_run: bool = False):
     issues_created = 0
 
     for record in records:
-        if issues_created >= MAX_ISSUES_PER_RUN and not dry_run:
-            print(f"  Issue作成上限（{MAX_ISSUES_PER_RUN}件）に達したため、残りはログ記録のみ")
+        limit_reached = issues_created >= MAX_ISSUES_PER_RUN and not dry_run
+        if limit_reached:
+            print(f"  Issue新規作成上限（{MAX_ISSUES_PER_RUN}件）到達。既存Issueへのコメント追記は継続")
 
-        r = await review_one_archive(record, dry_run=(dry_run or issues_created >= MAX_ISSUES_PER_RUN))
+        r = await review_one_archive(
+            record, dry_run=dry_run, comments_only=limit_reached,
+        )
         results.append(r)
         if r.get("issue_url"):
             issues_created += 1
