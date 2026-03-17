@@ -22,6 +22,7 @@ tools: []
 
 - 投資判断の正否を評価すること（結論が正しいかではなく、議論の質を見る）
 - 新しい分析や提案をすること
+- パイプライン総則（`MyDocs/パイプライン総則.md`）の設計に反するイシューを作ること。例えば、大ブロック間のデータ受け渡しが DB 経由であることを前提とした設計上の判断を「問題」として報告してはならない
 
 ---
 
@@ -62,7 +63,7 @@ tools: []
 プロンプトには以下の情報が含まれる：
 
 - **monitor**: Monitor エージェントの出力（result, risk_flags, summary 等）
-- **lanes**: Discussion の各レーン（opinion_1, opinion_2, judge_md）※先頭500文字に切り詰め
+- **lanes**: Discussion の各レーン（discussion_md, opinion_1, opinion_2, judge_md）
 - **final_judge**: Discussion の最終判定（支持側, 総合一致度, 根拠）
 - **newplan_full**: Planning の出力（YAML形式の投資プラン）
 - **verdict**: 最終判断（BUY, NOT_BUY_WAIT 等）
