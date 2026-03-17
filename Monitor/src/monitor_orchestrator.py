@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import (
     safe_db,
     list_watchlist,
+    get_archivelog_by_id,
     get_latest_archivelog_with_newplan,
     create_archivelog,
     update_archivelog,
@@ -129,11 +130,12 @@ def _extract_plan_price(newplan_full: str) -> float | None:
 MAX_MONITOR_RETRIES = 3
 
 
-async def check_one_ticker(ticker: str) -> dict | None:
+async def check_one_ticker(ticker: str, archivelog: dict | None = None) -> dict | None:
     """1銘柄に対する監視チェックを実行する。エージェント呼び出し〜パースを最大3回リトライ。"""
     now = datetime.now(JST)
 
-    archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
+    if not archivelog:
+        archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
     if not archivelog:
         print(f"  [{ticker}] スキップ: プラン付きセッションが見つかりません")
         return None
@@ -300,8 +302,14 @@ async def run_monitor(
 
     filtered = []
     archivelog_map = {}
+    watchlist_map = {w["ticker"]: w for w in watchlist} if not target_ticker else {}
     for ticker in tickers:
-        archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
+        wl_entry = watchlist_map.get(ticker)
+        aid = wl_entry.get("latest_archive_id") if wl_entry else None
+        if aid:
+            archivelog = safe_db(get_archivelog_by_id, aid)
+        else:
+            archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
         archivelog_map[ticker] = archivelog
         if skip_spans and archivelog:
             span = archivelog.get("span", "mid")
@@ -311,7 +319,9 @@ async def run_monitor(
         filtered.append(ticker)
 
     if filtered:
-        results = await asyncio.gather(*[check_one_ticker(t) for t in filtered])
+        results = await asyncio.gather(*[
+            check_one_ticker(t, archivelog_map.get(t)) for t in filtered
+        ])
         for ticker, result in zip(filtered, results):
             if result:
                 summary.results[ticker] = result

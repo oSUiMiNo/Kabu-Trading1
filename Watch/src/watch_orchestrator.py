@@ -149,6 +149,7 @@ async def process_one_ticker(ticker: str) -> bool:
         "risk_flags": monitor_data.get("risk_flags", []),
         "plan_comparison": plan_comparison,
         "stock_price": monitor_data.get("current_price"),
+        "latest_archive_id": archivelog_id,
     }
     safe_db(update_watchlist, ticker, **update_fields)
     print(f"  [{ticker}] watchlist 更新完了")

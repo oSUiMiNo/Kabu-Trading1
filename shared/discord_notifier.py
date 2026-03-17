@@ -183,7 +183,7 @@ def build_embed(payload: NotifyPayload) -> dict:
         risk_flags = md.get("risk_flags") or []
         if risk_flags:
             flags_ja = [f for f in risk_flags if f in _VALID_RISK_FLAGS]
-            fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja)})
+            fields.append({"name": "リスクフラグ", "value": "> " + ", ".join(flags_ja)})
 
         if payload.plan_comparison:
             fields.append({"name": "前回プランとの比較", "value": f"> {payload.plan_comparison[:1020]}"})
@@ -217,7 +217,7 @@ def build_embed(payload: NotifyPayload) -> dict:
         risk_flags = md.get("risk_flags") or []
         if risk_flags:
             flags_ja = [f for f in risk_flags if f in _VALID_RISK_FLAGS]
-            fields.append({"name": "リスクフラグ", "value": ", ".join(flags_ja)})
+            fields.append({"name": "リスクフラグ", "value": "> " + ", ".join(flags_ja)})
 
         embed = {"title": title, "color": color, "timestamp": timestamp, "fields": fields}
         if payload.beginner_summary:

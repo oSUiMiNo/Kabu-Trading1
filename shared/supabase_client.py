@@ -223,6 +223,19 @@ def update_archivelog(archivelog_id: str, **fields) -> dict:
     return resp.data[0] if resp.data else {}
 
 
+def get_archivelog_by_id(archive_id: str) -> dict | None:
+    """archive ID で直接取得する。"""
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("*")
+        .eq("id", archive_id)
+        .limit(1)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
 def get_latest_archivelog(ticker: str) -> dict | None:
     """指定銘柄の最新セッションを取得。"""
     resp = (
