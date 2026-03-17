@@ -312,5 +312,50 @@ class TestJapaneseTranslation(unittest.TestCase):
         self.assertNotIn("post_release_20m", event_field["value"])
 
 
+class TestPlanComparison(unittest.TestCase):
+    """plan_comparison フィールドの表示テスト"""
+
+    def test_plan_comparison_shown_with_new_plan(self):
+        payload = NotifyPayload(
+            label=NotifyLabel.WARNING,
+            ticker="TSLA",
+            monitor_data={"result": "NG", "current_price": 200.0, "plan_price": 250.0,
+                          "price_change_pct": -20.0, "summary": "急落"},
+            new_plan={"decision_final": "NOT_BUY_WAIT", "confidence": "high"},
+            plan_comparison="旧プランでは買い判定だったが、新プランでは様子見に変更",
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertIn("前回プランとの比較", field_names)
+        comp_field = next(f for f in embed["fields"] if f["name"] == "前回プランとの比較")
+        self.assertIn("旧プラン", comp_field["value"])
+
+    def test_plan_comparison_hidden_when_empty(self):
+        payload = NotifyPayload(
+            label=NotifyLabel.WARNING,
+            ticker="TSLA",
+            monitor_data={"result": "NG", "current_price": 200.0, "plan_price": 250.0,
+                          "price_change_pct": -20.0, "summary": "急落"},
+            new_plan={"decision_final": "NOT_BUY_WAIT", "confidence": "high"},
+            plan_comparison="",
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertNotIn("前回プランとの比較", field_names)
+
+    def test_plan_comparison_not_shown_without_new_plan(self):
+        payload = NotifyPayload(
+            label=NotifyLabel.CHECK,
+            ticker="AAPL",
+            monitor_data={"result": "OK", "current_price": 180.0, "plan_price": 175.0,
+                          "price_change_pct": 2.86, "summary": "問題なし",
+                          "risk_flags": ["マクロショック"]},
+            plan_comparison="何か比較テキスト",
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertNotIn("前回プランとの比較", field_names)
+
+
 if __name__ == "__main__":
     unittest.main()
