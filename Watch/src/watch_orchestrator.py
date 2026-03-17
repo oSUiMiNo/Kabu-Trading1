@@ -173,6 +173,7 @@ async def process_one_ticker(ticker: str) -> bool:
                 new_plan=new_plan,
                 event_context=event_context,
                 display_name=dn,
+                plan_comparison=plan_comparison,
             )
             await notify(payload)
             print(f"  [{ticker}] Discord 通知送信完了 (label={label.value})")

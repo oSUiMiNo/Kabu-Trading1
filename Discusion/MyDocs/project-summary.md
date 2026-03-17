@@ -53,9 +53,9 @@ flowchart TD
 ```
 
 ### 投票ルール
-- AGREED レーン → 2票、DISAGREED レーン → 各 side に1票ずつ
-- **買うモード**: 全会一致のみ BUY（1票でも反対 → NOT_BUY_WAIT）
-- **売るモード**: SELL票 ≥ 2/3 なら SELL
+- AGREED レーン → そのスタンスに2票、DISAGREED レーン → HOLD に1票
+- 最多得票のスタンスが勝ち。同数の場合は HOLD 優先
+- スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択
 
 ---
 
@@ -75,8 +75,8 @@ flowchart TD
 | エージェント | ファイル | 役割 |
 |-------------|----------|------|
 | Analyst | `analyst.md` | 銘柄を分析し Facts → Claims を組み立てる。Web検索可 |
-| Devil's Advocate | `devils-advocate.md` | Analyst の stance の反対側に固定して反論。Web検索可 |
-| Opinion | `opinion.md` | 議論ログを読み BUY/NOT_BUY を 0-100 で採点 + 軽量監査 |
+| Devil's Advocate | `devils-advocate.md` | Analyst とは異なるスタンスを取って反論。Web検索可 |
+| Opinion | `opinion.md` | 議論ログを読み 5択スタンスから1つ選び確信度 0-100 で採点 + 軽量監査 |
 | Judge | `judge.md` | 2つの Opinion の supported_side が一致か不一致か判定 |
 | Final Judge | `final-judge.md` | 全レーンの投票を集約し最終結論を出す |
 

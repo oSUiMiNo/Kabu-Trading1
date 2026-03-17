@@ -43,6 +43,7 @@ class NotifyPayload:
     event_context: dict | None = None
     error_detail: str = ""
     display_name: str = ""
+    plan_comparison: str = ""
 
 
 def classify_label(monitor_data: dict) -> NotifyLabel | None:
