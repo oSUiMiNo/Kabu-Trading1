@@ -130,9 +130,9 @@ def _build_review_prompt(record: dict) -> str:
             parts.append("## Monitor結果")
             parts.append(f"- result：{monitor.get('result', '?')}")
             parts.append(f"- risk_flags：{monitor.get('risk_flags', [])}")
-            parts.append(f"- summary：{_truncate(monitor.get('summary'), 300)}")
+            parts.append(f"- summary：{monitor.get('summary') or '(なし)'}")
             if monitor.get("ng_reason"):
-                parts.append(f"- ng_reason：{_truncate(monitor.get('ng_reason'), 300)}")
+                parts.append(f"- ng_reason：{monitor.get('ng_reason')}")
             parts.append("")
 
     lanes = record.get("lanes")
@@ -148,10 +148,12 @@ def _build_review_prompt(record: dict) -> str:
                 if not isinstance(lane_data, dict):
                     continue
                 parts.append(f"### レーン {lane_id}：{lane_data.get('theme', '?')}")
-                parts.append(f"- opinion_1：{_truncate(lane_data.get('opinion_1'), 500)}")
-                parts.append(f"- opinion_2：{_truncate(lane_data.get('opinion_2'), 500)}")
-                parts.append(f"- judge_md：{_truncate(lane_data.get('judge_md'), 500)}")
-                parts.append("")
+                discussion_md = lane_data.get("discussion_md") or ""
+                if discussion_md:
+                    parts.append(f"#### 議論ログ\n{discussion_md}\n")
+                parts.append(f"#### opinion_1\n{lane_data.get('opinion_1') or '(なし)'}\n")
+                parts.append(f"#### opinion_2\n{lane_data.get('opinion_2') or '(なし)'}\n")
+                parts.append(f"#### judge_md\n{lane_data.get('judge_md') or '(なし)'}\n")
 
     final_judge = record.get("final_judge")
     if final_judge:
@@ -162,12 +164,12 @@ def _build_review_prompt(record: dict) -> str:
                 pass
         if isinstance(final_judge, dict):
             parts.append("## 最終判定（final_judge）")
-            parts.append(f"```json\n{json.dumps(final_judge, ensure_ascii=False, indent=2)[:1000]}\n```\n")
+            parts.append(f"```json\n{json.dumps(final_judge, ensure_ascii=False, indent=2)}\n```\n")
 
     newplan_full = record.get("newplan_full")
     if newplan_full:
         parts.append("## 投資プラン（newplan_full）")
-        parts.append(f"```yaml\n{_truncate(str(newplan_full), 1000)}\n```\n")
+        parts.append(f"```yaml\n{str(newplan_full)}\n```\n")
 
     parts.append("上記の内容を品質基準に照らしてレビューし、YAML形式で結果を出力してください。")
 
