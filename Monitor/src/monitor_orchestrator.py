@@ -207,8 +207,15 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None) -> dict 
             "retries_exhausted": True,
             "error_detail": last_error,
         }
-        archivelog_id = archivelog["id"]
-        safe_db(update_archivelog, archivelog_id, monitor=error_record)
+        new_record = safe_db(create_archivelog, ticker,
+                             archivelog.get("mode", "buy"),
+                             archivelog.get("span", "中期"))
+        if new_record:
+            safe_db(update_archivelog, new_record["id"],
+                    MotivationID=0,
+                    active=False,
+                    monitor=error_record,
+                    status="error")
         return error_record
 
     plan_price = _extract_plan_price(newplan_full)
@@ -235,13 +242,22 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None) -> dict 
         new_record = safe_db(create_archivelog, ticker,
                              archivelog.get("mode", "buy"),
                              archivelog.get("span", "中期"))
-        safe_db(update_archivelog, new_record["id"],
-                MotivationID=1,
-                motivation_full=monitor_data.get("ng_reason", ""),
-                active=True,
-                monitor=monitor_record)
+        if new_record:
+            safe_db(update_archivelog, new_record["id"],
+                    MotivationID=1,
+                    motivation_full=monitor_data.get("ng_reason", ""),
+                    active=True,
+                    monitor=monitor_record)
     else:
-        safe_db(update_archivelog, archivelog["id"], monitor=monitor_record)
+        new_record = safe_db(create_archivelog, ticker,
+                             archivelog.get("mode", "buy"),
+                             archivelog.get("span", "中期"))
+        if new_record:
+            safe_db(update_archivelog, new_record["id"],
+                    MotivationID=0,
+                    active=False,
+                    monitor=monitor_record,
+                    status="completed")
 
     status = monitor_record["result"]
     print(f"  [{ticker}] 結果: {status}")
