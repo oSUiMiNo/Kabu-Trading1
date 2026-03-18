@@ -12,7 +12,7 @@ Plan Agent 要件定義書（v0 / 固定値反映版）
 2. スコープ
 2.1 v0でやること
 
-最終判定（BUY / NO_BUY / SELL / NO_SELL）と票を受け取り、行動プランを生成
+最終判定（BUY / SELL / ADD / REDUCE / HOLD）と票を受け取り、行動プランを生成
 
 予算・リスク上限・期間・保有状況を反映して、**配分% / 投入額 / 株数（または購入単位）**を提案
 
@@ -150,7 +150,7 @@ shares == 0 の場合、100株を買えるかを判定
 
 status = NOT_EXECUTABLE_DUE_TO_LOT として出力
 
-v0では「見送り（NO_BUY相当のプラン）」または「監視のみ」を提案
+v0では「見送り（HOLD相当のプラン）」または「監視のみ」を提案
 
 代替案（将来拡張の注記）：単元未満株/ETF/投信
 
@@ -171,7 +171,7 @@ BUY：新規 or 買い増し（position_stateで分岐）
 
 SELL：全売りを基本（v0は簡略化）
 
-NO_BUY / NO_SELL：監視方針（強/中/弱）を決める
+HOLD：監視方針（強/中/弱）を決める
 
 PlanSpec（機械可読）として出力
 
@@ -189,7 +189,7 @@ ticker: "{TICKER}"
 plan_id: "{YYYYMMDD}-{TICKER}-{SEQ}"
 
 decision:
-  final: "BUY|NO_BUY|SELL|NO_SELL"
+  final: "BUY|SELL|ADD|REDUCE|HOLD"
   vote:
     for: 0
     against: 0
@@ -257,7 +257,7 @@ LOW → LIGHT
 
 8. 受け入れ基準（v0）
 
-BUY/SELL/NO_BUY/NO_SELL の全ケースで PlanSpecを必ず出力
+BUY/SELL/ADD/REDUCE/HOLD の全ケースで PlanSpecを必ず出力
 
 価格ズレが ±10%超の場合、必ず BLOCK_REEVALUATE に切り替わる
 

@@ -31,6 +31,8 @@ model: claude-haiku-4-5
 
 プロンプトに `【アクション判定】` が指定される。supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。同数/不確実時は `HOLD` に倒す。
 
+**使用禁止スタンス名**：NOT_BUY_WAIT, NO_BUY, NOT_SELL_HOLD, NO_SELL 等の旧名称は絶対に使用しない。必ず上記5択のいずれかを使用すること。
+
 ---
 
 ## 対象ファイル（命名）
@@ -66,6 +68,7 @@ model: claude-haiku-4-5
      - DISAGREEDレーン: HOLD に **1票**（意見が割れたため保守的に扱う）
    - **オーケストレーターがプロンプトで投票集計と確定判定を提供する** → その判定に従うこと
    - 判定ルール: 最多得票のスタンスが勝ち。同数の場合は HOLD 優先
+   - **MIXED/INCOMPLETE 時の判定理由記載義務**：タイブレークルールの適用（例：同数→HOLD優先）や、どのレーンの投票がどう影響したかを「根拠（要約）」セクションに明記すること
    - **overall_agreement**：
      - 全レーンAGREEDかつ同じ supported_side → AGREED_STRONG
      - 最多得票が勝ったがDISAGREEDやAGREED内の割れがある → MIXED

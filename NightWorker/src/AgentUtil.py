@@ -27,9 +27,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # 判定結果の英語→日本語マッピング（コンソール表示用）
 _SIDE_JA: dict[str, str] = {
     "BUY": "買い",
-    "NOT_BUY_WAIT": "買わない（様子見）",
     "SELL": "売り",
-    "NOT_SELL_HOLD": "売らない（保有継続）",
+    "ADD": "買い増し",
+    "REDUCE": "売り減らし",
+    "HOLD": "現状維持",
 }
 
 

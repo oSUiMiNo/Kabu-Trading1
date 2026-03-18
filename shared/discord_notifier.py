@@ -22,9 +22,10 @@ _RESULT_JA = {"OK": "OK", "NG": "NG", "ERROR": "エラー"}
 
 _DECISION_JA = {
     "BUY": "買い",
-    "NOT_BUY_WAIT": "買わない（様子見）",
     "SELL": "売り",
-    "NOT_SELL_HOLD": "売らない（保有継続）",
+    "ADD": "買い増し",
+    "REDUCE": "売り減らし",
+    "HOLD": "現状維持",
 }
 
 _CONFIDENCE_JA = {

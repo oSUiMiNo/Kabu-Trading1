@@ -13,12 +13,13 @@ from pathlib import Path
 import yaml
 
 
-# Discussion → Planning の用語変換テーブル
+# Discussion → Planning の用語変換テーブル（5択スタンス対応）
 DECISION_MAP: dict[str, str] = {
     "BUY": "BUY",
-    "NOT_BUY_WAIT": "NO_BUY",
     "SELL": "SELL",
-    "NOT_SELL_HOLD": "NO_SELL",
+    "ADD": "ADD",
+    "REDUCE": "REDUCE",
+    "HOLD": "HOLD",
 }
 
 
@@ -34,8 +35,8 @@ class DecisionBasis:
 class ParsedJudgment:
     """final_judge ログから抽出したデータ"""
     ticker: str
-    decision: str                       # "BUY" | "NO_BUY" | "SELL" | "NO_SELL"
-    decision_raw: str                   # 変換前の値（"NOT_BUY_WAIT" 等）
+    decision: str                       # "BUY" | "SELL" | "ADD" | "REDUCE" | "HOLD"
+    decision_raw: str                   # DECISION_MAP 適用前の生値
     vote_for: int                       # アクション側の票数
     vote_against: int                   # 安全側の票数
     overall_agreement: str              # "AGREED_STRONG" | "MIXED" | "INCOMPLETE"
@@ -134,10 +135,9 @@ def _extract_votes_from_export(export: dict) -> tuple[int, int] | None:
     """
     EXPORT yaml から投票数を抽出する。
 
-    投票集計セクションの形式:
-    投票集計（オーケストレーター算出・確定値）:
-      BUY票: 1
-      NOT_BUY_WAIT票: 3
+    5択スタンス対応:
+      action = BUY + SELL + ADD + REDUCE
+      safe   = HOLD
     """
     # 投票集計キーを探す（部分一致）
     vote_section = None
@@ -149,16 +149,19 @@ def _extract_votes_from_export(export: dict) -> tuple[int, int] | None:
     if not vote_section or not isinstance(vote_section, dict):
         return None
 
-    # BUY/SELL 票を探す
     action_votes = 0
     safe_votes = 0
     for key, value in vote_section.items():
-        key_str = str(key)
-        if isinstance(value, (int, float)):
-            if any(k in key_str for k in ("BUY票", "SELL票")) and "NOT_" not in key_str:
-                action_votes = int(value)
-            elif any(k in key_str for k in ("NOT_BUY", "NOT_SELL")):
-                safe_votes = int(value)
+        key_upper = str(key).upper()
+        if not isinstance(value, (int, float)):
+            continue
+        v = int(value)
+        # Action stances: BUY, SELL, ADD, REDUCE
+        if any(s in key_upper for s in ("BUY", "SELL", "ADD", "REDUCE")):
+            action_votes += v
+        # Safe stance: HOLD
+        elif "HOLD" in key_upper:
+            safe_votes += v
 
     if action_votes > 0 or safe_votes > 0:
         return action_votes, safe_votes
@@ -222,27 +225,26 @@ def _extract_votes_from_text(text: str) -> tuple[int, int] | None:
     """
     本文テキストから投票数をフォールバック抽出する。
 
-    パターン:
-    - "BUY票: N" / "NOT_BUY_WAIT票: N"
-    - "SELL票: N" / "NOT_SELL_HOLD票: N"
-    - "BUYx票 vs NOT_BUY_WAITy票" 形式
+    5択スタンス対応:
+    - "BUY: N" / "HOLD: N" / "BUY票: N" / "HOLD票: N"
     """
-    # BUY モード
-    m_buy = re.search(r"BUY票[:\s]*(\d+)", text)
-    m_notbuy = re.search(r"NOT_BUY_WAIT票[:\s]*(\d+)", text)
-    if m_buy and m_notbuy:
-        return int(m_buy.group(1)), int(m_notbuy.group(1))
+    action_total = 0
+    safe_total = 0
+    found = False
 
-    # SELL モード
-    m_sell = re.search(r"SELL票[:\s]*(\d+)", text)
-    m_notsell = re.search(r"NOT_SELL_HOLD票[:\s]*(\d+)", text)
-    if m_sell and m_notsell:
-        return int(m_sell.group(1)), int(m_notsell.group(1))
+    for stance in ("BUY", "SELL", "ADD", "REDUCE"):
+        m = re.search(rf"{stance}[票]?[:\s]*(\d+)", text)
+        if m:
+            action_total += int(m.group(1))
+            found = True
 
-    # "BUY1票 vs NOT_BUY_WAIT3票" 形式
-    m = re.search(r"BUY\s*(\d+)\s*票\s*vs\s*NOT_BUY_WAIT\s*(\d+)\s*票", text)
+    m = re.search(r"HOLD[票]?[:\s]*(\d+)", text)
     if m:
-        return int(m.group(1)), int(m.group(2))
+        safe_total += int(m.group(1))
+        found = True
+
+    if found:
+        return action_total, safe_total
 
     return None
 
@@ -252,8 +254,8 @@ def _extract_decision_from_text(text: str) -> str | None:
     本文マークダウンから判定結果をフォールバック抽出する。
 
     パターン:
-    - 支持側（機械）: **NOT_BUY_WAIT**
-    - supported_side: NOT_BUY_WAIT
+    - 支持側（機械）: **HOLD**
+    - supported_side: BUY
     """
     m = re.search(
         r"(?:支持側|supported_side)(?:（機械）)?[:\s]*\*{0,2}(\S+?)\*{0,2}\s*$",

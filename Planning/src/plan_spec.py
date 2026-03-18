@@ -20,7 +20,7 @@ class PlanSpec:
     plan_id: str
 
     # decision ブロック
-    decision_final: str        # BUY | NO_BUY | SELL | NO_SELL
+    decision_final: str        # BUY | SELL | ADD | REDUCE | HOLD
     vote_for: int
     vote_against: int
     horizon: str               # SHORT | MID | LONG

@@ -36,9 +36,6 @@ _SIDE_JA: dict[str, str] = {
     "ADD": "買い増し",
     "REDUCE": "売り減らし",
     "HOLD": "現状維持",
-    "NOT_BUY_WAIT": "買わない（様子見）",
-    "NOT_SELL_HOLD": "売らない（保有継続）",
-    "NOT_ADD_HOLD": "買い増さない（現状維持）",
 }
 
 

@@ -49,7 +49,7 @@ tools: []
 ### Planning品質
 
 1. **verdict の整合性**
-   - final_judge の支持側（BUY/NOT_BUY_WAIT等）と newplan_full 内の decision が一致しているか
+   - final_judge の支持側（BUY/SELL/ADD/REDUCE/HOLD）と newplan_full 内の decision が一致しているか
    - 不一致の場合は severity="高"
 
 2. **パラメータの完全性**
@@ -66,7 +66,7 @@ tools: []
 - **lanes**: Discussion の各レーン（discussion_md, opinion_1, opinion_2, judge_md）
 - **final_judge**: Discussion の最終判定（支持側, 総合一致度, 根拠）
 - **newplan_full**: Planning の出力（YAML形式の投資プラン）
-- **verdict**: 最終判断（BUY, NOT_BUY_WAIT 等）
+- **verdict**: 最終判断（BUY, SELL, ADD, REDUCE, HOLD）
 
 ---
 

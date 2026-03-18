@@ -106,7 +106,7 @@ class TestBuildEmbed(unittest.TestCase):
                 "ng_reason": "急落",
             },
             new_plan={
-                "decision_final": "NOT_BUY_WAIT",
+                "decision_final": "HOLD",
                 "confidence": 0.75,
                 "allocation_jpy": 50000,
                 "quantity": 2,
@@ -321,7 +321,7 @@ class TestPlanComparison(unittest.TestCase):
             ticker="TSLA",
             monitor_data={"result": "NG", "current_price": 200.0, "plan_price": 250.0,
                           "price_change_pct": -20.0, "summary": "急落"},
-            new_plan={"decision_final": "NOT_BUY_WAIT", "confidence": "high"},
+            new_plan={"decision_final": "HOLD", "confidence": "high"},
             plan_comparison="旧プランでは買い判定だったが、新プランでは様子見に変更",
         )
         embed = build_embed(payload)
@@ -336,7 +336,7 @@ class TestPlanComparison(unittest.TestCase):
             ticker="TSLA",
             monitor_data={"result": "NG", "current_price": 200.0, "plan_price": 250.0,
                           "price_change_pct": -20.0, "summary": "急落"},
-            new_plan={"decision_final": "NOT_BUY_WAIT", "confidence": "high"},
+            new_plan={"decision_final": "HOLD", "confidence": "high"},
             plan_comparison="",
         )
         embed = build_embed(payload)
