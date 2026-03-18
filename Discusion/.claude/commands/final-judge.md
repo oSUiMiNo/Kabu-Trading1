@@ -57,10 +57,12 @@ model: claude-haiku-4-5
 ## 作業手順
 1) **対象レーンの元ログ（銘柄名_setN.md）を最初にすべて Read**
    - 各setの Analyst / Devils の主張・根拠・争点を把握
+   - **各 Round の証拠表を確認**し、ソース付き事実と URL を把握
    - これが「正」の情報源となる
 2) 対象レーンの `{TICKER}_setN_judge_*.md` を探索
 3) setごとに judge から情報を抽出
    - `{TICKER}_setN_judge_*.md` の最大Kを Read → EXPORTから抽出
+   - **evidence_score** があれば取得する
 4) setごとの結果を揃える（欠損があれば "欠損" として扱う）
 5) 最終判定を決める（投票閾値ルール）
    - 各opinion の supported_side を **1票** として数える
@@ -73,8 +75,10 @@ model: claude-haiku-4-5
      - 全レーンAGREEDかつ同じ supported_side → AGREED_STRONG
      - 最多得票が勝ったがDISAGREEDやAGREED内の割れがある → MIXED
      - 明確な多数派なし → INCOMPLETE
-6) 理由の要約
+6) 根拠の構造化
    - 「最終 supported_side を支持する理由」を set別の why / reasons から **共通点優先**で 3〜6 個
+   - **各根拠にどのレーン（set）由来かを明記**する
+   - **元ログの証拠表からソース情報（URL・ソース説明）を引用**する
    - set間で割れた場合は「割れてるポイント」を 2〜4 個（推測禁止）
 7) 結果を **テキスト応答として出力**
 
@@ -103,6 +107,7 @@ model: claude-haiku-4-5
 ### set{N}（対象レーンごとに記載）
 - 判定一致度: AGREED | DISAGREED
 - 支持側: BUY | SELL | ADD | REDUCE | HOLD
+- evidence_score: {AGREED 時は両 opinion の平均。DISAGREED 時は null}
 - 一行要約: "{judgeの一行要約}"
 - 補足: "{特記事項があれば短く。DISAGREEDの場合は両論の概要を記載}"
 
@@ -112,8 +117,9 @@ model: claude-haiku-4-5
 - 支持側（表示）: **BUY** / **SELL** / **ADD** / **REDUCE** / **HOLD**
 - 支持側（機械）: BUY | SELL | ADD | REDUCE | HOLD
 - 総合一致度: **AGREED_STRONG** | **MIXED** | **INCOMPLETE**
-- 根拠（要約）:
-  - 3〜6個（最終結論を支持する理由。set由来のみ、推測禁止）
+- 根拠（構造化）:
+  - 3〜6個。各根拠に lane とソース情報を付与する
+  - 形式：「[主張の要約]（lane: set{N}、出典：[ソース説明 or URL]）」
 
 ---
 
@@ -150,6 +156,7 @@ model: claude-haiku-4-5
   set{N}:  # 対象レーンごとに記載
     judge一致度: AGREED | DISAGREED
     支持側: BUY | SELL | ADD | REDUCE | HOLD
+    evidence_score: {0.00〜1.00（AGREED時は平均） | null（DISAGREED時）}
     一行要約: "{...}"
 
 最終判定:
@@ -157,8 +164,14 @@ model: claude-haiku-4-5
   総合一致度: AGREED_STRONG | MIXED | INCOMPLETE
 
 根拠:
-  - "{理由1}"
-  - "{理由2}"
+  - lane: set{N}
+    claim: "{主張の要約}"
+    source_desc: "{ソースの説明}"
+    source_url: "{URL（元ログの証拠表から取得。なければ省略）}"
+  - lane: set{N}
+    claim: "{主張の要約}"
+    source_desc: "{ソースの説明}"
+    source_url: "{URL}"
 
 対立点:
   - "{割れ/不足1}"

@@ -27,7 +27,7 @@ class PlanSpec:
     p: float
     confidence: str            # HIGH | MED | LOW
     decision_basis: list[dict] = field(default_factory=list)
-    # 各 dict: {"fact_id": "F12", "source_id": "S3", "why_it_matters": "..."}
+    # 各 dict: {"lane": "set1", "source_desc": "...", "source_url": "...", "why_it_matters": "..."}
 
     # freshness ブロック
     log_age_days: int = 0
@@ -104,8 +104,9 @@ def build_yaml(spec: PlanSpec) -> str:
     basis_list = []
     for b in spec.decision_basis:
         entry = _ordered_dict(
-            ("fact_id", b.get("fact_id", "")),
-            ("source_id", b.get("source_id", "")),
+            ("lane", b.get("lane", "")),
+            ("source_desc", b.get("source_desc", "")),
+            ("source_url", b.get("source_url", "")),
             ("why_it_matters", b.get("why_it_matters", b.get("text", ""))),
         )
         basis_list.append(entry)

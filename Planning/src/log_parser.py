@@ -26,9 +26,10 @@ DECISION_MAP: dict[str, str] = {
 @dataclass
 class DecisionBasis:
     """判定の根拠1件"""
-    fact_id: str         # "F12" など（抽出できない場合は空文字）
-    source_id: str       # "S3" など（抽出できない場合は空文字）
-    text: str            # 根拠の全文テキスト
+    lane: str            # "set1" 等（どのレーンの議論由来か）
+    source_desc: str     # ソースの説明
+    source_url: str      # ソース URL（証拠表から取得。なければ空文字）
+    text: str            # 主張の要約テキスト
 
 
 @dataclass
@@ -283,36 +284,47 @@ def _extract_decision_basis(export: dict | None, full_text: str) -> list[Decisio
     """
     根拠リストを抽出する。
 
-    EXPORT yaml の「根拠」キーから取得し、
-    各項目内の F#[S#] パターンがあれば fact_id/source_id に分解する。
+    EXPORT yaml の「根拠」キーから取得する。
+    新形式（構造化）: lane / claim / source_desc / source_url を持つ dict
+    旧形式（テキスト）: 文字列リスト（フォールバック）
     """
     basis_list: list[DecisionBasis] = []
-    raw_items: list[str] = []
 
     # EXPORT から取得
     if export and "根拠" in export:
         items = export["根拠"]
         if isinstance(items, list):
-            raw_items = [str(item) for item in items]
+            for item in items:
+                if isinstance(item, dict):
+                    # 新形式: 構造化された根拠
+                    basis_list.append(DecisionBasis(
+                        lane=str(item.get("lane", "")),
+                        source_desc=str(item.get("source_desc", "")),
+                        source_url=str(item.get("source_url", "")),
+                        text=str(item.get("claim", "")),
+                    ))
+                else:
+                    # 旧形式フォールバック: テキストのみ
+                    basis_list.append(DecisionBasis(
+                        lane="",
+                        source_desc="",
+                        source_url="",
+                        text=str(item),
+                    ))
 
-    # EXPORT に無ければ本文の「根拠（要約）」セクションから
-    if not raw_items:
-        m = re.search(r"根拠（要約）[:\s]*\n((?:\s+\d+\.\s+.+\n?)+)", full_text)
+    # EXPORT に無ければ本文の「根拠（構造化）」セクションから
+    if not basis_list:
+        m = re.search(r"根拠[（(](?:構造化|要約)[）)][:\s]*\n((?:\s*-\s+.+\n?)+)", full_text)
         if m:
             for line in m.group(1).strip().splitlines():
-                cleaned = re.sub(r"^\s*\d+\.\s*", "", line).strip()
+                cleaned = re.sub(r"^\s*-\s*", "", line).strip()
                 if cleaned:
-                    raw_items.append(cleaned)
-
-    for item in raw_items:
-        # F#[S#] パターンを探す
-        fact_match = re.search(r"(F\d+)", item)
-        source_match = re.search(r"(S\d+)", item)
-        basis_list.append(DecisionBasis(
-            fact_id=fact_match.group(1) if fact_match else "",
-            source_id=source_match.group(1) if source_match else "",
-            text=item,
-        ))
+                    basis_list.append(DecisionBasis(
+                        lane="",
+                        source_desc="",
+                        source_url="",
+                        text=cleaned,
+                    ))
 
     return basis_list
 

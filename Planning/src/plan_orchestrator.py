@@ -414,7 +414,7 @@ async def run_plan_orchestrator(
 
     # decision_basis を dict リストに変換
     basis_dicts = [
-        {"fact_id": b.fact_id, "source_id": b.source_id, "why_it_matters": b.text}
+        {"lane": b.lane, "source_desc": b.source_desc, "source_url": b.source_url, "why_it_matters": b.text}
         for b in judgment.decision_basis
     ]
 

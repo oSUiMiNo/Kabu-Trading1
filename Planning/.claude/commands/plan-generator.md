@@ -48,7 +48,7 @@ model: claude-haiku-4-5
 ## ルール
 
 1. **PlanSpec の数値フィールドは一切変更しない**
-2. `decision_basis` の `fact_id` / `source_id` は最終判定ログから確認できるもののみ使用
+2. `decision_basis` の `lane` / `source_desc` / `source_url` は最終判定ログから確認できるもののみ使用
 3. `why_it_matters` は推測禁止。ログ記載の内容のみを根拠にする
 4. `monitoring_hint.reason` は `confidence`、`freshness.status`、`data_checks.status` を踏まえて記述
 5. `BLOCK_REEVALUATE` / `STALE_REEVALUATE` の場合は、`execution_plan.notes` に警告文を含める

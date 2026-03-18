@@ -18,7 +18,7 @@ Plan Agent 要件定義書（v0 / 固定値反映版）
 
 価格ズレが大きい場合は 停止→再評価要求 に切り替える
 
-根拠（fact_id/source_id）をプランに必ず保持する
+根拠（lane/source_desc/source_url）をプランに必ず保持する
 
 日本株の 単元（100株）制約を考慮し、実行不可能な場合はその旨を明示
 
@@ -197,8 +197,9 @@ decision:
   p: 0.0
   confidence: "HIGH|MED|LOW"
   decision_basis:
-    - fact_id: "F12"
-      source_id: "S3"
+    - lane: "set1"
+      source_desc: "Yahoo Finance 株価指標"
+      source_url: "https://..."
       why_it_matters: "結論の決め手"
 
 freshness:
@@ -261,7 +262,7 @@ BUY/SELL/ADD/REDUCE/HOLD の全ケースで PlanSpecを必ず出力
 
 価格ズレが ±10%超の場合、必ず BLOCK_REEVALUATE に切り替わる
 
-出力に根拠（fact_id/source_id）が含まれて追跡可能
+出力に根拠（lane/source_desc/source_url）が含まれて追跡可能
 
 日本株の100株制約により実行不能な場合、NOT_EXECUTABLE_DUE_TO_LOT を明示して破綻しない
 

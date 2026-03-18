@@ -76,11 +76,14 @@ model: claude-haiku-4-5
 
 ## evidence_score の算出
 
-各 opinion の EXPORT に含まれる `evidence_quality` から算出する：
+各 opinion の EXPORT に含まれる `evidence_quality` から、**その opinion が支持した側**の数値を使って算出する：
 
 ```
-evidence_score = ソース付き事実の数 / (ソース付き事実の数 + ソースなし主張の数)
+evidence_score = 支持側のソース付き事実の数 / (支持側のソース付き事実の数 + 支持側のソースなし主張の数)
 ```
+
+例：opinion_A が Analyst 側（BUY）を支持 → `analyst_sourced_facts` と `analyst_unsourced_claims` で計算
+例：opinion_B が DA 側（HOLD）を支持 → `da_sourced_facts` と `da_unsourced_claims` で計算
 
 - 両 opinion の evidence_score を比較し、**証拠の質に明確な差があるか**を判定する
 - AGREED の場合：evidence_score が高い方の opinion の理由を優先的に採用
