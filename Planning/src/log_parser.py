@@ -297,6 +297,7 @@ def _extract_decision_basis(export: dict | None, full_text: str) -> list[Decisio
             for item in items:
                 if isinstance(item, dict):
                     # 新形式: 構造化された根拠
+                    # final-judge の "claim" → plan-generator で "why_it_matters" に補強される
                     basis_list.append(DecisionBasis(
                         lane=str(item.get("lane", "")),
                         source_desc=str(item.get("source_desc", "")),

@@ -65,7 +65,7 @@ def build_check_prompt(ticker: str, archivelog: dict) -> str:
                 basis_list = decision.get("decision_basis", [])
                 if basis_list:
                     basis_text = "\n".join(
-                        f"  - [{b.get('fact_id', '?')}] {b.get('why_it_matters', '')}"
+                        f"  - [{b.get('lane', '?')}] {b.get('why_it_matters', '')}"
                         for b in basis_list
                     )
 
