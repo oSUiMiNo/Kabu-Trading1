@@ -326,7 +326,7 @@ async def run_plan_orchestrator(
     """
     now = datetime.now()
     t = ticker.upper()
-    h = Horizon[horizon]
+    h = Horizon[_HORIZON_MAP.get(horizon, horizon)]
     market = detect_market(ticker)
     risk_jpy = parse_risk_limit(risk_limit, budget_total_jpy)
     cfg = config or PlanConfig()
