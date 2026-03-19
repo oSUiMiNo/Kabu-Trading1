@@ -1,18 +1,13 @@
 """
 Plan オーケストレーター
 
-DB から最新セッションの final_judge / lanes を取得し、
+指定された1銘柄の final_judge / lanes を取得し、
 決定論的な計算ですべての数値を確定させた上で、
-エージェントに commentary フィールド (decision_basis の why_it_matters,
-monitoring_hint の reason, execution_notes) を生成させ、
-PlanSpec YAML を出力する。
+エージェントに commentary フィールドを生成させ、PlanSpec YAML を出力する。
+複数銘柄の並列実行は planning_batch.py（PJTルート）が担う。
 
 Usage:
     python main.py <銘柄> <期間> [予算(円)] [リスク上限] [現在価格] [基準価格]
-
-    現在価格を省略すると price-fetcher エージェントがWeb検索で自動取得する。
-    基準価格を省略すると現在価格と同値（ズレ0%）になる。
-    "-" を指定しても省略扱い。
 
 例:
     python main.py 楽天 中期
@@ -33,7 +28,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import (
     safe_db, get_portfolio_config,
     get_latest_archivelog, update_archivelog,
-    fetch_active_for_planning,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -541,56 +535,12 @@ def _parse_optional_float(argv: list[str], idx: int) -> float | None:
     return float(val)
 
 
-async def run_batch():
-    """DB から全 active 銘柄を自動検出し、並列で Planning を実行する。"""
-    pending = safe_db(fetch_active_for_planning) or []
-    if not pending:
-        print("[Planning] active な対象銘柄がありません。終了。")
-        return
-
-    _db_config = safe_db(get_portfolio_config) or {}
-    budget = int(_db_config.get("total_budget_jpy") or 0)
-    if budget == 0:
-        print("エラー: 予算が 0 です。portfolio_config を設定してください。")
-        sys.exit(1)
-
-    risk_pct = _db_config.get("risk_limit_pct")
-    risk_limit = f"{risk_pct}%" if risk_pct is not None else "5%"
-    plan_config = load_plan_config(_db_config)
-
-    tickers = [row["ticker"] for row in pending]
-    print(f"[Planning] 対象銘柄: {', '.join(tickers)}")
-    print(f"[設定] 予算={budget:,}円 リスク上限={risk_limit}")
-
-    async def _process_one(row):
-        ticker = row["ticker"]
-        span = row.get("span", "mid")
-        try:
-            await run_plan(
-                ticker, budget, risk_limit, span, config=plan_config,
-            )
-        except SystemExit:
-            print(f"  [{ticker}] Planning 失敗")
-        except Exception as e:
-            print(f"  [{ticker}] 予期しないエラー: {e}")
-
-    async with anyio.create_task_group() as tg:
-        for row in pending:
-            tg.start_soon(_process_one, row)
-
-    print(f"\n[Planning] 全銘柄処理完了")
-
-
 if __name__ == "__main__":
-    # 引数なし → バッチモード（DB から全 active 銘柄を自動検出）
-    if len(sys.argv) <= 1:
-        anyio.run(run_batch)
-        sys.exit(0)
-
     if len(sys.argv) < 3:
         print("使い方:")
-        print("  python main.py                                    # バッチモード（DB から自動検出）")
         print("  python main.py <銘柄> <期間> [予算] [リスク上限]    # 手動指定")
+        print()
+        print("  バッチ実行は planning_batch.py を使用してください。")
         print()
         print("  期間（必須）: '短期' / '中期' / '長期'")
         print("  予算・リスク上限は省略時に Supabase DB から自動取得")

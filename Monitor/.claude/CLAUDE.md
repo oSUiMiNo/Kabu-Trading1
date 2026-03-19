@@ -18,7 +18,8 @@ python main_pipeline.py                    # 全パイプライン（Monitor →
 python main_pipeline.py --ticker NVDA      # 特定銘柄のみ
 python main_pipeline.py --monitor-only     # 監視のみ（Discussion/Planning/Watch 起動しない）
 python main_pipeline.py --market US        # 米国株のみ
-python Monitor/src/main.py # 監視のみ（単体実行）
+python monitor_batch.py                    # 監視バッチ（単体実行）
+python Monitor/src/main.py --ticker NVDA   # 1銘柄のみ
 ```
 
 
@@ -26,8 +27,9 @@ python Monitor/src/main.py # 監視のみ（単体実行）
 
 | ファイル | 役割 |
 |----------|------|
-| (PJTルート) main_pipeline.py | パイプラインオーケストレーター（Monitor → Discussion → Planning → Watch） |
-| src/main.py | 監視オーケストレーター |
+| (PJTルート) main_pipeline.py | パイプラインオーケストレーター（Technical → Monitor → Discussion → Planning → Watch） |
+| (PJTルート) monitor_batch.py | 複数銘柄バッチ |
+| src/main.py | 1銘柄の監視チェック |
 | src/event_watch_check.py | イベント watch + 定期スケジュールの検出（event-monitor.yml から呼ばれる） |
 | src/AgentUtil.py | Claude Agent SDK ユーティリティ（shared/agent_util.py のラッパー） |
 | .claude/commands/monitor-checker.md | 監視チェック用サブエージェント定義 |

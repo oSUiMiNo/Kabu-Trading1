@@ -4,8 +4,8 @@
 5 大ブロックを順番に実行する。各ブロックは DB（伝言板方式）で連携し、
 ブロック間のデータ受け渡しは archive テーブルを介して行う。
 
-オーケストレーターの役割は大ブロックを順番に呼び出すだけであり、
-ティッカー検出や並列化の責務は各ブロック（またはそのバッチアダプタ）が持つ。
+各ブロックの複数銘柄並列実行は *_batch.py が担い、
+このファイルはブロックを順番に呼び出すだけ。
 
 Usage:
     python main_pipeline.py                    # 全銘柄パイプライン
@@ -16,7 +16,6 @@ Usage:
 """
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -25,40 +24,20 @@ import anyio
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT / "shared"))
-sys.path.insert(0, str(PROJECT_ROOT / "Monitor" / "src"))
 from supabase_client import (
     safe_db,
+    list_watchlist,
     fetch_active_for_discussion,
     fetch_active_for_planning,
+    fetch_today_monitor_results,
     get_archivelog_by_id,
     update_archivelog,
 )
-
-from main import run_monitor
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA
 from discord_notifier import notify, send_start_notification
 
-TECHNICAL_DIR = PROJECT_ROOT / "Technical"
-DISCUSSION_DIR = PROJECT_ROOT / "Discusion" / "src"
-PLANNING_DIR = PROJECT_ROOT / "Planning" / "src"
-WATCH_DIR = PROJECT_ROOT / "Watch" / "src"
-
-SPAN_TO_JP = {"short": "短期", "mid": "中期", "long": "長期"}
-
 
 # ── ユーティリティ ───────────────────────────────────────
-
-def _find_venv_python(src_dir: Path) -> str:
-    """プロジェクトの venv Python パスを返す。"""
-    win = src_dir / ".venv" / "Scripts" / "python.exe"
-    unix = src_dir / ".venv" / "bin" / "python"
-    if win.exists():
-        return str(win)
-    if unix.exists():
-        return str(unix)
-    return "python"
-
-
 
 def _load_event_context() -> dict | None:
     """環境変数 EVENT_CONTEXT から JSON を読み取る。"""
@@ -71,88 +50,17 @@ def _load_event_context() -> dict | None:
         return None
 
 
-# ── Technical ─────────────────────────────────────────────
-
-def run_technical(target_ticker: str | None = None) -> int:
-    """Technical を subprocess で実行する。テクニカル指標を取得して archive に記録する。"""
-    print(f"\n{'='*60}")
-    print(f"=== Phase 1: Technical ===")
-    print(f"{'='*60}")
-
-    python = _find_venv_python(TECHNICAL_DIR)
-    script = str(TECHNICAL_DIR / "src" / "main.py")
-    cmd = [python, script]
-    if target_ticker:
-        cmd.extend(["--ticker", target_ticker])
-
-    print(f"  Technical 起動: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(TECHNICAL_DIR))
+def _run_batch(script_name: str, extra_args: list[str] | None = None) -> int:
+    """PJTルートの batch スクリプトを subprocess で実行する。"""
+    cmd = [sys.executable, str(PROJECT_ROOT / script_name)] + (extra_args or [])
+    print(f"  起動: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     if result.returncode != 0:
-        print(f"  Technical 失敗 (exit code: {result.returncode})")
-    return result.returncode
-
-
-# ── Discussion ────────────────────────────────────────────
-
-def run_discussion() -> int:
-    """Discussion を subprocess で実行する。Discussion が内部で全対象銘柄を自動検出・処理する。"""
-    print(f"\n{'='*60}")
-    print(f"=== Phase 3: Discussion ===")
-    print(f"{'='*60}")
-
-    python = _find_venv_python(DISCUSSION_DIR)
-    script = str(DISCUSSION_DIR / "main.py")
-    cmd = [python, script]
-
-    print(f"  Discussion 起動: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(DISCUSSION_DIR))
-    if result.returncode != 0:
-        print(f"  Discussion 失敗 (exit code: {result.returncode})")
-    return result.returncode
-
-
-# ── Planning ─────────────────────────────────────────────
-
-def run_planning() -> int:
-    """Planning を subprocess で実行する。Planning が内部で全対象銘柄を自動検出・処理する。"""
-    print(f"\n{'='*60}")
-    print(f"=== Phase 4: Planning ===")
-    print(f"{'='*60}")
-
-    python = _find_venv_python(PLANNING_DIR)
-    script = str(PLANNING_DIR / "main.py")
-    cmd = [python, script]
-
-    print(f"  Planning 起動: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(PLANNING_DIR))
-    if result.returncode != 0:
-        print(f"  Planning 失敗 (exit code: {result.returncode})")
-    return result.returncode
-
-
-# ── Watch ────────────────────────────────────────────────
-
-def run_watch() -> int:
-    """Watch を subprocess で実行する。Watch が内部で全対象銘柄を自動検出・処理する。"""
-    print(f"\n{'='*60}")
-    print(f"=== Phase 5: Watch ===")
-    print(f"{'='*60}")
-
-    python = _find_venv_python(WATCH_DIR)
-    script = str(WATCH_DIR / "main.py")
-    cmd = [python, script]
-
-    print(f"  Watch 起動: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(WATCH_DIR))
-    if result.returncode != 0:
-        print(f"  Watch 失敗 (exit code: {result.returncode})")
+        print(f"  {script_name} 失敗 (exit code: {result.returncode})")
     return result.returncode
 
 
 # ── パイプライン本体 ─────────────────────────────────────
-#
-# オーケストレーターの役割：大ブロックを順番に呼び出すだけ。
-# ティッカーの検出・ディスパッチは各ブロック（バッチアダプタ）の責務。
 
 async def run_pipeline(
     target_ticker: str | None = None,
@@ -164,19 +72,38 @@ async def run_pipeline(
     event_context = _load_event_context()
     send_start_notification(market)
 
+    # display_names を事前取得（全フェーズの通知で使用）
+    wl = safe_db(list_watchlist, active_only=True, market=market) or []
+    dn_map = {w["ticker"]: w.get("display_name") or w["ticker"] for w in wl}
+
     # ── Phase 1: Technical ──
-    run_technical(target_ticker)
+    print(f"\n{'='*60}")
+    print(f"=== Phase 1: Technical ===")
+    print(f"{'='*60}")
+    tech_args = []
+    if target_ticker:
+        tech_args.extend(["--ticker", target_ticker])
+    _run_batch("technical_batch.py", tech_args)
 
     # ── Phase 2: Monitor ──
     print(f"\n{'='*60}")
     print(f"=== Phase 2: Monitor ===")
     print(f"{'='*60}")
+    mon_args = []
+    if target_ticker:
+        mon_args.extend(["--ticker", target_ticker])
+    if market:
+        mon_args.extend(["--market", market])
+    if skip_spans:
+        for span in skip_spans:
+            mon_args.extend(["--skip-span", span])
+    _run_batch("monitor_batch.py", mon_args)
 
-    summary = await run_monitor(target_ticker, market=market, skip_spans=skip_spans)
-    dn_map = summary.display_names
-
-    # Monitor ERROR / CHECK 通知（パイプラインレベル）
-    for ticker, monitor_data in summary.results.items():
+    # Monitor 後処理：DB から結果取得して ERROR/CHECK 通知
+    monitor_results = safe_db(fetch_today_monitor_results) or []
+    for rec in monitor_results:
+        ticker = rec["ticker"]
+        monitor_data = rec.get("monitor") or {}
         if monitor_data.get("retries_exhausted"):
             payload = NotifyPayload(
                 label=NotifyLabel.ERROR,
@@ -202,7 +129,8 @@ async def run_pipeline(
 
     if not ng_tickers:
         print("\nNG 銘柄なし。Discussion/Planning/Watch は起動しません。")
-        ok_tickers = [t for t, r in summary.results.items() if r.get("result") == "OK"]
+        ok_tickers = [rec["ticker"] for rec in monitor_results
+                      if (rec.get("monitor") or {}).get("result") == "OK"]
         if ok_tickers:
             market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
             ok_names = [dn_map.get(t, t) for t in ok_tickers]
@@ -220,9 +148,12 @@ async def run_pipeline(
         return
 
     # ── Phase 3: Discussion ──
-    run_discussion()
+    print(f"\n{'='*60}")
+    print(f"=== Phase 3: Discussion ===")
+    print(f"{'='*60}")
+    _run_batch("discussion_batch.py")
 
-    # Post-Discussion: エラー検出（同一 archive 方式のため propagate 不要）
+    # Post-Discussion: エラー検出
     ng_ticker_names = []
     for row in ng_tickers:
         ticker = row["ticker"]
@@ -246,7 +177,10 @@ async def run_pipeline(
             await notify(payload)
 
     # ── Phase 4: Planning ──
-    run_planning()
+    print(f"\n{'='*60}")
+    print(f"=== Phase 4: Planning ===")
+    print(f"{'='*60}")
+    _run_batch("planning_batch.py")
 
     # Post-Planning: エラー検出 + 失敗レコードを status=failed にして残存防止
     planning_failed = safe_db(fetch_active_for_planning) or []
@@ -267,14 +201,17 @@ async def run_pipeline(
         await notify(payload)
 
     # ── Phase 5: Watch ──
-    run_watch()
+    print(f"\n{'='*60}")
+    print(f"=== Phase 5: Watch ===")
+    print(f"{'='*60}")
+    _run_batch("watch_batch.py")
 
     # ── COMPLETE 通知 ──
     print(f"\n{'='*60}")
     print(f"=== パイプライン完了 ===")
     print(f"{'='*60}")
 
-    all_tickers = list(summary.results.keys())
+    all_tickers = [rec["ticker"] for rec in monitor_results]
     market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
     all_names = [dn_map.get(t, t) for t in all_tickers]
     ng_names = [dn_map.get(t, t) for t in ng_ticker_names]

@@ -1,12 +1,11 @@
 """
 Watch オーケストレーター
 
-archive テーブルの情報を読み取り、watchlist を更新し、Discord 通知を送信する。
-パイプラインの Phase 4 に相当する。
+指定された1銘柄の archive を読み取り、watchlist を更新し、Discord 通知を送信する。
+複数銘柄の並列実行は watch_batch.py（PJTルート）が担う。
 
 Usage:
-    python main.py                  # archive.active=True の全銘柄を処理
-    python main.py --ticker NVDA    # 指定銘柄のみ
+    python main.py --ticker NVDA
 """
 import argparse
 import json
@@ -23,7 +22,6 @@ from supabase_client import (
     safe_db,
     update_watchlist,
     update_archivelog,
-    fetch_active_for_watch,
     get_latest_archivelog_with_newplan,
     get_previous_archivelog_with_newplan,
     list_watchlist,
@@ -188,30 +186,8 @@ async def process_one_ticker(ticker: str) -> bool:
     return True
 
 
-async def run_watch(target_ticker: str | None = None):
-    if target_ticker:
-        tickers = [target_ticker.upper()]
-    else:
-        tickers = safe_db(fetch_active_for_watch) or []
-        if not tickers:
-            print("[Watch] active な対象銘柄がありません。終了。")
-            return
-
-    print(f"[Watch] 対象銘柄: {', '.join(tickers)}")
-
-    async with anyio.create_task_group() as tg:
-        for ticker in tickers:
-            tg.start_soon(process_one_ticker, ticker)
-
-    print(f"\n[Watch] 全銘柄処理完了")
-
-
-async def main():
-    parser = argparse.ArgumentParser(description="Watch ブロック：watchlist 更新 + Discord 通知")
-    parser.add_argument("--ticker", help="処理対象の銘柄（省略時は archive.active=True の全銘柄）")
-    args = parser.parse_args()
-    await run_watch(target_ticker=args.ticker)
-
-
 if __name__ == "__main__":
-    anyio.run(main)
+    parser = argparse.ArgumentParser(description="Watch ブロック：watchlist 更新 + Discord 通知")
+    parser.add_argument("--ticker", required=True, help="処理対象の銘柄")
+    args = parser.parse_args()
+    anyio.run(lambda: process_one_ticker(args.ticker.upper()))

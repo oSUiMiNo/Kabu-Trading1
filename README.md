@@ -31,11 +31,11 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 
 | モジュール | 役割 | 主要ファイル |
 |-----------|------|------------|
-| **Technical** | テクニカル指標取得 + archive 作成 | `Technical/src/main.py` |
-| **Monitor** | 市場チェック + パイプライン制御 | `main_pipeline.py`<br>`Monitor/src/main.py` |
-| **Discussion** | 複数レーン並列議論 + 最終判定 | `Discusion/src/main.py` |
-| **Planning** | プラン YAML 生成 | `Planning/src/main.py` |
-| **Watch** | watchlist 更新 + Discord 業務通知 | `Watch/src/main.py` |
+| **Technical** | テクニカル指標取得 + archive 作成 | `technical_batch.py`<br>`Technical/src/main.py` |
+| **Monitor** | 市場チェック + パイプライン制御 | `monitor_batch.py`<br>`Monitor/src/main.py` |
+| **Discussion** | 複数レーン並列議論 + 最終判定 | `discussion_batch.py`<br>`Discusion/src/main.py` |
+| **Planning** | プラン YAML 生成 | `planning_batch.py`<br>`Planning/src/main.py` |
+| **Watch** | watchlist 更新 + Discord 業務通知 | `watch_batch.py`<br>`Watch/src/main.py` |
 | **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/main.py` |
 | **NightWorker** | archive 品質レビュー + Issue 作成 + 用語集統合 | `NightWorker/src/main.py`<br>`NightWorker/src/words_consolidator.py` |
 | **shared** | DB・通知・LLM クライアント共通 | `shared/supabase_client.py`<br>`shared/discord_notifier.py`<br>`shared/llm_client.py` |
@@ -57,8 +57,8 @@ python main_pipeline.py --monitor-only
 # 米国株のみ
 python main_pipeline.py --market US
 
-# 監視単体実行
-python Monitor/src/main.py
+# 監視バッチ（単体実行）
+python monitor_batch.py
 ```
 
 ---

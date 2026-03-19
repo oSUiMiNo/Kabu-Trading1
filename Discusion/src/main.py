@@ -1,12 +1,13 @@
 """
-並行オーケストレーター（レーン型アーキテクチャ）
+Discussion オーケストレーター（レーン型アーキテクチャ）
 
-同一銘柄に対して複数のレーンを並行実行する。
+指定された1銘柄に対して複数のレーンを並行実行する。
 各レーンは「議論 → Opinion → Judge」のフローを独立して完結させる。
 全レーン完了後、全レーン（AGREED+DISAGREED）でFinal Judgeを実行する。
+複数銘柄の並列実行は discussion_batch.py（PJTルート）が担う。
 
-DB書き込みはこのオーケストレーターに集約。
-全レーン完了後にlanes JSONB一括書き込み、final_judge完了後に最終判定書き込み。
+Usage:
+    python main.py <銘柄> <投資期間> [モード] [--archive-id ID] [--display-name 名前]
 """
 import sys
 from datetime import datetime
@@ -20,9 +21,7 @@ from supabase_client import (
     create_archivelog,
     update_archivelog,
     get_discussion_config,
-    fetch_active_for_discussion,
     get_archivelog_by_id,
-    list_watchlist,
     ensure_technical_data,
 )
 
@@ -254,67 +253,45 @@ async def run_parallel(
         )
 
 
-async def run_batch():
-    """DB から全 active 銘柄を自動検出し、並列で Discussion を実行する。"""
-    pending = safe_db(fetch_active_for_discussion) or []
-    if not pending:
-        print("[Discussion] active な対象銘柄がありません。終了。")
-        return
-
-    # watchlist から display_name を取得
-    wl = safe_db(list_watchlist, active_only=False) or []
-    dn_map = {w["ticker"]: w.get("display_name") or "" for w in wl}
-
-    tickers = [row["ticker"] for row in pending]
-    print(f"[Discussion] 対象銘柄: {', '.join(tickers)}")
-
-    async def _process_one(row):
-        ticker = row["ticker"]
-        mode = row.get("mode", "buy")
-        span = row.get("span", "mid")
-        dn = dn_map.get(ticker, "")
-        archive_id = row.get("id")
-        try:
-            await run_parallel(
-                ticker, mode=mode, horizon=span,
-                display_name=dn,
-                existing_archive_id=archive_id,
-            )
-        except Exception as e:
-            print(f"  [{ticker}] 予期しないエラー: {e}")
-
-    async with anyio.create_task_group() as tg:
-        for row in pending:
-            tg.start_soon(_process_one, row)
-
-    print(f"\n[Discussion] 全銘柄処理完了")
-
-
 if __name__ == "__main__":
     _horizon_map = {"短期": "short", "中期": "mid", "長期": "long",
                     "short": "short", "mid": "mid", "long": "long"}
 
-    # 引数なし → バッチモード（DB から全 active 銘柄を自動検出）
-    if len(sys.argv) <= 1:
-        anyio.run(run_batch)
-        sys.exit(0)
-
     if len(sys.argv) < 3 or sys.argv[2] not in _horizon_map:
         print("使い方:")
-        print("  python main.py                          # バッチモード（DB から自動検出）")
-        print("  python main.py <銘柄> <投資期間> [モード]  # 手動指定")
+        print("  python main.py <銘柄> <投資期間> [モード] [--archive-id ID] [--display-name 名前]")
         print()
         print("  投資期間（必須）: '短期' / '中期' / '長期'")
         print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
+        print()
+        print("  バッチ実行は discussion_batch.py を使用してください。")
         sys.exit(1)
 
     ticker = sys.argv[1]
     horizon = _horizon_map[sys.argv[2]]
     _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "buy": "buy", "sell": "sell", "add": "add"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
-    num_sets = int(sys.argv[4]) if len(sys.argv) > 4 else None
-    max_rounds = int(sys.argv[5]) if len(sys.argv) > 5 else None
-    opinions_per_set = int(sys.argv[6]) if len(sys.argv) > 6 else None
-    initial_prompt = sys.argv[7] if len(sys.argv) > 7 else None
 
-    anyio.run(lambda: run_parallel(ticker, num_sets, max_rounds, initial_prompt, opinions_per_set, mode, horizon))
+    _archive_id = None
+    _display_name = ""
+    num_sets = None
+    max_rounds = None
+    opinions_per_set = None
+    initial_prompt = None
+
+    args = sys.argv[4:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--archive-id" and i + 1 < len(args):
+            _archive_id = args[i + 1]
+            i += 2
+        elif args[i] == "--display-name" and i + 1 < len(args):
+            _display_name = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    anyio.run(lambda: run_parallel(
+        ticker, num_sets, max_rounds, initial_prompt, opinions_per_set,
+        mode, horizon, display_name=_display_name, existing_archive_id=_archive_id,
+    ))
