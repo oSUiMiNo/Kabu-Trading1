@@ -46,6 +46,10 @@ jobs:
       - name: Setup Python
         run: uv python install 3.12
 
+      - name: Install Technical dependencies
+        working-directory: Technical
+        run: uv sync --no-install-project
+
       - name: Install Monitor dependencies
         working-directory: Monitor/src
         run: uv sync

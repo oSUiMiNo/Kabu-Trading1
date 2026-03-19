@@ -98,6 +98,11 @@ jobs:
         if: steps.resolve.outputs.should_run == 'true'
         run: uv python install 3.12
 
+      - name: Install Technical dependencies
+        if: steps.resolve.outputs.should_run == 'true'
+        working-directory: Technical
+        run: uv sync --no-install-project
+
       - name: Install Monitor dependencies
         if: steps.resolve.outputs.should_run == 'true'
         working-directory: Monitor/src

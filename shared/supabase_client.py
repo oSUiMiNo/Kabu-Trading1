@@ -404,6 +404,21 @@ def fetch_active_for_watch() -> list[str]:
     return list({r["ticker"] for r in (resp.data or [])})
 
 
+def fetch_today_monitor_results() -> list[dict]:
+    """今日の Monitor 結果（archive.monitor IS NOT NULL）を返す。
+    main_pipeline が Monitor 後に ERROR/CHECK 通知対象を判定するために使用。"""
+    today = datetime.now(_JST).strftime("%Y-%m-%d")
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("ticker, monitor, status")
+        .gte("created_at", f"{today}T00:00:00+09:00")
+        .not_.is_("monitor", "null")
+        .execute()
+    )
+    return resp.data or []
+
+
 
 # ── watchlist ─────────────────────────────────────────
 

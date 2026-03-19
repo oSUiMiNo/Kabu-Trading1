@@ -1,12 +1,13 @@
 """
 Technical オーケストレーター
 
-watchlist の active 銘柄に対してテクニカル指標を取得し、
-archive テーブルに記録する。
+指定された1銘柄のテクニカル指標を取得し、archive テーブルに記録する。
+複数銘柄の並列実行は technical_batch.py（PJTルート）が担う。
 
 Usage:
-    python main.py                 # watchlist 全銘柄
-    python main.py --ticker AAPL    # 特定銘柄のみ
+    python main.py --ticker AAPL                        # 既存 archive に書き込み
+    python main.py --ticker AAPL --create-archive       # 新規 archive を作成
+    python main.py --ticker 4755 --market JP            # 市場指定
 """
 
 import asyncio
@@ -19,7 +20,6 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
     safe_db,
-    list_watchlist,
     get_latest_archivelog_with_newplan,
     create_archivelog,
     update_archivelog,
@@ -159,58 +159,41 @@ async def _notify_error(ticker: str, error_detail: str):
         print(f"  [{ticker}] Discord 通知失敗: {e}")
 
 
-async def run_technical(target_ticker: str | None = None):
-    now = datetime.now(JST)
+async def run_single(ticker: str, market: str | None = None, create_archive: bool = False):
+    """1銘柄のテクニカル指標を取得して archive に記録する。"""
     config = load_config()
-
-    print(f"{'='*60}")
-    print(f"=== Technical オーケストレーター ===")
-    print(f"=== {now.strftime('%Y-%m-%d %H:%M %Z')} ===")
-    print(f"{'='*60}")
-
-    if target_ticker:
-        ticker = target_ticker.upper()
-        print(f"  対象: {ticker}（指定銘柄）")
-        print()
-        await process_one_ticker(ticker, config, create_archive=False)
+    ticker = ticker.upper()
+    print(f"  [{ticker}] Technical 開始")
+    result = await process_one_ticker(ticker, config, market=market, create_archive=create_archive)
+    if result and "error" not in result:
+        sys.exit(0)
     else:
-        watchlist = safe_db(list_watchlist, active_only=True)
-        if not watchlist:
-            print("  watchlist に active な銘柄がありません。終了します。")
-            return
-
-        tickers = [w["ticker"] for w in watchlist]
-        market_map = {w["ticker"]: w.get("market") for w in watchlist}
-        print(f"  対象: {len(tickers)} 銘柄")
-        for t in tickers:
-            print(f"    - {t}")
-        print()
-
-        results = await asyncio.gather(*[
-            process_one_ticker(t, config, market=market_map.get(t), create_archive=True)
-            for t in tickers
-        ])
-
-        ok_count = sum(1 for r in results if r and "error" not in r)
-        err_count = sum(1 for r in results if r and "error" in r)
-        skip_count = sum(1 for r in results if r is None)
-
-        print(f"\n{'='*60}")
-        print(f"=== 完了 ===")
-        print(f"  OK: {ok_count}, ERROR: {err_count}, SKIP: {skip_count}")
-        print(f"{'='*60}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    target = None
+    _ticker = None
+    _market = None
+    _create_archive = False
+
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         if args[i] == "--ticker" and i + 1 < len(args):
-            target = args[i + 1]
+            _ticker = args[i + 1]
             i += 2
+        elif args[i] == "--market" and i + 1 < len(args):
+            _market = args[i + 1]
+            i += 2
+        elif args[i] == "--create-archive":
+            _create_archive = True
+            i += 1
         else:
-            target = args[i]
+            _ticker = args[i]
             i += 1
 
-    asyncio.run(run_technical(target))
+    if not _ticker:
+        print("エラー: --ticker は必須です。バッチ実行は technical_batch.py を使用してください。")
+        sys.exit(1)
+
+    asyncio.run(run_single(_ticker, _market, _create_archive))

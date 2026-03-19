@@ -1,32 +1,24 @@
 """
 Monitor オーケストレーター
 
-watchlist テーブルの active 銘柄について、
-最新プランの前提が現在の市場状況で維持されているかをチェックする。
+指定された1銘柄について、最新プランの前提が現在の市場状況で維持されているかをチェックする。
+複数銘柄の並列実行は monitor_batch.py（PJTルート）が担う。
 
 Usage:
-    python main.py                          # watchlist 全銘柄
-    python main.py --ticker NVDA             # 特定銘柄のみ
-    python main.py --market US               # 米国株のみ
-    python main.py --market JP               # 日本株のみ
-    python main.py --skip-span long          # 長期銘柄をスキップ
+    python main.py --ticker NVDA
 """
 import re
 import sys
-from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import asyncio
 
-import anyio
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
     safe_db,
-    list_watchlist,
-    get_archivelog_by_id,
     get_latest_archivelog_with_newplan,
     create_archivelog,
     update_archivelog,
@@ -290,141 +282,50 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
     return monitor_record
 
 
-@dataclass
-class MonitorSummary:
-    """run_monitor() の戻り値。NG銘柄のセッション情報を含む。"""
-    results: dict = field(default_factory=dict)
-    ng_tickers: list[dict] = field(default_factory=list)
-    total_cost: float = 0.0
-    display_names: dict = field(default_factory=dict)
+async def run_single(ticker: str):
+    """1銘柄の Monitor チェックを実行する。"""
+    ticker = ticker.upper()
 
+    target_archive_id = None
+    try:
+        resp = (
+            get_client()
+            .from_("archive")
+            .select("id")
+            .eq("ticker", ticker)
+            .not_.is_("technical", "null")
+            .is_("monitor", "null")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if resp.data:
+            target_archive_id = resp.data[0]["id"]
+    except Exception:
+        pass
 
-async def run_monitor(
-    target_ticker: str | None = None,
-    market: str | None = None,
-    skip_spans: set[str] | None = None,
-) -> MonitorSummary:
-    """watchlist の active 銘柄をチェックする。
+    result = await check_one_ticker(ticker, archivelog=None, target_archive_id=target_archive_id)
 
-    Args:
-        market: 'US'/'JP' で市場フィルタ。
-        skip_spans: スキップする投資期間の集合（例: {'long'}）。
-    """
-    now = datetime.now(JST)
-    summary = MonitorSummary()
-
-    market_label = f" [{market}]" if market else ""
-    skip_label = f" (skip: {','.join(skip_spans)})" if skip_spans else ""
-    print(f"{'='*60}")
-    print(f"=== Monitor オーケストレーター{market_label}{skip_label} ===")
-    print(f"=== {now.strftime('%Y-%m-%d %H:%M %Z')} ===")
-    print(f"{'='*60}")
-
-    if target_ticker:
-        tickers = [target_ticker.upper()]
-        print(f"  対象: {tickers[0]}（指定銘柄）")
+    if result and result.get("result") != "ERROR":
+        sys.exit(0)
     else:
-        watchlist = safe_db(list_watchlist, active_only=True, market=market)
-        if not watchlist:
-            print(f"  watchlist に active な銘柄がありません{market_label}。終了します。")
-            return summary
-        tickers = [w["ticker"] for w in watchlist]
-        summary.display_names = {
-            w["ticker"]: w.get("display_name") or w["ticker"]
-            for w in watchlist
-        }
-        print(f"  対象: {len(tickers)} 銘柄{market_label}")
-        for t in tickers:
-            print(f"    - {t}")
-
-    print()
-
-    filtered = []
-    archivelog_map = {}
-    watchlist_map = {w["ticker"]: w for w in watchlist} if not target_ticker else {}
-    for ticker in tickers:
-        wl_entry = watchlist_map.get(ticker)
-        aid = wl_entry.get("latest_archive_id") if wl_entry else None
-        if aid:
-            archivelog = safe_db(get_archivelog_by_id, aid)
-        else:
-            archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
-        archivelog_map[ticker] = archivelog
-        if skip_spans and archivelog:
-            span = archivelog.get("span", "mid")
-            if span in skip_spans:
-                print(f"  [{ticker}] スキップ: {span} は対象外")
-                continue
-        filtered.append(ticker)
-
-    technical_map = {}
-    for ticker in filtered:
-        try:
-            resp = (
-                get_client()
-                .from_("archive")
-                .select("id")
-                .eq("ticker", ticker.upper())
-                .not_.is_("technical", "null")
-                .is_("monitor", "null")
-                .order("created_at", desc=True)
-                .limit(1)
-                .execute()
-            )
-            if resp.data:
-                technical_map[ticker] = resp.data[0]["id"]
-        except Exception:
-            pass
-
-    if filtered:
-        results = await asyncio.gather(*[
-            check_one_ticker(t, archivelog_map.get(t), target_archive_id=technical_map.get(t))
-            for t in filtered
-        ])
-        for ticker, result in zip(filtered, results):
-            if result:
-                summary.results[ticker] = result
-                summary.total_cost += result.get("cost_usd", 0) or 0
-                archivelog = archivelog_map.get(ticker)
-                if result.get("result") == "NG" and archivelog:
-                    summary.ng_tickers.append({
-                        "ticker": ticker,
-                        "mode": archivelog.get("mode", "buy"),
-                        "span": archivelog.get("span", "mid"),
-                    })
-
-    ok_count = sum(1 for r in summary.results.values() if r.get("result") == "OK")
-    ng_count = len(summary.ng_tickers)
-    err_count = sum(1 for r in summary.results.values() if r.get("result") == "ERROR")
-    skip_count = len(tickers) - len(summary.results)
-
-    print(f"{'='*60}")
-    print(f"=== 完了 ===")
-    print(f"  OK: {ok_count}, NG: {ng_count}, ERROR: {err_count}, SKIP: {skip_count}")
-    print(f"  合計コスト: ${summary.total_cost:.4f}")
-    print(f"{'='*60}")
-
-    return summary
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    target = None
-    _market = None
-    _skip_spans: set[str] = set()
+    _ticker = None
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         if args[i] == "--ticker" and i + 1 < len(args):
-            target = args[i + 1]
-            i += 2
-        elif args[i] == "--market" and i + 1 < len(args):
-            _market = args[i + 1].upper()
-            i += 2
-        elif args[i] == "--skip-span" and i + 1 < len(args):
-            _skip_spans.add(args[i + 1].lower())
+            _ticker = args[i + 1]
             i += 2
         else:
-            target = args[i]
+            _ticker = args[i]
             i += 1
 
-    anyio.run(lambda: run_monitor(target, _market, _skip_spans or None))
+    if not _ticker:
+        print("エラー: --ticker は必須です。バッチ実行は monitor_batch.py を使用してください。")
+        sys.exit(1)
+
+    asyncio.run(run_single(_ticker))
