@@ -1,7 +1,7 @@
 """
-パイプラインオーケストレーター（Monitor → Discussion → Planning → Watch）
+パイプラインオーケストレーター（Technical → Monitor → Discussion → Planning → Watch）
 
-4 大ブロックを順番に実行する。各ブロックは DB（伝言板方式）で連携し、
+5 大ブロックを順番に実行する。各ブロックは DB（伝言板方式）で連携し、
 ブロック間のデータ受け渡しは archive テーブルを介して行う。
 
 オーケストレーターの役割は大ブロックを順番に呼び出すだけであり、
@@ -37,6 +37,7 @@ from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKE
 from discord_notifier import notify, send_start_notification
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+TECHNICAL_DIR = PROJECT_ROOT / "Technical"
 DISCUSSION_DIR = PROJECT_ROOT / "Discusion" / "src"
 PLANNING_DIR = PROJECT_ROOT / "Planning" / "src"
 WATCH_DIR = PROJECT_ROOT / "Watch" / "src"
@@ -69,12 +70,33 @@ def _load_event_context() -> dict | None:
         return None
 
 
+# ── Technical ─────────────────────────────────────────────
+
+def run_technical(target_ticker: str | None = None) -> int:
+    """Technical を subprocess で実行する。テクニカル指標を取得して archive に記録する。"""
+    print(f"\n{'='*60}")
+    print(f"=== Phase 1: Technical ===")
+    print(f"{'='*60}")
+
+    python = _find_venv_python(TECHNICAL_DIR)
+    script = str(TECHNICAL_DIR / "src" / "technical_orchestrator.py")
+    cmd = [python, script]
+    if target_ticker:
+        cmd.extend(["--ticker", target_ticker])
+
+    print(f"  Technical 起動: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(TECHNICAL_DIR))
+    if result.returncode != 0:
+        print(f"  Technical 失敗 (exit code: {result.returncode})")
+    return result.returncode
+
+
 # ── Discussion ────────────────────────────────────────────
 
 def run_discussion() -> int:
     """Discussion を subprocess で実行する。Discussion が内部で全対象銘柄を自動検出・処理する。"""
     print(f"\n{'='*60}")
-    print(f"=== Phase 2: Discussion ===")
+    print(f"=== Phase 3: Discussion ===")
     print(f"{'='*60}")
 
     python = _find_venv_python(DISCUSSION_DIR)
@@ -93,7 +115,7 @@ def run_discussion() -> int:
 def run_planning() -> int:
     """Planning を subprocess で実行する。Planning が内部で全対象銘柄を自動検出・処理する。"""
     print(f"\n{'='*60}")
-    print(f"=== Phase 3: Planning ===")
+    print(f"=== Phase 4: Planning ===")
     print(f"{'='*60}")
 
     python = _find_venv_python(PLANNING_DIR)
@@ -112,7 +134,7 @@ def run_planning() -> int:
 def run_watch() -> int:
     """Watch を subprocess で実行する。Watch が内部で全対象銘柄を自動検出・処理する。"""
     print(f"\n{'='*60}")
-    print(f"=== Phase 4: Watch ===")
+    print(f"=== Phase 5: Watch ===")
     print(f"{'='*60}")
 
     python = _find_venv_python(WATCH_DIR)
@@ -137,13 +159,16 @@ async def run_pipeline(
     market: str | None = None,
     skip_spans: set[str] | None = None,
 ):
-    """Monitor → Discussion → Planning → Watch パイプライン。"""
+    """Technical → Monitor → Discussion → Planning → Watch パイプライン。"""
     event_context = _load_event_context()
     send_start_notification(market)
 
-    # ── Phase 1: Monitor ──
+    # ── Phase 1: Technical ──
+    run_technical(target_ticker)
+
+    # ── Phase 2: Monitor ──
     print(f"\n{'='*60}")
-    print(f"=== Phase 1: Monitor ===")
+    print(f"=== Phase 2: Monitor ===")
     print(f"{'='*60}")
 
     summary = await run_monitor(target_ticker, market=market, skip_spans=skip_spans)
@@ -193,7 +218,7 @@ async def run_pipeline(
         print("\n--monitor-only: Discussion/Planning/Watch は起動しません。")
         return
 
-    # ── Phase 2: Discussion ──
+    # ── Phase 3: Discussion ──
     run_discussion()
 
     # Post-Discussion: propagate active flags + エラー検出
@@ -207,6 +232,7 @@ async def run_pipeline(
             print(f"  [{ticker}] Discussion 完了 → Planning に引き継ぎ")
         else:
             print(f"  [{ticker}] Discussion 失敗（final_judge 未生成）")
+            safe_db(update_archivelog, old_id, status="failed", active=False)
             dn = dn_map.get(ticker, ticker)
             payload = NotifyPayload(
                 label=NotifyLabel.ERROR,
@@ -218,7 +244,7 @@ async def run_pipeline(
             )
             await notify(payload)
 
-    # ── Phase 3: Planning ──
+    # ── Phase 4: Planning ──
     run_planning()
 
     # Post-Planning: エラー検出 + 失敗レコードを status=failed にして残存防止
@@ -239,7 +265,7 @@ async def run_pipeline(
         )
         await notify(payload)
 
-    # ── Phase 4: Watch ──
+    # ── Phase 5: Watch ──
     run_watch()
 
     # ── COMPLETE 通知 ──

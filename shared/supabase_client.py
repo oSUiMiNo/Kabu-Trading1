@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -234,6 +235,40 @@ def get_archivelog_by_id(archive_id: str) -> dict | None:
         .execute()
     )
     return resp.data[0] if resp.data else None
+
+
+def ensure_technical_data(archive_id: str) -> bool:
+    """archive.technical が未取得なら Technical ブロックを呼び出して取得する。
+
+    既に取得済みなら何もしない。
+    Returns: True（データあり or 取得成功）/ False（取得失敗）
+    """
+    record = get_archivelog_by_id(archive_id)
+    if not record:
+        return False
+    if record.get("technical"):
+        return True
+
+    ticker = record.get("ticker")
+    if not ticker:
+        return False
+
+    technical_dir = _PROJECT_ROOT / "Technical"
+    venv_python_win = technical_dir / "src" / ".venv" / "Scripts" / "python.exe"
+    venv_python_root = technical_dir / ".venv" / "Scripts" / "python.exe"
+    if venv_python_root.exists():
+        python = str(venv_python_root)
+    elif venv_python_win.exists():
+        python = str(venv_python_win)
+    else:
+        python = "python"
+
+    script = str(technical_dir / "src" / "technical_orchestrator.py")
+    result = subprocess.run(
+        [python, script, "--ticker", ticker],
+        cwd=str(technical_dir),
+    )
+    return result.returncode == 0
 
 
 def get_latest_archivelog(ticker: str) -> dict | None:
