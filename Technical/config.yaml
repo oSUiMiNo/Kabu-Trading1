@@ -1,0 +1,7 @@
+timeframes:
+  - "1d"
+
+period: "1y"
+
+indicator_profile: "core"
+pattern_profile: "major_only"

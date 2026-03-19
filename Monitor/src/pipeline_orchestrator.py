@@ -29,6 +29,7 @@ from supabase_client import (
     fetch_active_for_discussion,
     fetch_active_for_planning,
     propagate_active_after_discussion,
+    update_archivelog,
 )
 
 from monitor_orchestrator import run_monitor
@@ -220,11 +221,13 @@ async def run_pipeline(
     # ── Phase 3: Planning ──
     run_planning()
 
-    # Post-Planning: エラー検出
+    # Post-Planning: エラー検出 + 失敗レコードを status=failed にして残存防止
     planning_failed = safe_db(fetch_active_for_planning) or []
     for row in planning_failed:
         ticker = row["ticker"]
+        archive_id = row["id"]
         print(f"  [{ticker}] Planning 失敗（newplan_full 未生成）")
+        safe_db(update_archivelog, archive_id, status="failed", active=False)
         dn = dn_map.get(ticker, ticker)
         payload = NotifyPayload(
             label=NotifyLabel.ERROR,
