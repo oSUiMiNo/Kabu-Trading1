@@ -28,8 +28,8 @@ def _find_venv_python() -> str:
     return "python"
 
 
-async def _run_one(python: str, script: str, ticker: str, horizon: str, budget: int, risk_limit: str):
-    cmd = [python, script, ticker, horizon, str(budget), risk_limit]
+async def _run_one(python: str, script: str, ticker: str, horizon: str, budget: int, risk_limit: str, archive_id: str):
+    cmd = [python, script, ticker, horizon, str(budget), risk_limit, "--archive-id", archive_id]
     proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(PLANNING_DIR / "src"))
     await proc.communicate()
     return ticker, proc.returncode
@@ -68,7 +68,8 @@ async def run():
     for row in pending:
         ticker = row["ticker"]
         span = row.get("span", "mid")
-        tasks.append(_run_one(python, script, ticker, span, budget, risk_limit))
+        archive_id = row.get("id", "")
+        tasks.append(_run_one(python, script, ticker, span, budget, risk_limit, archive_id))
 
     results = await asyncio.gather(*tasks)
 

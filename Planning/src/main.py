@@ -27,7 +27,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import (
     safe_db, get_portfolio_config,
-    get_latest_archivelog, update_archivelog,
+    get_latest_archivelog, get_archivelog_by_id, update_archivelog,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -303,6 +303,7 @@ async def run_plan(
     current_price: float | None = None,
     anchor_price: float | None = None,
     config: PlanConfig | None = None,
+    archive_id: str | None = None,
 ) -> Path | None:
     """
     Plan オーケストレーターのメイン関数。
@@ -331,7 +332,10 @@ async def run_plan(
     print(f"{'='*60}")
 
     # --- 1. DB からセッション取得 ---
-    _db_archivelog = safe_db(get_latest_archivelog, t)
+    if archive_id:
+        _db_archivelog = safe_db(get_archivelog_by_id, archive_id)
+    else:
+        _db_archivelog = safe_db(get_latest_archivelog, t)
     if not _db_archivelog:
         print(f"  エラー: {t} のセッションが DB に見つかりません")
         sys.exit(1)
@@ -550,6 +554,19 @@ if __name__ == "__main__":
         print(f"エラー: 期間 '{sys.argv[2]}' は無効です。'短期' / '中期' / '長期' のいずれかを指定してください。")
         sys.exit(1)
 
+    # --archive-id をパース（位置引数の前後どちらでも対応）
+    _archive_id = None
+    _filtered_argv = [sys.argv[0]]
+    _i = 1
+    while _i < len(sys.argv):
+        if sys.argv[_i] == "--archive-id" and _i + 1 < len(sys.argv):
+            _archive_id = sys.argv[_i + 1]
+            _i += 2
+        else:
+            _filtered_argv.append(sys.argv[_i])
+            _i += 1
+    sys.argv = _filtered_argv
+
     ticker = sys.argv[1]
     horizon = _HORIZON_MAP[sys.argv[2]]
 
@@ -591,4 +608,5 @@ if __name__ == "__main__":
         ticker, budget, risk_limit, horizon,
         current_price, anchor_price,
         config=plan_config,
+        archive_id=_archive_id,
     ))

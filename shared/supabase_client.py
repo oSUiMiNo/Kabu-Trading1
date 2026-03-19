@@ -390,18 +390,18 @@ def fetch_active_for_planning() -> list[dict]:
     return resp.data or []
 
 
-def fetch_active_for_watch() -> list[str]:
-    """active=True かつ Planning 完了済みの銘柄リストを取得。"""
+def fetch_active_for_watch() -> list[dict]:
+    """active=True かつ Planning 完了済みのレコードを取得。"""
     resp = (
         get_client()
         .from_("archive")
-        .select("ticker")
+        .select("id, ticker")
         .eq("active", True)
         .eq("status", "completed")
         .not_.is_("newplan_full", "null")
         .execute()
     )
-    return list({r["ticker"] for r in (resp.data or [])})
+    return resp.data or []
 
 
 def fetch_today_monitor_results() -> list[dict]:

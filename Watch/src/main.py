@@ -22,6 +22,7 @@ from supabase_client import (
     safe_db,
     update_watchlist,
     update_archivelog,
+    get_archivelog_by_id,
     get_latest_archivelog_with_newplan,
     get_previous_archivelog_with_newplan,
     list_watchlist,
@@ -97,12 +98,15 @@ def _build_summarizer_prompt(
     return "\n".join(parts)
 
 
-async def process_one_ticker(ticker: str) -> bool:
+async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool:
     print(f"\n{'='*50}")
     print(f"[Watch] {ticker} 処理開始")
     print(f"{'='*50}")
 
-    archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
+    if archive_id:
+        archivelog = safe_db(get_archivelog_by_id, archive_id)
+    else:
+        archivelog = safe_db(get_latest_archivelog_with_newplan, ticker)
     if not archivelog:
         print(f"  [{ticker}] newplan_full 付きアーカイブログが見つかりません。スキップ。")
         return False
@@ -189,5 +193,6 @@ async def process_one_ticker(ticker: str) -> bool:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Watch ブロック：watchlist 更新 + Discord 通知")
     parser.add_argument("--ticker", required=True, help="処理対象の銘柄")
+    parser.add_argument("--archive-id", default=None, help="対象の archive ID")
     args = parser.parse_args()
-    anyio.run(lambda: process_one_ticker(args.ticker.upper()))
+    anyio.run(lambda: process_one_ticker(args.ticker.upper(), archive_id=args.archive_id))

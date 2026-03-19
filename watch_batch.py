@@ -29,8 +29,8 @@ def _find_venv_python() -> str:
     return "python"
 
 
-async def _run_one(python: str, script: str, ticker: str):
-    cmd = [python, script, "--ticker", ticker]
+async def _run_one(python: str, script: str, ticker: str, archive_id: str):
+    cmd = [python, script, "--ticker", ticker, "--archive-id", archive_id]
     proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(WATCH_DIR / "src"))
     await proc.communicate()
     return ticker, proc.returncode
@@ -42,22 +42,24 @@ async def run(target_ticker: str | None = None):
     print(f"{'='*60}")
 
     if target_ticker:
-        tickers = [target_ticker.upper()]
+        pending = [{"ticker": target_ticker.upper(), "id": ""}]
     else:
-        tickers = safe_db(fetch_active_for_watch) or []
-        if not tickers:
+        pending = safe_db(fetch_active_for_watch) or []
+        if not pending:
             print("  active な対象銘柄がありません。")
             return 0
 
-    print(f"  対象: {len(tickers)} 銘柄")
-    for t in tickers:
-        print(f"    - {t}")
+    print(f"  対象: {len(pending)} 銘柄")
+    for row in pending:
+        print(f"    - {row['ticker']}")
     print()
 
     python = _find_venv_python()
     script = str(WATCH_DIR / "src" / "main.py")
 
-    results = await asyncio.gather(*[_run_one(python, script, t) for t in tickers])
+    results = await asyncio.gather(*[
+        _run_one(python, script, row["ticker"], row["id"]) for row in pending
+    ])
 
     ok = sum(1 for _, rc in results if rc == 0)
     ng = len(results) - ok
