@@ -5,11 +5,11 @@ watchlist テーブルの active 銘柄について、
 最新プランの前提が現在の市場状況で維持されているかをチェックする。
 
 Usage:
-    python monitor_orchestrator.py                          # watchlist 全銘柄
-    python monitor_orchestrator.py --ticker NVDA             # 特定銘柄のみ
-    python monitor_orchestrator.py --market US               # 米国株のみ
-    python monitor_orchestrator.py --market JP               # 日本株のみ
-    python monitor_orchestrator.py --skip-span long          # 長期銘柄をスキップ
+    python main.py                          # watchlist 全銘柄
+    python main.py --ticker NVDA             # 特定銘柄のみ
+    python main.py --market US               # 米国株のみ
+    python main.py --market JP               # 日本株のみ
+    python main.py --skip-span long          # 長期銘柄をスキップ
 """
 import re
 import sys

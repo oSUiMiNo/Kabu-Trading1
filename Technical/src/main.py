@@ -5,8 +5,8 @@ watchlist の active 銘柄に対してテクニカル指標を取得し、
 archive テーブルに記録する。
 
 Usage:
-    python technical_orchestrator.py                 # watchlist 全銘柄
-    python technical_orchestrator.py --ticker AAPL    # 特定銘柄のみ
+    python main.py                 # watchlist 全銘柄
+    python main.py --ticker AAPL    # 特定銘柄のみ
 """
 
 import asyncio

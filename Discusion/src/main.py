@@ -301,8 +301,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 3 or sys.argv[2] not in _horizon_map:
         print("使い方:")
-        print("  python parallel_orchestrator.py                          # バッチモード（DB から自動検出）")
-        print("  python parallel_orchestrator.py <銘柄> <投資期間> [モード]  # 手動指定")
+        print("  python main.py                          # バッチモード（DB から自動検出）")
+        print("  python main.py <銘柄> <投資期間> [モード]  # 手動指定")
         print()
         print("  投資期間（必須）: '短期' / '中期' / '長期'")
         print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")

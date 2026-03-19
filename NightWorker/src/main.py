@@ -5,9 +5,9 @@ archive テーブルのレコードを自動レビューし、品質問題を検
 検出結果は archive_reviews テーブルに記録し、重大な問題は GitHub Issue を作成する。
 
 Usage:
-    python review_orchestrator.py                    # デフォルト（最大20件）
-    python review_orchestrator.py --max-reviews 5    # 件数指定
-    python review_orchestrator.py --dry-run           # Issue作成なし（プレビューのみ）
+    python main.py                    # デフォルト（最大20件）
+    python main.py --max-reviews 5    # 件数指定
+    python main.py --dry-run           # Issue作成なし（プレビューのみ）
 """
 import argparse
 import json

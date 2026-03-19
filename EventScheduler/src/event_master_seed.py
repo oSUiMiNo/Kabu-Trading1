@@ -1,7 +1,7 @@
 """
 イベントマスターデータ定義（16イベント）
 
-scheduler_orchestrator.py seed で DB に upsert される。
+main.py seed で DB に upsert される。
 """
 
 EVENT_MASTERS: list[dict] = [

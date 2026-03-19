@@ -148,7 +148,7 @@ async def run_lane(
             if m_side:
                 agreed_side = m_side.group(1)
 
-        # DB用データを構築（書き込みは parallel_orchestrator が行う）
+        # DB用データを構築（書き込みは main が行う）
         _final_export = get_last_export(log_path)
         _discussion_md = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
         lane_db_data = {

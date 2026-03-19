@@ -263,7 +263,7 @@ def ensure_technical_data(archive_id: str) -> bool:
     else:
         python = "python"
 
-    script = str(technical_dir / "src" / "technical_orchestrator.py")
+    script = str(technical_dir / "src" / "main.py")
     result = subprocess.run(
         [python, script, "--ticker", ticker],
         cwd=str(technical_dir),

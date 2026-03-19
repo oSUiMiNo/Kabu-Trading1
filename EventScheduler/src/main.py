@@ -4,10 +4,10 @@ EventScheduler オーケストレーター
 経済イベントの日程を取得し、Monitor 用の watch_schedule を生成する。
 
 Usage:
-    python scheduler_orchestrator.py seed                    # マスターデータのみ upsert
-    python scheduler_orchestrator.py annual                  # 年次: 1年分取得
-    python scheduler_orchestrator.py monthly                 # 月次: 当月+翌月
-    python scheduler_orchestrator.py monthly --months 3      # 月次: 3ヶ月分
+    python main.py seed                    # マスターデータのみ upsert
+    python main.py annual                  # 年次: 1年分取得
+    python main.py monthly                 # 月次: 当月+翌月
+    python main.py monthly --months 3      # 月次: 3ヶ月分
 """
 
 import json
@@ -305,7 +305,7 @@ async def run_scheduler(run_type: str, months_ahead: int = 2) -> None:
 if __name__ == "__main__":
     args = sys.argv[1:]
     if not args:
-        print("Usage: python scheduler_orchestrator.py <seed|annual|monthly> [--months N]")
+        print("Usage: python main.py <seed|annual|monthly> [--months N]")
         sys.exit(1)
 
     command = args[0]

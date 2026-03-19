@@ -20,7 +20,7 @@
 
 ```mermaid
 flowchart TD
-    START["parallel_orchestrator.py 実行"] --> FORK
+    START["main.py 実行"] --> FORK
 
     subgraph LANES ["並列実行（各レーンが独立）"]
         direction TB
@@ -105,11 +105,11 @@ S#（参照元）→ F#（事実）→ C#（主張）→ 暫定結論
 ## 実行方法
 
 ```bash
-python src/parallel_orchestrator.py <銘柄> <期間> [モード] [レーン数] [最大ラウンド数] [意見数] [追加指示]
+python src/main.py <銘柄> <期間> [モード] [レーン数] [最大ラウンド数] [意見数] [追加指示]
 
 # 例
-python src/parallel_orchestrator.py AMZN 中期
-python src/parallel_orchestrator.py NVDA 長期 売る 2 4
+python src/main.py AMZN 中期
+python src/main.py NVDA 長期 売る 2 4
 ```
 
 出力は `logs/{YYMMDD_HHMM}/` に議論ログ・判定・最終判定が一式生成される。
@@ -121,7 +121,7 @@ python src/parallel_orchestrator.py NVDA 長期 売る 2 4
 ```
 Discusion/
 ├── src/                           # オーケストレーター群（Python）
-│   ├── parallel_orchestrator.py   #   エントリーポイント
+│   ├── main.py   #   エントリーポイント
 │   ├── lane_orchestrator.py       #   1レーン制御
 │   ├── discussion_orchestrator.py #   議論ループ
 │   ├── opinion_orchestrator.py    #   意見生成

@@ -91,9 +91,9 @@ jobs:
           CMD="${{ steps.command.outputs.cmd }}"
           MONTHS="${{ steps.command.outputs.months }}"
           if [ "$CMD" = "seed" ]; then
-            uv run python scheduler_orchestrator.py seed
+            uv run python main.py seed
           elif [ "$CMD" = "annual" ]; then
-            uv run python scheduler_orchestrator.py annual
+            uv run python main.py annual
           else
-            uv run python scheduler_orchestrator.py monthly --months "$MONTHS"
+            uv run python main.py monthly --months "$MONTHS"
           fi

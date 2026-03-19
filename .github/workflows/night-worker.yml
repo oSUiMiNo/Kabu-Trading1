@@ -60,7 +60,7 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
-          uv run python review_orchestrator.py $ARGS
+          uv run python main.py $ARGS
 
       - name: Words Consolidation
         working-directory: NightWorker/src

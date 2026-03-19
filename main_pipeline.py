@@ -34,7 +34,7 @@ from supabase_client import (
     update_archivelog,
 )
 
-from monitor_orchestrator import run_monitor
+from main import run_monitor
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA
 from discord_notifier import notify, send_start_notification
 
@@ -80,7 +80,7 @@ def run_technical(target_ticker: str | None = None) -> int:
     print(f"{'='*60}")
 
     python = _find_venv_python(TECHNICAL_DIR)
-    script = str(TECHNICAL_DIR / "src" / "technical_orchestrator.py")
+    script = str(TECHNICAL_DIR / "src" / "main.py")
     cmd = [python, script]
     if target_ticker:
         cmd.extend(["--ticker", target_ticker])
@@ -101,7 +101,7 @@ def run_discussion() -> int:
     print(f"{'='*60}")
 
     python = _find_venv_python(DISCUSSION_DIR)
-    script = str(DISCUSSION_DIR / "parallel_orchestrator.py")
+    script = str(DISCUSSION_DIR / "main.py")
     cmd = [python, script]
 
     print(f"  Discussion 起動: {' '.join(cmd)}")
@@ -120,7 +120,7 @@ def run_planning() -> int:
     print(f"{'='*60}")
 
     python = _find_venv_python(PLANNING_DIR)
-    script = str(PLANNING_DIR / "plan_orchestrator.py")
+    script = str(PLANNING_DIR / "main.py")
     cmd = [python, script]
 
     print(f"  Planning 起動: {' '.join(cmd)}")
@@ -139,7 +139,7 @@ def run_watch() -> int:
     print(f"{'='*60}")
 
     python = _find_venv_python(WATCH_DIR)
-    script = str(WATCH_DIR / "watch_orchestrator.py")
+    script = str(WATCH_DIR / "main.py")
     cmd = [python, script]
 
     print(f"  Watch 起動: {' '.join(cmd)}")

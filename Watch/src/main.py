@@ -5,8 +5,8 @@ archive テーブルの情報を読み取り、watchlist を更新し、Discord 
 パイプラインの Phase 4 に相当する。
 
 Usage:
-    python watch_orchestrator.py                  # archive.active=True の全銘柄を処理
-    python watch_orchestrator.py --ticker NVDA    # 指定銘柄のみ
+    python main.py                  # archive.active=True の全銘柄を処理
+    python main.py --ticker NVDA    # 指定銘柄のみ
 """
 import argparse
 import json
