@@ -254,14 +254,16 @@ def ensure_technical_data(archive_id: str) -> bool:
         return False
 
     technical_dir = _PROJECT_ROOT / "Technical"
-    venv_python_win = technical_dir / "src" / ".venv" / "Scripts" / "python.exe"
-    venv_python_root = technical_dir / ".venv" / "Scripts" / "python.exe"
-    if venv_python_root.exists():
-        python = str(venv_python_root)
-    elif venv_python_win.exists():
-        python = str(venv_python_win)
-    else:
-        python = "python"
+    python = "python"
+    for base in [technical_dir / "src", technical_dir]:
+        win = base / ".venv" / "Scripts" / "python.exe"
+        unix = base / ".venv" / "bin" / "python"
+        if win.exists():
+            python = str(win)
+            break
+        if unix.exists():
+            python = str(unix)
+            break
 
     script = str(technical_dir / "src" / "main.py")
     result = subprocess.run(

@@ -6,6 +6,7 @@ dependencies = [
     "technical-indicator-fetcher @ git+https://github.com/oSUiMiNo/TechnicalIndicatorFetcher.git",
     "python-dotenv",
     "postgrest",
+    "pyyaml",
 ]
 
 [tool.hatch.metadata]
