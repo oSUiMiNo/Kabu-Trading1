@@ -21,6 +21,7 @@ from supabase_client import (
     update_archivelog,
     get_discussion_config,
     fetch_active_for_discussion,
+    get_archivelog_by_id,
     list_watchlist,
     ensure_technical_data,
 )
@@ -29,6 +30,63 @@ from discussion_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
 from AgentUtil import side_ja, load_debug_config
 from final_judge_orchestrator import run_final_judge_orchestrator
+
+def _build_market_context(archive_id: str | None) -> str:
+    """archive の monitor/technical データから議論用の市場コンテキストを構築する。"""
+    if not archive_id:
+        return ""
+    record = safe_db(get_archivelog_by_id, archive_id)
+    if not record:
+        return ""
+
+    parts = []
+    technical = record.get("technical")
+    tech_price = None
+    if technical and isinstance(technical, dict):
+        tech_price = technical.get("latest_price")
+
+    monitor = record.get("monitor")
+    display_price = tech_price
+    if display_price is None and monitor and isinstance(monitor, dict):
+        display_price = monitor.get("current_price")
+
+    if display_price is not None:
+        parts.append(f"【現在株価】{display_price}")
+
+    if monitor and isinstance(monitor, dict):
+        change = monitor.get("price_change_pct")
+        ng_reason = monitor.get("ng_reason", "")
+        summary = monitor.get("summary", "")
+        if change is not None:
+            parts.append(f"  プラン時からの変動: {change}%")
+        if ng_reason:
+            parts.append(f"  NG理由: {ng_reason}")
+        elif summary:
+            parts.append(f"  概要: {summary}")
+
+    technical = record.get("technical")
+    if technical and isinstance(technical, dict) and "timeframes" in technical:
+        for tf, data in technical["timeframes"].items():
+            if not isinstance(data, dict):
+                continue
+            derived = data.get("indicators", {}).get("derived", {})
+            if derived:
+                trend = derived.get("trend", {})
+                momentum = derived.get("momentum", {})
+                volatility = derived.get("volatility", {})
+                lines = []
+                if trend:
+                    lines.append(f"  トレンド: {', '.join(f'{k}={v}' for k, v in trend.items())}")
+                if momentum:
+                    lines.append(f"  モメンタム: {', '.join(f'{k}={v}' for k, v in momentum.items())}")
+                if volatility:
+                    lines.append(f"  ボラティリティ: {', '.join(f'{k}={v}' for k, v in volatility.items())}")
+                if lines:
+                    parts.append(f"【テクニカル指標 ({tf})】")
+                    parts.extend(lines)
+
+    return "\n".join(parts) if parts else ""
+
 
 SET_THEMES: dict[int, str] = {
     1: "ファンダメンタル（事業・決算・バリュエーション）",
@@ -68,6 +126,10 @@ async def run_parallel(
 
     if _db_archivelog_id:
         ensure_technical_data(_db_archivelog_id)
+
+    market_context = _build_market_context(_db_archivelog_id)
+    if market_context:
+        initial_prompt = f"{market_context}\n\n{initial_prompt}" if initial_prompt else market_context
 
     t = ticker.upper()
 

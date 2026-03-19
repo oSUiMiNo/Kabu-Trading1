@@ -59,7 +59,7 @@ def fetch_technical(symbol: str, config: dict) -> dict:
         output_format="json",
     )
 
-    result = {"fetched_at": datetime.now(JST).isoformat(), "timeframes": {}}
+    result = {"fetched_at": datetime.now(JST).isoformat(), "latest_price": None, "timeframes": {}}
 
     for tf in timeframes:
         data = fetch_and_run_with_yfinance(
@@ -71,6 +71,8 @@ def fetch_technical(symbol: str, config: dict) -> dict:
             return_dict=True,
         )
         result["timeframes"][tf] = data
+        if result["latest_price"] is None:
+            result["latest_price"] = data.get("data_summary", {}).get("latest_close")
 
     return result
 

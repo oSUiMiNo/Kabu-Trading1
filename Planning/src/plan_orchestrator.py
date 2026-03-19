@@ -372,15 +372,26 @@ async def run_plan_orchestrator(
     print()
 
     # --- 1.5 価格取得（current_price 未指定時）---
+    #   優先順: archive.technical.latest_price → archive.monitor.current_price → price-fetcher
     if current_price is None:
-        print(f">>> 価格取得（price-fetcher エージェント）")
-        fetched = await _fetch_current_price(ticker, market)
-        if fetched is not None:
-            current_price = fetched
-            print(f"  取得成功: {current_price}")
+        technical_data = _db_archivelog.get("technical")
+        if technical_data and isinstance(technical_data, dict) and technical_data.get("latest_price"):
+            current_price = technical_data["latest_price"]
+            print(f">>> 価格取得（archive.technical から）: {current_price}")
         else:
-            print(f"  エラー: 価格取得に失敗しました。現在価格を手動指定してください。")
-            sys.exit(1)
+            monitor_data = _db_archivelog.get("monitor")
+            if monitor_data and isinstance(monitor_data, dict) and monitor_data.get("current_price"):
+                current_price = monitor_data["current_price"]
+                print(f">>> 価格取得（archive.monitor から）: {current_price}")
+            else:
+                print(f">>> 価格取得（price-fetcher エージェント）")
+                fetched = await _fetch_current_price(ticker, market)
+                if fetched is not None:
+                    current_price = fetched
+                    print(f"  取得成功: {current_price}")
+                else:
+                    print(f"  エラー: 価格取得に失敗しました。現在価格を手動指定してください。")
+                    sys.exit(1)
 
     if anchor_price is None:
         anchor_price = current_price

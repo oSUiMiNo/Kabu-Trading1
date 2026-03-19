@@ -158,6 +158,7 @@ numpy, pandas                 # 同上
 ```jsonc
 {
   "fetched_at": "2026-03-18T10:30:00+09:00",
+  "latest_price": 175.50,
   "timeframes": {
     "1d": {
       "schema_version": "1.0",

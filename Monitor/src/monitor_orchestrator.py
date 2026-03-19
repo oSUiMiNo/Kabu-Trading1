@@ -224,7 +224,17 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
         return error_record
 
     plan_price = _extract_plan_price(newplan_full)
-    current_price = monitor_data.get("current_price")
+
+    tech_price = None
+    if target_archive_id:
+        try:
+            _tech_rec = get_client().from_("archive").select("technical").eq("id", target_archive_id).limit(1).execute()
+            if _tech_rec.data:
+                _tech = _tech_rec.data[0].get("technical") or {}
+                tech_price = _tech.get("latest_price") if isinstance(_tech, dict) else None
+        except Exception:
+            pass
+    current_price = tech_price if tech_price is not None else monitor_data.get("current_price")
 
     price_change_pct = None
     if plan_price and current_price and plan_price > 0:
