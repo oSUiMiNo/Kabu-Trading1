@@ -22,6 +22,7 @@ from supabase_client import (
     get_discussion_config,
     fetch_active_for_discussion,
     list_watchlist,
+    ensure_technical_data,
 )
 
 from discussion_orchestrator import LOGS_DIR
@@ -44,6 +45,7 @@ async def run_parallel(
     mode: str = "buy",
     horizon: str = "mid",
     display_name: str = "",
+    existing_archive_id: str | None = None,
 ):
     if num_sets is None or max_rounds is None or opinions_per_set is None:
         disc_cfg = safe_db(get_discussion_config) or {}
@@ -57,9 +59,15 @@ async def run_parallel(
     discusion_dir = LOGS_DIR / discusion_name
     discusion_dir.mkdir(parents=True, exist_ok=True)
 
-    # DB: セッション作成（1行）
-    _db_archivelog = safe_db(create_archivelog, ticker, mode, horizon)
-    _db_archivelog_id = _db_archivelog["id"] if _db_archivelog else None
+    # DB: 既存 archive があればそこに書き足す。なければ新規作成
+    if existing_archive_id:
+        _db_archivelog_id = existing_archive_id
+    else:
+        _db_archivelog = safe_db(create_archivelog, ticker, mode, horizon)
+        _db_archivelog_id = _db_archivelog["id"] if _db_archivelog else None
+
+    if _db_archivelog_id:
+        ensure_technical_data(_db_archivelog_id)
 
     t = ticker.upper()
 
@@ -203,10 +211,12 @@ async def run_batch():
         mode = row.get("mode", "buy")
         span = row.get("span", "mid")
         dn = dn_map.get(ticker, "")
+        archive_id = row.get("id")
         try:
             await run_parallel(
                 ticker, mode=mode, horizon=span,
                 display_name=dn,
+                existing_archive_id=archive_id,
             )
         except Exception as e:
             print(f"  [{ticker}] 予期しないエラー: {e}")

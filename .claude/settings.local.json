@@ -101,7 +101,10 @@
       "Bash(cd /c/Users/osuim/Dev/Investment/EventScheduler/src && uv run python -c \"\nimport sys\nfrom pathlib import Path\nsys.path.insert\\(0, str\\(Path\\('.'\\).resolve\\(\\).parent.parent / 'shared'\\)\\)\nfrom supabase_client import get_client\n\nresp = get_client\\(\\).from_\\('watch_schedule'\\).select\\('watch_id, watch_kind, watch_at_utc, watch_at_jst'\\).order\\('watch_id'\\).execute\\(\\)\nfor r in resp.data:\n    print\\(f'  id={r[\\\\\"watch_id\\\\\"]} kind={r[\\\\\"watch_kind\\\\\"]:25s} utc={r[\\\\\"watch_at_utc\\\\\"]} jst={r[\\\\\"watch_at_jst\\\\\"]}'\\)\n\" 2>&1)",
       "Bash(cd /c/Users/osuim/Dev/Investment/EventScheduler/src && uv run python -c \"\nimport sys\nfrom pathlib import Path\nsys.path.insert\\(0, str\\(Path\\('.'\\).resolve\\(\\).parent.parent / 'shared'\\)\\)\nfrom supabase_client import get_client\n\n# テストデータ削除（watch_schedule は CASCADE で自動削除）\nget_client\\(\\).from_\\('event_occurrence'\\).delete\\(\\).eq\\('event_id', 'US_CPI'\\).execute\\(\\)\nget_client\\(\\).from_\\('ingest_run'\\).delete\\(\\).eq\\('run_type', 'test'\\).execute\\(\\)\n\n# 確認\nocc = get_client\\(\\).from_\\('event_occurrence'\\).select\\('*'\\).execute\\(\\)\nws = get_client\\(\\).from_\\('watch_schedule'\\).select\\('*'\\).execute\\(\\)\nir = get_client\\(\\).from_\\('ingest_run'\\).select\\('*'\\).execute\\(\\)\nprint\\(f'event_occurrence: {len\\(occ.data\\)} rows'\\)\nprint\\(f'watch_schedule: {len\\(ws.data\\)} rows'\\)\nprint\\(f'ingest_run: {len\\(ir.data\\)} rows'\\)\nprint\\('=== cleanup done ==='\\)\n\" 2>&1)",
       "Bash(cd /c/Users/osuim/Dev/Investment/EventScheduler/src && uv run python -c \"\nimport sys\nfrom pathlib import Path\nsys.path.insert\\(0, str\\(Path\\('.'\\).resolve\\(\\).parent.parent / 'shared'\\)\\)\nfrom supabase_client import get_client\n\n# 前回のテスト実行のingest_runも削除\nget_client\\(\\).from_\\('ingest_run'\\).delete\\(\\).neq\\('run_id', 0\\).execute\\(\\)\nir = get_client\\(\\).from_\\('ingest_run'\\).select\\('*'\\).execute\\(\\)\nprint\\(f'ingest_run: {len\\(ir.data\\)} rows'\\)\n\" 2>&1)",
-      "mcp__supabase__execute_sql"
+      "mcp__supabase__execute_sql",
+      "Bash(uv run:*)",
+      "Bash(gh issue:*)",
+      "Bash(uv run python -c \":*)"
     ]
   }
 }

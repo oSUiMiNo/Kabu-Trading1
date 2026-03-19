@@ -404,45 +404,6 @@ def fetch_active_for_watch() -> list[str]:
     return list({r["ticker"] for r in (resp.data or [])})
 
 
-def propagate_active_after_discussion(ticker: str, old_archive_id: str) -> dict | None:
-    """Discussion 完了後：新レコードに active+MotivationID+monitor を引き継ぎ、旧レコードを非活性化。"""
-    old = (
-        get_client()
-        .from_("archive")
-        .select("MotivationID, motivation_full, monitor")
-        .eq("id", old_archive_id)
-        .execute()
-    )
-    old_data = old.data[0] if old.data else {}
-
-    new = (
-        get_client()
-        .from_("archive")
-        .select("id")
-        .eq("ticker", ticker.upper())
-        .not_.is_("final_judge", "null")
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if not new.data:
-        return None
-
-    new_id = new.data[0]["id"]
-
-    fields = {
-        "active": True,
-        "MotivationID": old_data.get("MotivationID", 1),
-        "motivation_full": old_data.get("motivation_full", ""),
-    }
-    if old_data.get("monitor"):
-        fields["monitor"] = old_data["monitor"]
-
-    update_archivelog(new_id, **fields)
-    update_archivelog(old_archive_id, active=False)
-
-    return new.data[0]
-
 
 # ── watchlist ─────────────────────────────────────────
 

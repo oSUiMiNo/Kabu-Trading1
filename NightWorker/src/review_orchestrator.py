@@ -28,6 +28,7 @@ from supabase_client import (
 
 from AgentUtil import call_agent
 from issue_creator import create_issue, should_create_issue
+from issue_consolidator import run_consolidation
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
@@ -311,9 +312,12 @@ async def run_review(max_reviews: int = 20, dry_run: bool = False):
     needs_work = sum(1 for r in results if r["overall_quality"] == "要改善")
     problematic = sum(1 for r in results if r["overall_quality"] == "問題あり")
 
-    print(f"\n[NightWorker] 完了")
+    print(f"\n[NightWorker] レビュー完了")
     print(f"  良好：{good}件 / 要改善：{needs_work}件 / 問題あり：{problematic}件")
     print(f"  Issue作成：{issues_created}件")
+
+    if issues_created > 0:
+        await run_consolidation(dry_run=dry_run)
 
 
 async def main():

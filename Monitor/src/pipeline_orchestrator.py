@@ -28,7 +28,7 @@ from supabase_client import (
     safe_db,
     fetch_active_for_discussion,
     fetch_active_for_planning,
-    propagate_active_after_discussion,
+    get_archivelog_by_id,
     update_archivelog,
 )
 
@@ -221,18 +221,18 @@ async def run_pipeline(
     # ── Phase 3: Discussion ──
     run_discussion()
 
-    # Post-Discussion: propagate active flags + エラー検出
+    # Post-Discussion: エラー検出（同一 archive 方式のため propagate 不要）
     ng_ticker_names = []
     for row in ng_tickers:
         ticker = row["ticker"]
-        old_id = row["id"]
-        propagated = safe_db(propagate_active_after_discussion, ticker, old_id)
-        if propagated:
+        archive_id = row["id"]
+        record = safe_db(get_archivelog_by_id, archive_id)
+        if record and record.get("final_judge"):
             ng_ticker_names.append(ticker)
             print(f"  [{ticker}] Discussion 完了 → Planning に引き継ぎ")
         else:
             print(f"  [{ticker}] Discussion 失敗（final_judge 未生成）")
-            safe_db(update_archivelog, old_id, status="failed", active=False)
+            safe_db(update_archivelog, archive_id, status="failed", active=False)
             dn = dn_map.get(ticker, ticker)
             payload = NotifyPayload(
                 label=NotifyLabel.ERROR,

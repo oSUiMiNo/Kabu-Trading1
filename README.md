@@ -1,6 +1,6 @@
 # 投資パイプライン（Kabu-Trading1）
 
-銘柄の監視 → 議論 → プラン生成 → watchlist 更新を自動化するシステム。
+テクニカル指標取得 → 銘柄の監視 → 議論 → プラン生成 → watchlist 更新を自動化するシステム。
 Claude Code / GLM のマルチエージェント構成で運用する。
 
 ---
@@ -8,15 +8,18 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 ## システム全体像
 
 ```
-[Monitor] → [Discussion] → [Planning] → [Watch]
-   ↑                                        |
-   └────────── archive テーブル ←────────────┘
+[Technical] → [Monitor] → [Discussion] → [Planning] → [Watch]
+                 ↑                                        |
+                 └────────── archive テーブル ←────────────┘
 ```
 
-1. **Monitor** が watchlist 銘柄の現状をチェックし OK/NG/ERROR を判定
-2. **Discussion** が NG 銘柄を複数エージェントで議論し最終判定を出す
-3. **Planning** が最終判定からプラン YAML を生成
-4. **Watch** がプラン結果をもとに watchlist を更新し、Discord に業務通知を送信
+1. **Technical** が watchlist 全銘柄のテクニカル指標を取得し archive に記録
+2. **Monitor** がテクニカルデータを参照しつつ現状をチェックし OK/NG/ERROR を判定
+3. **Discussion** が NG 銘柄を複数エージェントで議論し最終判定を出す
+4. **Planning** が最終判定からプラン YAML を生成
+5. **Watch** がプラン結果をもとに watchlist を更新し、Discord に業務通知を送信
+
+全ブロックが同一の archive レコードに順番に書き足す。ブロックごとに別レコードを作らない。
 
 ブロック間の情報伝達は **DB（archive テーブル）経由の伝言板方式** で疎結合。環境変数・引数・ファイル等による大ブロック間の直接的なデータ受け渡しは禁止。
 ブロック内のサブエージェント間は変数・引数で直接渡す、またはファイルを作成してファイルパスを渡す方式で連携する。
@@ -28,6 +31,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 
 | モジュール | 役割 | 主要ファイル |
 |-----------|------|------------|
+| **Technical** | テクニカル指標取得 + archive 作成 | `Technical/src/technical_orchestrator.py` |
 | **Monitor** | 市場チェック + パイプライン制御 | `Monitor/src/pipeline_orchestrator.py`<br>`Monitor/src/monitor_orchestrator.py` |
 | **Discussion** | 複数レーン並列議論 + 最終判定 | `Discusion/src/parallel_orchestrator.py` |
 | **Planning** | プラン YAML 生成 | `Planning/src/plan_orchestrator.py` |
@@ -41,7 +45,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 ## 実行方法
 
 ```bash
-# 全パイプライン（Monitor → Discussion → Planning → Watch）
+# 全パイプライン（Technical → Monitor → Discussion → Planning → Watch）
 python Monitor/src/pipeline_orchestrator.py
 
 # 特定銘柄のみ
@@ -143,7 +147,7 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 
 | テーブル | 用途 |
 |---------|------|
-| `archive` | パイプライン出力の蓄積（monitor, lanes, final_judge, newplan_full, verdict） |
+| `archive` | パイプライン出力の蓄積（technical, monitor, lanes, final_judge, newplan_full, verdict） |
 | `watchlist` | 監視対象銘柄と最新サマリー |
 | `event_master` | 経済イベントのマスター |
 | `event_watch` | イベント watch スケジュール |
@@ -154,6 +158,7 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 
 | ブロック | DB クエリ条件 |
 |---------|-------------|
+| Monitor | `technical IS NOT NULL AND monitor IS NULL` |
 | Discussion | `active = True AND final_judge IS NULL` |
 | Planning | `active = True AND final_judge IS NOT NULL AND newplan_full IS NULL` |
 | Watch | `active = True AND status = 'completed' AND newplan_full IS NOT NULL` |
@@ -167,6 +172,7 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 | ファイル | 内容 |
 |---------|------|
 | パイプライン総則.md | ブロック間・ブロック内の構造原則 |
+| Technical要件定義書.md | Technical ブロックの要件定義 |
 | 新アーキテクチャ設計.md | 現行アーキテクチャの設計書 |
 | Discord通知.md | 通知ラベルの種類・色・送信タイミング |
 | リスクフラグ.md | monitor-checker が付与するタグ定義 |

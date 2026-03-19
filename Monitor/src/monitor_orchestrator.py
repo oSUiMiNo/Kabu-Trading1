@@ -30,6 +30,7 @@ from supabase_client import (
     get_latest_archivelog_with_newplan,
     create_archivelog,
     update_archivelog,
+    get_client,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -130,8 +131,9 @@ def _extract_plan_price(newplan_full: str) -> float | None:
 MAX_MONITOR_RETRIES = 3
 
 
-async def check_one_ticker(ticker: str, archivelog: dict | None = None) -> dict | None:
-    """1銘柄に対する監視チェックを実行する。エージェント呼び出し〜パースを最大3回リトライ。"""
+async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_archive_id: str | None = None) -> dict | None:
+    """1銘柄に対する監視チェックを実行する。エージェント呼び出し〜パースを最大3回リトライ。
+    target_archive_id: Technical が作成した archive ID。指定時はそこに書き込む。"""
     now = datetime.now(JST)
 
     if not archivelog:
@@ -207,15 +209,18 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None) -> dict 
             "retries_exhausted": True,
             "error_detail": last_error,
         }
-        new_record = safe_db(create_archivelog, ticker,
-                             archivelog.get("mode", "buy"),
-                             archivelog.get("span", "中期"))
-        if new_record:
-            safe_db(update_archivelog, new_record["id"],
-                    MotivationID=0,
-                    active=False,
-                    monitor=error_record,
-                    status="error")
+        if target_archive_id:
+            safe_db(update_archivelog, target_archive_id,
+                    MotivationID=0, active=False,
+                    monitor=error_record, status="error")
+        else:
+            new_record = safe_db(create_archivelog, ticker,
+                                 archivelog.get("mode", "buy"),
+                                 archivelog.get("span", "中期"))
+            if new_record:
+                safe_db(update_archivelog, new_record["id"],
+                        MotivationID=0, active=False,
+                        monitor=error_record, status="error")
         return error_record
 
     plan_price = _extract_plan_price(newplan_full)
@@ -238,26 +243,34 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None) -> dict 
 
     if monitor_data.get("result") == "NG":
         monitor_record["ng_reason"] = monitor_data.get("ng_reason", "")
-        safe_db(update_archivelog, archivelog["id"], active=False)
-        new_record = safe_db(create_archivelog, ticker,
-                             archivelog.get("mode", "buy"),
-                             archivelog.get("span", "中期"))
-        if new_record:
-            safe_db(update_archivelog, new_record["id"],
+        if target_archive_id:
+            safe_db(update_archivelog, target_archive_id,
                     MotivationID=1,
                     motivation_full=monitor_data.get("ng_reason", ""),
-                    active=True,
-                    monitor=monitor_record)
+                    active=True, monitor=monitor_record)
+        else:
+            safe_db(update_archivelog, archivelog["id"], active=False)
+            new_record = safe_db(create_archivelog, ticker,
+                                 archivelog.get("mode", "buy"),
+                                 archivelog.get("span", "中期"))
+            if new_record:
+                safe_db(update_archivelog, new_record["id"],
+                        MotivationID=1,
+                        motivation_full=monitor_data.get("ng_reason", ""),
+                        active=True, monitor=monitor_record)
     else:
-        new_record = safe_db(create_archivelog, ticker,
-                             archivelog.get("mode", "buy"),
-                             archivelog.get("span", "中期"))
-        if new_record:
-            safe_db(update_archivelog, new_record["id"],
-                    MotivationID=0,
-                    active=False,
-                    monitor=monitor_record,
-                    status="completed")
+        if target_archive_id:
+            safe_db(update_archivelog, target_archive_id,
+                    MotivationID=0, active=False,
+                    monitor=monitor_record, status="completed")
+        else:
+            new_record = safe_db(create_archivelog, ticker,
+                                 archivelog.get("mode", "buy"),
+                                 archivelog.get("span", "中期"))
+            if new_record:
+                safe_db(update_archivelog, new_record["id"],
+                        MotivationID=0, active=False,
+                        monitor=monitor_record, status="completed")
 
     status = monitor_record["result"]
     print(f"  [{ticker}] 結果: {status}")
@@ -334,9 +347,29 @@ async def run_monitor(
                 continue
         filtered.append(ticker)
 
+    technical_map = {}
+    for ticker in filtered:
+        try:
+            resp = (
+                get_client()
+                .from_("archive")
+                .select("id")
+                .eq("ticker", ticker.upper())
+                .not_.is_("technical", "null")
+                .is_("monitor", "null")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if resp.data:
+                technical_map[ticker] = resp.data[0]["id"]
+        except Exception:
+            pass
+
     if filtered:
         results = await asyncio.gather(*[
-            check_one_ticker(t, archivelog_map.get(t)) for t in filtered
+            check_one_ticker(t, archivelog_map.get(t), target_archive_id=technical_map.get(t))
+            for t in filtered
         ])
         for ticker, result in zip(filtered, results):
             if result:
