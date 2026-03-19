@@ -6,19 +6,19 @@
 
 | ラベル | 色 | 送信元 | 送信タイミング |
 |--------|-----|--------|----------------|
-| **開始** | 水色 | pipeline_orchestrator | パイプライン開始時 |
+| **開始** | 水色 | main_pipeline | パイプライン開始時 |
 | **緊急** | 赤 | Watch | Monitor 結果が NG かつ変動率 ≤ −10% |
 | **朗報** | 緑 | Watch | Monitor 結果が NG かつ変動率 ≥ +10% |
 | **警告** | オレンジ | Watch | Monitor 結果が NG（変動率 −10%〜+10% の範囲） |
-| **確認** | 青 | pipeline_orchestrator | Monitor 結果が OK だがリスクフラグあり |
-| **完了** | 緑 | pipeline_orchestrator | 全銘柄チェック完了時 |
-| **エラー** | グレー | pipeline_orchestrator | リトライ上限到達 / 失敗 |
+| **確認** | 青 | main_pipeline | Monitor 結果が OK だがリスクフラグあり |
+| **完了** | 緑 | main_pipeline | 全銘柄チェック完了時 |
+| **エラー** | グレー | main_pipeline | リトライ上限到達 / 失敗 |
 
 > Monitor 結果が OK でリスクフラグなし → 通知なし
 
 ## 送信元の役割分担
 
-- **pipeline_orchestrator**：パイプライン制御系の通知（開始・完了・エラー・確認）を担当
+- **main_pipeline**：パイプライン制御系の通知（開始・完了・エラー・確認）を担当
 - **Watch**：業務判定系の通知（緊急・朗報・警告）を担当。Discussion → Planning 完了後、`archive.monitor` のデータをもとに `classify_label()` でラベルを判定して送信する
 
 ## 補足

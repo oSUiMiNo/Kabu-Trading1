@@ -8,11 +8,11 @@
 ティッカー検出や並列化の責務は各ブロック（またはそのバッチアダプタ）が持つ。
 
 Usage:
-    python pipeline_orchestrator.py                    # 全銘柄パイプライン
-    python pipeline_orchestrator.py --ticker NVDA      # 指定銘柄のみ
-    python pipeline_orchestrator.py --market US        # 米国株のみ
-    python pipeline_orchestrator.py --skip-span long   # 長期スキップ
-    python pipeline_orchestrator.py --monitor-only     # Monitor のみ
+    python main_pipeline.py                    # 全銘柄パイプライン
+    python main_pipeline.py --ticker NVDA      # 指定銘柄のみ
+    python main_pipeline.py --market US        # 米国株のみ
+    python main_pipeline.py --skip-span long   # 長期スキップ
+    python main_pipeline.py --monitor-only     # Monitor のみ
 """
 import json
 import os
@@ -23,7 +23,9 @@ from pathlib import Path
 
 import anyio
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT / "shared"))
+sys.path.insert(0, str(PROJECT_ROOT / "Monitor" / "src"))
 from supabase_client import (
     safe_db,
     fetch_active_for_discussion,
@@ -36,7 +38,6 @@ from monitor_orchestrator import run_monitor
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA
 from discord_notifier import notify, send_start_notification
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TECHNICAL_DIR = PROJECT_ROOT / "Technical"
 DISCUSSION_DIR = PROJECT_ROOT / "Discusion" / "src"
 PLANNING_DIR = PROJECT_ROOT / "Planning" / "src"

@@ -32,7 +32,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 | モジュール | 役割 | 主要ファイル |
 |-----------|------|------------|
 | **Technical** | テクニカル指標取得 + archive 作成 | `Technical/src/technical_orchestrator.py` |
-| **Monitor** | 市場チェック + パイプライン制御 | `Monitor/src/pipeline_orchestrator.py`<br>`Monitor/src/monitor_orchestrator.py` |
+| **Monitor** | 市場チェック + パイプライン制御 | `main_pipeline.py`<br>`Monitor/src/monitor_orchestrator.py` |
 | **Discussion** | 複数レーン並列議論 + 最終判定 | `Discusion/src/parallel_orchestrator.py` |
 | **Planning** | プラン YAML 生成 | `Planning/src/plan_orchestrator.py` |
 | **Watch** | watchlist 更新 + Discord 業務通知 | `Watch/src/watch_orchestrator.py` |
@@ -46,16 +46,16 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 
 ```bash
 # 全パイプライン（Technical → Monitor → Discussion → Planning → Watch）
-python Monitor/src/pipeline_orchestrator.py
+python main_pipeline.py
 
 # 特定銘柄のみ
-python Monitor/src/pipeline_orchestrator.py --ticker NVDA
+python main_pipeline.py --ticker NVDA
 
 # 監視のみ（Discussion/Planning/Watch 起動しない）
-python Monitor/src/pipeline_orchestrator.py --monitor-only
+python main_pipeline.py --monitor-only
 
 # 米国株のみ
-python Monitor/src/pipeline_orchestrator.py --market US
+python main_pipeline.py --market US
 
 # 監視単体実行
 python Monitor/src/monitor_orchestrator.py
@@ -91,13 +91,13 @@ python Monitor/src/monitor_orchestrator.py
 
 | ラベル | 送信元 | 条件 |
 |--------|--------|------|
-| 開始 | pipeline_orchestrator | パイプライン開始時 |
-| 確認 | pipeline_orchestrator | OK だがリスクフラグあり |
+| 開始 | main_pipeline | パイプライン開始時 |
+| 確認 | main_pipeline | OK だがリスクフラグあり |
 | 緊急 | Watch | NG かつ変動率 ≤ -10% |
 | 朗報 | Watch | NG かつ変動率 ≥ +10% |
 | 警告 | Watch | NG（変動率 -10%〜+10%） |
-| 完了 | pipeline_orchestrator | 全銘柄チェック完了時 |
-| エラー | pipeline_orchestrator | リトライ上限到達 / 失敗 |
+| 完了 | main_pipeline | 全銘柄チェック完了時 |
+| エラー | main_pipeline | リトライ上限到達 / 失敗 |
 
 ---
 

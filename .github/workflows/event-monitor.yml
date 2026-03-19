@@ -12,7 +12,7 @@
 #   1. event_watch_check.py  … 上記2種類のトリガーを DB からチェック
 #      - 両方該当なし → ジョブ終了（以降のステップはスキップ）
 #      - いずれか該当 → 対象市場(markets), skip_spans, event_details を出力
-#   2. pipeline_orchestrator.py … 市場ごとに Monitor → Discussion → Planning → Watch パイプラインを実行
+#   2. main_pipeline.py … 市場ごとに Monitor → Discussion → Planning → Watch パイプラインを実行
 #
 # スケジュール:
 #   5分間隔・24時間稼働。毎時ちょうど (:00) を避けているのは
@@ -124,7 +124,6 @@ jobs:
       # markets が空の場合は全銘柄チェック（market 引数なし）。
       - name: Run Monitor pipeline for each market
         if: steps.resolve.outputs.should_run == 'true'
-        working-directory: Monitor/src
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -144,12 +143,12 @@ jobs:
             echo "============================================"
             echo "=== Monitor: all markets ==="
             echo "============================================"
-            uv run python pipeline_orchestrator.py $SKIP_ARGS
+            uv run --project Monitor/src python main_pipeline.py $SKIP_ARGS
           else
             for MARKET in $MARKETS; do
               echo "============================================"
               echo "=== Monitor: ${MARKET} market ==="
               echo "============================================"
-              uv run python pipeline_orchestrator.py --market "$MARKET" $SKIP_ARGS
+              uv run --project Monitor/src python main_pipeline.py --market "$MARKET" $SKIP_ARGS
             done
           fi
