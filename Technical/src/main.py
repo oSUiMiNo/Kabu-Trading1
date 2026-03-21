@@ -47,6 +47,18 @@ def to_yfinance_symbol(ticker: str, market: str | None = None) -> str:
     return ticker
 
 
+def fetch_usd_jpy_rate() -> float | None:
+    import yfinance as yf
+    try:
+        t = yf.Ticker("JPY=X")
+        h = t.history(period="1d")
+        if not h.empty:
+            return round(float(h["Close"].iloc[-1]), 2)
+    except Exception as e:
+        print(f"  USD/JPY 取得失敗: {e}")
+    return None
+
+
 def fetch_technical(symbol: str, config: dict) -> dict:
     from technical_indicator_fetcher import fetch_and_run_with_yfinance, FetcherOptions
 
@@ -60,6 +72,10 @@ def fetch_technical(symbol: str, config: dict) -> dict:
     )
 
     result = {"fetched_at": datetime.now(JST).isoformat(), "latest_price": None, "timeframes": {}}
+
+    usd_jpy = fetch_usd_jpy_rate()
+    if usd_jpy is not None:
+        result["usd_jpy_rate"] = usd_jpy
 
     for tf in timeframes:
         data = fetch_and_run_with_yfinance(

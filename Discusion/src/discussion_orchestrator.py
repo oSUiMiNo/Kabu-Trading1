@@ -15,6 +15,19 @@ from AgentUtil import call_agent, AgentResult, load_debug_config, save_result_lo
 
 MAX_AGENT_RETRIES = 3
 
+_EXPORT_FENCE_RE = re.compile(
+    r"(### EXPORT[^\n]*\n```[^\n]*\n.*?```)",
+    re.DOTALL,
+)
+
+
+def _truncate_after_first_export(text: str) -> str:
+    """最初のEXPORTブロック（```で囲まれた部分）完了後のテキストを除去する。"""
+    m = _EXPORT_FENCE_RE.search(text)
+    if not m:
+        return text
+    return text[: m.end()]
+
 # プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
@@ -236,7 +249,11 @@ async def run_discussion(
         if show_cost and result.cost:
             print(f"コスト: ${result.cost:.4f}")
 
-        # オーケストレーター側でログに追記
+        # EXPORT後の重複分析を除去してからログに追記
+        original_len = len(result.text)
+        result.text = _truncate_after_first_export(result.text)
+        if len(result.text) < original_len:
+            print(f"---{lane_label} ラウンド{round_num} EXPORT以降の余剰テキストを除去")
         saved = save_result_log(result, log_path, append=True)
         
 

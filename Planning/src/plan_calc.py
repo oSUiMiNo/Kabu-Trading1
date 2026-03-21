@@ -234,6 +234,7 @@ def calc_allocation(
     market: Market,
     risk_limit_jpy: int | None = None,
     config: PlanConfig | None = None,
+    usd_jpy_rate: float | None = None,
 ) -> AllocationResult:
     """配分・株数計算（youken 5.4, 5.6, 5.7）"""
     cfg = config or DEFAULT_CONFIG
@@ -250,7 +251,13 @@ def calc_allocation(
     if current_price <= 0:
         shares = 0
     else:
-        raw_shares = alloc_jpy / current_price
+        if market == Market.US:
+            if usd_jpy_rate is None or usd_jpy_rate <= 0:
+                raise ValueError("US銘柄の株数計算には usd_jpy_rate が必要です")
+            alloc_local = alloc_jpy / usd_jpy_rate
+        else:
+            alloc_local = alloc_jpy
+        raw_shares = alloc_local / current_price
         shares = math.floor(raw_shares / lot) * lot
 
     status = "OK" if shares > 0 else "NOT_EXECUTABLE_DUE_TO_LOT"

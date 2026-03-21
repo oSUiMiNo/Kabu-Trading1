@@ -369,10 +369,15 @@ async def run_plan(
         print(f"  追加テキスト: {len(additional_texts)} 件")
     print()
 
-    # --- 1.5 価格取得（current_price 未指定時）---
+    # --- 1.5 価格取得（current_price 未指定時）+ 為替レート ---
     #   優先順: archive.technical.latest_price → archive.monitor.current_price → price-fetcher
+    technical_data = _db_archivelog.get("technical")
+    if isinstance(technical_data, dict):
+        usd_jpy_rate = technical_data.get("usd_jpy_rate")
+    else:
+        usd_jpy_rate = None
+
     if current_price is None:
-        technical_data = _db_archivelog.get("technical")
         if technical_data and isinstance(technical_data, dict) and technical_data.get("latest_price"):
             current_price = technical_data["latest_price"]
             print(f">>> 価格取得（archive.technical から）: {current_price}")
@@ -410,7 +415,7 @@ async def run_plan(
     print(f"  confidence: {confidence.value}（p={p}）")
 
     # --- 5. 配分計算 ---
-    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy, config=cfg)
+    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy, config=cfg, usd_jpy_rate=usd_jpy_rate)
     print(f"  配分: {allocation.allocation_pct}% = {allocation.allocation_jpy:,}円")
     print(f"  株数: {allocation.quantity}（{allocation.market.value} lot={allocation.lot_size}）→ {allocation.status}")
     print()
@@ -456,6 +461,7 @@ async def run_plan(
         budget_total_jpy=allocation.budget_total_jpy,
         allocation_pct=allocation.allocation_pct,
         allocation_jpy=allocation.allocation_jpy,
+        usd_jpy_rate=usd_jpy_rate,
         market=market.value,
         lot_size=allocation.lot_size,
         quantity=allocation.quantity,

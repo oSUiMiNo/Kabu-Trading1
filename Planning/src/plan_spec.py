@@ -52,6 +52,7 @@ class PlanSpec:
     budget_total_jpy: int = 0
     allocation_pct: float = 0.0
     allocation_jpy: int = 0
+    usd_jpy_rate: float | None = None
     market: str = "JP"
     lot_size: int = 100
     lot_policy: str = "FLOOR_TO_LOT"
@@ -148,6 +149,7 @@ def build_yaml(spec: PlanSpec) -> str:
             ("budget_total_jpy", spec.budget_total_jpy),
             ("allocation_pct", spec.allocation_pct),
             ("allocation_jpy", spec.allocation_jpy),
+            *([("usd_jpy_rate", spec.usd_jpy_rate)] if spec.usd_jpy_rate is not None else []),
             ("instrument_lot", _ordered_dict(
                 ("market", spec.market),
                 ("lot_size", spec.lot_size),

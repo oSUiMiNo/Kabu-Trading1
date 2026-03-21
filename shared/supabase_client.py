@@ -421,6 +421,20 @@ def fetch_today_monitor_results() -> list[dict]:
     return resp.data or []
 
 
+def fetch_monitor_results_since(since_iso: str) -> list[dict]:
+    """指定時刻以降に作成された Monitor 結果を返す。
+    パイプライン実行開始時刻を渡すことで、当該実行の結果のみを取得できる。"""
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("ticker, monitor, status")
+        .gte("created_at", since_iso)
+        .not_.is_("monitor", "null")
+        .execute()
+    )
+    return resp.data or []
+
+
 
 # ── watchlist ─────────────────────────────────────────
 

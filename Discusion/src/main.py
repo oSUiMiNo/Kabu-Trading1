@@ -54,14 +54,8 @@ def _build_market_context(archive_id: str | None) -> str:
 
     if monitor and isinstance(monitor, dict):
         change = monitor.get("price_change_pct")
-        ng_reason = monitor.get("ng_reason", "")
-        summary = monitor.get("summary", "")
         if change is not None:
             parts.append(f"  プラン時からの変動: {change}%")
-        if ng_reason:
-            parts.append(f"  NG理由: {ng_reason}")
-        elif summary:
-            parts.append(f"  概要: {summary}")
 
     technical = record.get("technical")
     if technical and isinstance(technical, dict) and "timeframes" in technical:

@@ -18,9 +18,12 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import anyio
+
+_JST = timezone(timedelta(hours=9))
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT / "shared"))
@@ -30,6 +33,7 @@ from supabase_client import (
     fetch_active_for_discussion,
     fetch_active_for_planning,
     fetch_today_monitor_results,
+    fetch_monitor_results_since,
     get_archivelog_by_id,
     update_archivelog,
 )
@@ -97,10 +101,13 @@ async def run_pipeline(
     if skip_spans:
         for span in skip_spans:
             mon_args.extend(["--skip-span", span])
+    monitor_start = datetime.now(_JST).isoformat()
     _run_batch("monitor_batch.py", mon_args)
 
-    # Monitor 後処理：DB から結果取得して ERROR/CHECK 通知
-    monitor_results = safe_db(fetch_today_monitor_results) or []
+    # Monitor 後処理：この実行で作られた結果のみ取得し、対象 market で絞る
+    wl_tickers = {w["ticker"] for w in wl}
+    monitor_results = safe_db(fetch_monitor_results_since, monitor_start) or []
+    monitor_results = [r for r in monitor_results if r["ticker"] in wl_tickers]
     for rec in monitor_results:
         ticker = rec["ticker"]
         monitor_data = rec.get("monitor") or {}
