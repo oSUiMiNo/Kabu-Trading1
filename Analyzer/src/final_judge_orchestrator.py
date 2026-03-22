@@ -96,7 +96,7 @@ def _read_latest_judge(ticker: str, set_num: int, discusion_dir: Path | None = N
     return latest.read_text(encoding="utf-8")
 
 
-def _extract_discussion_summary(content: str) -> str:
+def _extract_analyzer_summary(content: str) -> str:
     """議論テキストから暫定結論・EXPORT 付近を抽出する（全文は大きすぎるため）"""
     if not content:
         return ""
@@ -107,7 +107,7 @@ def _extract_discussion_summary(content: str) -> str:
     return content[-3000:].strip() if len(content) > 3000 else content
 
 
-def _read_discussion_export(ticker: str, set_num: int, discusion_dir: Path | None = None) -> str:
+def _read_analyzer_export(ticker: str, set_num: int, discusion_dir: Path | None = None) -> str:
     """議論ログから暫定結論・EXPORT 付近を抽出する（全文は大きすぎるため）"""
     base = discusion_dir if discusion_dir else LOGS_DIR
     t = ticker.upper()
@@ -115,7 +115,7 @@ def _read_discussion_export(ticker: str, set_num: int, discusion_dir: Path | Non
     if not log_path.exists():
         return ""
     content = log_path.read_text(encoding="utf-8")
-    return _extract_discussion_summary(content)
+    return _extract_analyzer_summary(content)
 
 
 def build_final_judge_prompt(
@@ -175,11 +175,11 @@ def build_final_judge_prompt(
     for sn in all_sets:
         label = "AGREED" if sn in agreed_sets else "DISAGREED"
         judge_content = _read_latest_judge(ticker, sn, discusion_dir)
-        discussion_export = _read_discussion_export(ticker, sn, discusion_dir)
+        analyzer_export = _read_analyzer_export(ticker, sn, discusion_dir)
 
         section = f"--- set{sn} [{label}] ここから ---\n"
-        if discussion_export:
-            section += f"【議論ログ（暫定結論抜粋）】\n{discussion_export}\n\n"
+        if analyzer_export:
+            section += f"【議論ログ（暫定結論抜粋）】\n{analyzer_export}\n\n"
         if judge_content:
             section += f"【judge 判定ログ】\n{judge_content}\n"
         else:

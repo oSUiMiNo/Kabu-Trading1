@@ -8,14 +8,14 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 ## システム全体像
 
 ```
-[Technical] → [Monitor] → [Discussion] → [Planning] → [Watch]
+[Technical] → [Monitor] → [Analyzer] → [Planning] → [Watch]
                  ↑                                        |
                  └────────── archive テーブル ←────────────┘
 ```
 
 1. **Technical** が watchlist 全銘柄のテクニカル指標を取得し archive に記録
 2. **Monitor** がテクニカルデータを参照しつつ現状をチェックし OK/NG/ERROR を判定
-3. **Discussion** が NG 銘柄を複数エージェントで議論し最終判定を出す
+3. **Analyzer** が NG 銘柄を複数エージェントで議論し最終判定を出す
 4. **Planning** が最終判定からプラン YAML を生成
 5. **Watch** がプラン結果をもとに watchlist を更新し、Discord に業務通知を送信
 
@@ -33,7 +33,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 |-----------|------|------------|
 | **Technical** | テクニカル指標取得 + archive 作成 | `technical_batch.py`<br>`Technical/src/main.py` |
 | **Monitor** | 市場チェック + パイプライン制御 | `monitor_batch.py`<br>`Monitor/src/main.py` |
-| **Discussion** | 複数レーン並列議論 + 最終判定 | `discussion_batch.py`<br>`Discusion/src/main.py` |
+| **Analyzer** | 複数レーン並列議論 + 最終判定 | `analyzer_batch.py`<br>`Analyzer/src/main.py` |
 | **Planning** | プラン YAML 生成 | `planning_batch.py`<br>`Planning/src/main.py` |
 | **Watch** | watchlist 更新 + Discord 業務通知 | `watch_batch.py`<br>`Watch/src/main.py` |
 | **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/main.py` |
@@ -45,13 +45,13 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 ## 実行方法
 
 ```bash
-# 全パイプライン（Technical → Monitor → Discussion → Planning → Watch）
+# 全パイプライン（Technical → Monitor → Analyzer → Planning → Watch）
 python main_pipeline.py
 
 # 特定銘柄のみ
 python main_pipeline.py --ticker NVDA
 
-# 監視のみ（Discussion/Planning/Watch 起動しない）
+# 監視のみ（Analyzer/Planning/Watch 起動しない）
 python main_pipeline.py --monitor-only
 
 # 米国株のみ
@@ -101,17 +101,17 @@ python monitor_batch.py
 
 ---
 
-## Discussion の LLM バックエンド
+## Analyzer の LLM バックエンド
 
-Discussion ブロックは Claude Code と Z.AI GLM の2つのバックエンドに対応している。
+Analyzer ブロックは Claude Code と Z.AI GLM の2つのバックエンドに対応している。
 `.env.local` の環境変数で切り替える。
 
 ```env
 # バックエンド選択（claude / glm）
-DISCUSSION_LLM_PROVIDER=glm
+ANALYZER_LLM_PROVIDER=glm
 
 # GLM モデル指定
-DISCUSSION_GLM_MODEL=glm-4.7
+ANALYZER_GLM_MODEL=glm-4.7
 ```
 
 ### Z.AI GLM の利用
@@ -123,7 +123,7 @@ DISCUSSION_GLM_MODEL=glm-4.7
 | 現在のモデル | **GLM-4.7**（推論モデル、最大 128K コンテキスト） |
 | API キー | `.env.local` の `ZHIPUAI_API_KEY` に設定済み |
 | エンドポイント | `https://api.z.ai/api/coding/paas/v4/`（Coding Plan 用） |
-| 切り替え方法 | `DISCUSSION_GLM_MODEL` の値を変更するだけ（コード変更不要） |
+| 切り替え方法 | `ANALYZER_GLM_MODEL` の値を変更するだけ（コード変更不要） |
 | クォータ | 5時間あたり 80〜120 プロンプト / 週間上限 約400 |
 
 Lite プランで利用可能なモデル：`glm-4.7`、`glm-4.7-flash`（無料）
@@ -137,7 +137,7 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 
 主要設定：
 - 投資パラメータ（total_budget_jpy, risk_limit_pct, stop_loss_pct 等）
-- Discussion パラメータ（num_lanes, max_rounds 等）
+- Analyzer パラメータ（num_lanes, max_rounds 等）
 - Monitor 定期スケジュール
 - 緊急停止スイッチ（`monitor_schedule_enabled: false` で全スケジュール一時停止）
 
@@ -159,7 +159,7 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 | ブロック | DB クエリ条件 |
 |---------|-------------|
 | Monitor | `technical IS NOT NULL AND monitor IS NULL` |
-| Discussion | `active = True AND final_judge IS NULL` |
+| Analyzer | `active = True AND final_judge IS NULL` |
 | Planning | `active = True AND final_judge IS NOT NULL AND newplan_full IS NULL` |
 | Watch | `active = True AND status = 'completed' AND newplan_full IS NOT NULL` |
 

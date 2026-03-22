@@ -7,7 +7,7 @@
 # パイプライン:
 #   main_pipeline.py が以下を順に実行する
 #     1. Monitor  … 各銘柄の現在価格 vs plan 想定価格を比較 → OK/NG 判定
-#     2. Discussion（NG時のみ）… Analyst / Devil's Advocate / Judge による多角的議論
+#     2. Analyzer（NG時のみ）… Analyst / Devil's Advocate / Judge による多角的議論
 #     3. Planning（NG時のみ）… 新 plan の生成・DB 登録
 #     4. Watch … プラン結果をもとに watchlist サマリーを更新
 #     5. Discord 通知 … 結果をラベル付き Embed で送信
@@ -26,7 +26,7 @@ on:
         required: false
         type: string
       monitor_only:
-        description: '監視のみ（NG時にDiscussion/Planningを起動しない）'
+        description: '監視のみ（NG時にAnalyzer/Planningを起動しない）'
         required: false
         type: boolean
         default: false
@@ -54,8 +54,8 @@ jobs:
         working-directory: Monitor/src
         run: uv sync
 
-      - name: Install Discussion dependencies
-        working-directory: Discusion/src
+      - name: Install Analyzer dependencies
+        working-directory: Analyzer/src
         run: uv sync
 
       - name: Install Planning dependencies
@@ -66,7 +66,7 @@ jobs:
         working-directory: Watch/src
         run: uv sync
 
-      - name: Run Monitor → Discussion → Planning → Watch pipeline
+      - name: Run Monitor → Analyzer → Planning → Watch pipeline
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

@@ -5,7 +5,7 @@
 レーンは互いに独立しており、並列実行可能。
 
 フロー:
-  1. run_discussion() → 議論ログ生成（Analyst vs Devil's Advocate）
+  1. run_analyzer() → 議論ログ生成（Analyst vs Devil's Advocate）
   2. run_single_opinion() ×2 → Opinion生成（並列）
   3. run_single_judge() → 一致判定
   4. LaneResult を返す
@@ -17,9 +17,9 @@ from pathlib import Path
 
 import anyio
 
-from discussion_orchestrator import (
+from analyzer_orchestrator import (
     LOGS_DIR,
-    run_discussion,
+    run_analyzer,
     get_last_export,
 )
 from opinion_orchestrator import (
@@ -64,7 +64,7 @@ async def run_lane(
     1レーン分のフローを一気通貫で実行する。
 
     処理フロー:
-      1. run_discussion()         → 議論ログ
+      1. run_analyzer()           → 議論ログ
       2. run_single_opinion() ×N → Opinion生成（並列）
       3. run_single_judge()      → 一致判定
       4. LaneResult を返す（DB書き込みは呼び出し元が行う）
@@ -80,7 +80,7 @@ async def run_lane(
     try:
         # --- フェーズ1: 議論 ---
         print(f"\n[レーン{set_num}] 議論 開始")
-        await run_discussion(
+        await run_analyzer(
             ticker,
             max_rounds=max_rounds,
             initial_prompt=initial_prompt,
@@ -163,7 +163,7 @@ async def run_lane(
         }
 
         # レーン完了表示
-        show_cost = load_debug_config("discussion").get("show_cost", False)
+        show_cost = load_debug_config("analyzer").get("show_cost", False)
         print(f"\n{'='*60}")
         print(f"=== レーン{set_num} 完了 ===")
         print(f"  結果: {agreement}")

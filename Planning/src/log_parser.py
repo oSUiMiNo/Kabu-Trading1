@@ -1,7 +1,7 @@
 """
-Discussionプロジェクト ログ解析モジュール
+Analyzerプロジェクト ログ解析モジュール
 
-Discussion の final_judge ログから判定・投票・根拠を抽出する。
+Analyzer の final_judge ログから判定・投票・根拠を抽出する。
 EXPORT yamlブロックを優先的にパースし、フォールバックとして本文マークダウンを解析する。
 """
 import os
@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 
 
-# Discussion → Planning の用語変換テーブル（5択スタンス対応）
+# Analyzer → Planning の用語変換テーブル（5択スタンス対応）
 DECISION_MAP: dict[str, str] = {
     "BUY": "BUY",
     "SELL": "SELL",
@@ -47,14 +47,14 @@ class ParsedJudgment:
 
 
 @dataclass
-class DiscusionLogs:
+class AnalyzerLogs:
     """指定銘柄のログファイル一式"""
     final_judge: Path | None = None
     set_files: list[Path] = field(default_factory=list)
     judge_files: list[Path] = field(default_factory=list)
 
 
-def find_discusion_logs(discusion_dir: Path, ticker: str) -> DiscusionLogs:
+def find_analyzer_logs(analyzer_dir: Path, ticker: str) -> AnalyzerLogs:
     """
     セッションディレクトリから指定銘柄のログファイルを探索する。
 
@@ -63,23 +63,23 @@ def find_discusion_logs(discusion_dir: Path, ticker: str) -> DiscusionLogs:
     - {TICKER}_set{N}_judge_{K}.md           → judge_files（判定）
     - {TICKER}_final_judge_{K}.md            → final_judge（最大番号を採用）
     """
-    result = DiscusionLogs()
+    result = AnalyzerLogs()
     t = ticker.upper()
 
-    if not discusion_dir.exists():
+    if not analyzer_dir.exists():
         return result
 
-    final_judges = sorted(discusion_dir.glob(f"{t}_final_judge_*.md"))
+    final_judges = sorted(analyzer_dir.glob(f"{t}_final_judge_*.md"))
     if final_judges:
         result.final_judge = final_judges[-1]
 
     result.set_files = sorted(
-        p for p in discusion_dir.glob(f"{t}_set*.md")
+        p for p in analyzer_dir.glob(f"{t}_set*.md")
         if re.search(r"_set\d+\.md$", p.name)
     )
 
     result.judge_files = sorted(
-        p for p in discusion_dir.glob(f"{t}_set*_judge_*.md")
+        p for p in analyzer_dir.glob(f"{t}_set*_judge_*.md")
     )
 
     return result
@@ -174,7 +174,7 @@ def _infer_votes_from_export(export: dict, decision_raw: str) -> tuple[int, int]
     """
     EXPORT yaml のレーン構造から投票数を推定する（フォールバック）。
 
-    投票ルール（Discussion project）:
+    投票ルール（Analyzer project）:
     - AGREED レーン: supported_side に 2 票
     - DISAGREED レーン: 各 side に 1 票ずつ（split）
     """

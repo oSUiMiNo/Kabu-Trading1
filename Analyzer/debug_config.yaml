@@ -10,7 +10,7 @@ debug_prompt: |
 # show_cost     : コスト（USD）
 
 # 議論
-discussion:
+analyzer:
   show_options: false
   show_prompt: true
   show_response: false

@@ -2,7 +2,7 @@
   "permissions": {
     "allow": [
       "Skill(self-dir_build)",
-      "Bash(git -C \"C:/Users/osuim/Dev/Investment/Discusion/src\" rev-parse --show-toplevel)",
+      "Bash(git -C \"C:/Users/osuim/Dev/Investment/Analyzer/src\" rev-parse --show-toplevel)",
       "Bash(git fetch:*)",
       "Bash(git push:*)",
       "Bash(git add:*)",

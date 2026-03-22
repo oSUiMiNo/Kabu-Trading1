@@ -10,7 +10,7 @@ import subprocess
 
 
 _CATEGORY_LABEL = {
-    "Discussion品質": "discussion-quality",
+    "Analyzer品質": "analyzer-quality",
     "Planning品質": "planning-quality",
     "データ整合性": "data-integrity",
 }
@@ -18,7 +18,7 @@ _CATEGORY_LABEL = {
 _SEVERITY_JA = {"高": "高", "中": "中", "低": "低"}
 
 _WHY_IT_MATTERS = {
-    "Discussion中断の可能性": "議論が完了していないため、最終判定が不正確な可能性があります。",
+    "Analyzer中断の可能性": "議論が完了していないため、最終判定が不正確な可能性があります。",
     "Planning未完了": "投資プランが生成されておらず、watchlist の更新が不完全です。",
     "active=True のまま長時間放置": "パイプラインが途中で停止し、後続の処理が実行されていません。",
     "verdict不整合": "議論の結論とプランの判定が食い違っており、投資判断の信頼性に影響します。",

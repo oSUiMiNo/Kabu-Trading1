@@ -1,24 +1,24 @@
 """
-Discussion バッチ
+Analyzer バッチ
 
-DB から Discussion 対象の銘柄を取得し、Discusion/src/main.py を並列実行する。
+DB から Analyzer 対象の銘柄を取得し、Analyzer/src/main.py を並列実行する。
 
 Usage:
-    python discussion_batch.py    # DB から全対象銘柄を自動検出
+    python analyzer_batch.py    # DB から全対象銘柄を自動検出
 """
 import asyncio
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "shared"))
-from supabase_client import safe_db, fetch_active_for_discussion, list_watchlist
+from supabase_client import safe_db, fetch_active_for_analyzer, list_watchlist
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DISCUSSION_DIR = PROJECT_ROOT / "Discusion"
+ANALYZER_DIR = PROJECT_ROOT / "Analyzer"
 
 
 def _find_venv_python() -> str:
-    for base in [DISCUSSION_DIR / "src", DISCUSSION_DIR]:
+    for base in [ANALYZER_DIR / "src", ANALYZER_DIR]:
         win = base / ".venv" / "Scripts" / "python.exe"
         unix = base / ".venv" / "bin" / "python"
         if win.exists():
@@ -32,17 +32,17 @@ async def _run_one(python: str, script: str, ticker: str, horizon: str, mode: st
     cmd = [python, script, ticker, horizon, mode, "--archive-id", archive_id]
     if display_name:
         cmd.extend(["--display-name", display_name])
-    proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(DISCUSSION_DIR / "src"))
+    proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(ANALYZER_DIR / "src"))
     await proc.communicate()
     return ticker, proc.returncode
 
 
 async def run():
     print(f"\n{'='*60}")
-    print(f"=== Discussion Batch ===")
+    print(f"=== Analyzer Batch ===")
     print(f"{'='*60}")
 
-    pending = safe_db(fetch_active_for_discussion) or []
+    pending = safe_db(fetch_active_for_analyzer) or []
     if not pending:
         print("  active な対象銘柄がありません。")
         return 0
@@ -57,7 +57,7 @@ async def run():
     print()
 
     python = _find_venv_python()
-    script = str(DISCUSSION_DIR / "src" / "main.py")
+    script = str(ANALYZER_DIR / "src" / "main.py")
 
     tasks = []
     for row in pending:

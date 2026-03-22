@@ -217,7 +217,7 @@ def build_commentary_prompt(
             parts.append(f"--- {label} ---\n{content}\n")
         additional_section = (
             f"\n"
-            f"【参考：Discussion ログ】\n"
+            f"【参考：Analyzer ログ】\n"
             f"{''.join(parts)}"
         )
 
@@ -235,7 +235,7 @@ def build_commentary_prompt(
         f"\n"
         f"【あなたの作業】\n"
         f"1. 銘柄「{spec.ticker}」に関する最新ニュースや市場状況をWeb検索で確認\n"
-        f"2. 追加の Discussion ログがある場合は参照し、根拠の詳細や議論の文脈を把握する\n"
+        f"2. 追加の Analyzer ログがある場合は参照し、根拠の詳細や議論の文脈を把握する\n"
         f"3. decision_basis の各項目に why_it_matters（結論の決め手になった理由を日本語1文。最新情報があれば言及）を付与\n"
         f"4. monitoring_hint.reason を生成（投票状況・confidence・freshness + 直近イベントを踏まえた1文）\n"
         f"5. execution_notes に追加すべき注記があれば追加（価格ズレ警告、鮮度警告、市況注記など）\n"

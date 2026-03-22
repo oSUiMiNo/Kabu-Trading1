@@ -1,4 +1,4 @@
-# Discusion プロジェクトまとめ
+# Analyzer プロジェクトまとめ
 
 ## 何をするプロジェクトか
 
@@ -119,11 +119,11 @@ python src/main.py NVDA 長期 売る 2 4
 ## ディレクトリ構造
 
 ```
-Discusion/
+Analyzer/
 ├── src/                           # オーケストレーター群（Python）
 │   ├── main.py   #   エントリーポイント
 │   ├── lane_orchestrator.py       #   1レーン制御
-│   ├── discussion_orchestrator.py #   議論ループ
+│   ├── analyzer_orchestrator.py #   議論ループ
 │   ├── opinion_orchestrator.py    #   意見生成
 │   ├── judge_orchestrator.py      #   一致判定
 │   ├── final_judge_orchestrator.py#   最終判定

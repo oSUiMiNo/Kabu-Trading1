@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TB
-    in((Discussion<br>ログ一式<br>in))
+    in((Analyzer<br>ログ一式<br>in))
 
     in --> LP["ログ解析<br>(log_parser)"]
 

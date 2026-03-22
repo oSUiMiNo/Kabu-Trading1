@@ -19,7 +19,7 @@
 ## 送信元の役割分担
 
 - **main_pipeline**：パイプライン制御系の通知（開始・完了・エラー・確認）を担当
-- **Watch**：業務判定系の通知（緊急・朗報・警告）を担当。Discussion → Planning 完了後、`archive.monitor` のデータをもとに `classify_label()` でラベルを判定して送信する
+- **Watch**：業務判定系の通知（緊急・朗報・警告）を担当。Analyzer → Planning 完了後、`archive.monitor` のデータをもとに `classify_label()` でラベルを判定して送信する
 
 ## 補足
 

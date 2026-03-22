@@ -19,7 +19,7 @@ tools: []
 ## 統合の基準
 
 - **根本原因の一致**：表面的なキーワード一致ではなく、問題の原因が同じであること
-  - 例：「risk_flag 'X' が未分析」と「risk_flags が完全に無視」→ 同じ原因（Discussion が Monitor の risk_flags を参照していない）
+  - 例：「risk_flag 'X' が未分析」と「risk_flags が完全に無視」→ 同じ原因（Analyzer が Monitor の risk_flags を参照していない）
   - 例：「株価データ乖離」と「anchor_price が矛盾」→ 同じ原因（最新の価格データが反映されていない）
 - **最低2件**：同じ根本原因の問題が異なる Issue に2件以上存在する必要がある
 - **既存統合優先**：既存の [統合] Issue と同じ根本原因なら、新規作成ではなく既存に追加する
@@ -43,7 +43,7 @@ consolidation_plan:
         - <問題点2>
       estimated_cause: "<推定される技術的原因>"
       source_issues: [116, 114]
-      labels: ["night-worker", "discussion-quality"]
+      labels: ["night-worker", "analyzer-quality"]
   update:
     - issue_number: 107
       new_source_issues: [116, 114]
@@ -69,7 +69,7 @@ consolidation_plan:
 
 ### labels に使用できるカテゴリラベル
 
-- `discussion-quality`：Discussion品質に関する問題
+- `analyzer-quality`：Analyzer品質に関する問題
 - `planning-quality`：Planning品質に関する問題
 - `data-integrity`：データ整合性に関する問題
 

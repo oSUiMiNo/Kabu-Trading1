@@ -57,8 +57,8 @@ def run_static_checks(record: dict) -> list[dict]:
         issues.append({
             "category": "データ整合性",
             "severity": "中",
-            "title": "Discussion中断の可能性",
-            "detail": "lanes（議論ログ）は存在しますが、final_judge（最終判定）がありません。Discussionが途中で中断した可能性があります。",
+            "title": "Analyzer中断の可能性",
+            "detail": "lanes（議論ログ）は存在しますが、final_judge（最終判定）がありません。Analyzerが途中で中断した可能性があります。",
         })
 
     if final_judge and not newplan_full:
@@ -144,7 +144,7 @@ def _build_review_prompt(record: dict) -> str:
             except (ValueError, TypeError):
                 lanes = {}
         if isinstance(lanes, dict):
-            parts.append("## Discussion（lanes）")
+            parts.append("## Analyzer（lanes）")
             for lane_id, lane_data in sorted(lanes.items()):
                 if not isinstance(lane_data, dict):
                     continue
@@ -212,9 +212,9 @@ async def review_one_archive(
 
     llm_review = None
     llm_result = None
-    has_discussion = bool(record.get("lanes"))
+    has_analyzer_data = bool(record.get("lanes"))
 
-    if has_discussion:
+    if has_analyzer_data:
         print(f"  LLMレビュー実行中...")
         prompt = _build_review_prompt(record)
         agent_file = AGENTS_DIR / "archive-reviewer.md"

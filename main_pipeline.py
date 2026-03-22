@@ -1,5 +1,5 @@
 """
-パイプラインオーケストレーター（Technical → Monitor → Discussion → Planning → Watch）
+パイプラインオーケストレーター（Technical → Monitor → Analyzer → Planning → Watch）
 
 5 大ブロックを順番に実行する。各ブロックは DB（伝言板方式）で連携し、
 ブロック間のデータ受け渡しは archive テーブルを介して行う。
@@ -30,7 +30,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "shared"))
 from supabase_client import (
     safe_db,
     list_watchlist,
-    fetch_active_for_discussion,
+    fetch_active_for_analyzer,
     fetch_active_for_planning,
     fetch_today_monitor_results,
     fetch_monitor_results_since,
@@ -72,7 +72,7 @@ async def run_pipeline(
     market: str | None = None,
     skip_spans: set[str] | None = None,
 ):
-    """Technical → Monitor → Discussion → Planning → Watch パイプライン。"""
+    """Technical → Monitor → Analyzer → Planning → Watch パイプライン。"""
     event_context = _load_event_context()
     send_start_notification(market)
 
@@ -132,10 +132,10 @@ async def run_pipeline(
             await notify(payload)
 
     # NG 銘柄の有無を DB から確認（伝言板方式）
-    ng_tickers = safe_db(fetch_active_for_discussion) or []
+    ng_tickers = safe_db(fetch_active_for_analyzer) or []
 
     if not ng_tickers:
-        print("\nNG 銘柄なし。Discussion/Planning/Watch は起動しません。")
+        print("\nNG 銘柄なし。Analyzer/Planning/Watch は起動しません。")
         ok_tickers = [rec["ticker"] for rec in monitor_results
                       if (rec.get("monitor") or {}).get("result") == "OK"]
         if ok_tickers:
@@ -151,16 +151,16 @@ async def run_pipeline(
         return
 
     if monitor_only:
-        print("\n--monitor-only: Discussion/Planning/Watch は起動しません。")
+        print("\n--monitor-only: Analyzer/Planning/Watch は起動しません。")
         return
 
-    # ── Phase 3: Discussion ──
+    # ── Phase 3: Analyzer ──
     print(f"\n{'='*60}")
-    print(f"=== Phase 3: Discussion ===")
+    print(f"=== Phase 3: Analyzer ===")
     print(f"{'='*60}")
-    _run_batch("discussion_batch.py")
+    _run_batch("analyzer_batch.py")
 
-    # Post-Discussion: エラー検出
+    # Post-Analyzer: エラー検出
     ng_ticker_names = []
     for row in ng_tickers:
         ticker = row["ticker"]
@@ -168,9 +168,9 @@ async def run_pipeline(
         record = safe_db(get_archivelog_by_id, archive_id)
         if record and record.get("final_judge"):
             ng_ticker_names.append(ticker)
-            print(f"  [{ticker}] Discussion 完了 → Planning に引き継ぎ")
+            print(f"  [{ticker}] Analyzer 完了 → Planning に引き継ぎ")
         else:
-            print(f"  [{ticker}] Discussion 失敗（final_judge 未生成）")
+            print(f"  [{ticker}] Analyzer 失敗（final_judge 未生成）")
             safe_db(update_archivelog, archive_id, status="failed", active=False)
             dn = dn_map.get(ticker, ticker)
             payload = NotifyPayload(
@@ -178,7 +178,7 @@ async def run_pipeline(
                 ticker=ticker,
                 monitor_data={},
                 event_context=event_context,
-                error_detail="Discussion で final_judge が生成されませんでした",
+                error_detail="Analyzer で final_judge が生成されませんでした",
                 display_name=dn,
             )
             await notify(payload)

@@ -40,10 +40,10 @@ max_allocation_pct:
   med: 10
   high: 15
 
-# ── Discussion パラメータ ──
-discussion_num_lanes: 2
-discussion_max_rounds: 4
-discussion_opinions_per_lane: 2
+# ── Analyzer パラメータ ──
+analyzer_num_lanes: 2
+analyzer_max_rounds: 4
+analyzer_opinions_per_lane: 2
 
 # ── Monitor 定期スケジュール ──
 monitor_schedule_enabled: true

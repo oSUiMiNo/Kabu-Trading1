@@ -2,7 +2,7 @@
 
 ## プロジェクト概要
 
-archive テーブルに蓄積されたパイプライン出力（Discussion/Planning）の品質を
+archive テーブルに蓄積されたパイプライン出力（Analyzer/Planning）の品質を
 自動レビューし、問題があれば GitHub Issue を作成するモジュール。
 
 深夜帯（JST 3〜5時）に GitHub Actions で定期実行される。

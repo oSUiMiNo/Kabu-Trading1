@@ -1,4 +1,4 @@
-DISCUSSION_LLM_PROVIDER: glm
+ANALYZER_LLM_PROVIDER: glm
 ZHIPUAI_API_KEY set: True
 Fatal error in message reader: Command failed with exit code 1 (exit code: 1)
 Error output: Check stderr output for details

@@ -1,10 +1,10 @@
 """
-Discussion オーケストレーター（レーン型アーキテクチャ）
+Analyzer オーケストレーター（レーン型アーキテクチャ）
 
 指定された1銘柄に対して複数のレーンを並行実行する。
 各レーンは「議論 → Opinion → Judge」のフローを独立して完結させる。
 全レーン完了後、全レーン（AGREED+DISAGREED）でFinal Judgeを実行する。
-複数銘柄の並列実行は discussion_batch.py（PJTルート）が担う。
+複数銘柄の並列実行は analyzer_batch.py（PJTルート）が担う。
 
 Usage:
     python main.py <銘柄> <投資期間> [モード] [--archive-id ID] [--display-name 名前]
@@ -20,12 +20,12 @@ from supabase_client import (
     safe_db,
     create_archivelog,
     update_archivelog,
-    get_discussion_config,
+    get_analyzer_config,
     get_archivelog_by_id,
     ensure_technical_data,
 )
 
-from discussion_orchestrator import LOGS_DIR
+from analyzer_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
 from AgentUtil import side_ja, load_debug_config
 from final_judge_orchestrator import run_final_judge_orchestrator
@@ -99,7 +99,7 @@ async def run_parallel(
     existing_archive_id: str | None = None,
 ):
     if num_sets is None or max_rounds is None or opinions_per_set is None:
-        disc_cfg = safe_db(get_discussion_config) or {}
+        disc_cfg = safe_db(get_analyzer_config) or {}
         num_sets = num_sets or disc_cfg.get("num_sets", 2)
         max_rounds = max_rounds or disc_cfg.get("max_rounds", 4)
         opinions_per_set = opinions_per_set or disc_cfg.get("opinions_per_set", 2)
@@ -126,7 +126,7 @@ async def run_parallel(
 
     t = ticker.upper()
 
-    from discussion_orchestrator import _HORIZON_LABELS
+    from analyzer_orchestrator import _HORIZON_LABELS
     _mode_labels = {"sell": "保有中", "add": "保有中", "buy": "未保有"}
     mode_label = _mode_labels.get(mode, "未保有")
     horizon_label = _HORIZON_LABELS.get(horizon, horizon)
@@ -169,7 +169,7 @@ async def run_parallel(
     print(f"=== 全{num_sets}レーン完了 — 結果一覧 ===")
     print("=" * 70)
 
-    show_cost = load_debug_config("discussion").get("show_cost", False)
+    show_cost = load_debug_config("analyzer").get("show_cost", False)
     total_cost = 0.0
     agreed_sets: list[int] = []
     disagreed_sets: list[int] = []
@@ -258,7 +258,7 @@ if __name__ == "__main__":
         print("  投資期間（必須）: '短期' / '中期' / '長期'")
         print("  モード: '買う' / '売る' / '買い増す' (デフォルト: 買う)")
         print()
-        print("  バッチ実行は discussion_batch.py を使用してください。")
+        print("  バッチ実行は analyzer_batch.py を使用してください。")
         sys.exit(1)
 
     ticker = sys.argv[1]

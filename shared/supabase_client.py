@@ -1,7 +1,7 @@
 """
 Supabase 共有クライアント（postgrest ベース）
 
-Discussion / Planning 両プロジェクトから利用する。
+Analyzer / Planning 両プロジェクトから利用する。
 .env.local（プロジェクトルート）から認証情報を読み込み、
 テーブルごとのヘルパー関数を提供する。
 
@@ -72,13 +72,13 @@ def get_portfolio_config() -> dict:
     return resp.data[0] if resp.data else {}
 
 
-def get_discussion_config() -> dict:
-    """Discussion パラメータを portfolio_config から取得。"""
+def get_analyzer_config() -> dict:
+    """Analyzer パラメータを portfolio_config から取得。"""
     cfg = get_portfolio_config()
     return {
-        "num_sets": cfg.get("discussion_num_lanes", 2),
-        "max_rounds": cfg.get("discussion_max_rounds", 4),
-        "opinions_per_set": cfg.get("discussion_opinions_per_lane", 2),
+        "num_sets": cfg.get("analyzer_num_lanes", 2),
+        "max_rounds": cfg.get("analyzer_max_rounds", 4),
+        "opinions_per_set": cfg.get("analyzer_opinions_per_lane", 2),
     }
 
 
@@ -365,8 +365,8 @@ def get_previous_archivelog_with_newplan(ticker: str, exclude_id: str) -> dict |
     return resp.data[0] if resp.data else None
 
 
-def fetch_active_for_discussion() -> list[dict]:
-    """active=True かつ Discussion 未実施のレコードを取得（Discussion dispatch 用）。"""
+def fetch_active_for_analyzer() -> list[dict]:
+    """active=True かつ Analyzer 未実施のレコードを取得（Analyzer dispatch 用）。"""
     resp = (
         get_client()
         .from_("archive")
@@ -379,7 +379,7 @@ def fetch_active_for_discussion() -> list[dict]:
 
 
 def fetch_active_for_planning() -> list[dict]:
-    """active=True かつ Discussion 完了済み・Planning 未完了のレコードを取得。"""
+    """active=True かつ Analyzer 完了済み・Planning 未完了のレコードを取得。"""
     resp = (
         get_client()
         .from_("archive")

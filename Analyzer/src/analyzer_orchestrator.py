@@ -165,7 +165,7 @@ def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: s
         )
 
 
-async def run_discussion(
+async def run_analyzer(
     ticker: str,
     max_rounds: int = 4,
     initial_prompt: str | None = None,
@@ -224,7 +224,7 @@ async def run_discussion(
             prompt = f"{initial_prompt}\n\n{prompt}"
 
         # エージェント呼び出し（リトライ付き）
-        dbg = load_debug_config("discussion")
+        dbg = load_debug_config("analyzer")
         show_cost = dbg.pop("show_cost", False)
 
         result = AgentResult()
@@ -275,11 +275,11 @@ async def run_discussion(
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("使い方: python discussion_orchestrator.py <銘柄コード> [モード] [最大ラウンド数] [追加指示]")
+        print("使い方: python analyzer_orchestrator.py <銘柄コード> [モード] [最大ラウンド数] [追加指示]")
         print("  モード: '買う'(未保有) / '売る'(保有中) / '買い増す'(保有中) (デフォルト: 買う)")
-        print("例: python discussion_orchestrator.py NVDA 買う 4 '特にAI市場の競合状況に注目して'")
-        print("例: python discussion_orchestrator.py NVDA 売る 4")
-        print("例: python discussion_orchestrator.py NVDA 買い増す 4")
+        print("例: python analyzer_orchestrator.py NVDA 買う 4 '特にAI市場の競合状況に注目して'")
+        print("例: python analyzer_orchestrator.py NVDA 売る 4")
+        print("例: python analyzer_orchestrator.py NVDA 買い増す 4")
         sys.exit(1)
 
     ticker = sys.argv[1]
@@ -288,4 +288,4 @@ if __name__ == "__main__":
     max_rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 4
     initial_prompt = sys.argv[4] if len(sys.argv) > 4 else None
 
-    anyio.run(lambda: run_discussion(ticker, max_rounds, initial_prompt, mode=mode))
+    anyio.run(lambda: run_analyzer(ticker, max_rounds, initial_prompt, mode=mode))

@@ -6,8 +6,8 @@
 
 
 ## 禁止事項
-- **Discussionで作成されたログ（archive テーブルの lanes, final_judge 等）は絶対に変更しない。** Monitor や Planning など後段のエージェントは、Discussion が記録したデータを読み取り専用で参照すること。上書き・削除・改変は禁止。
-- **watchlist テーブルへの書き込みは Watch ブロックのみが行う。** 他のブロック（Monitor, Discussion, Planning）は watchlist を読み取り専用で参照すること。Monitor は archive テーブルに MotivationID を書き込み、Watch が archive から読んで watchlist に反映する。
+- **Analyzerで作成されたログ（archive テーブルの lanes, final_judge 等）は絶対に変更しない。** Monitor や Planning など後段のエージェントは、Analyzer が記録したデータを読み取り専用で参照すること。上書き・削除・改変は禁止。
+- **watchlist テーブルへの書き込みは Watch ブロックのみが行う。** 他のブロック（Monitor, Analyzer, Planning）は watchlist を読み取り専用で参照すること。Monitor は archive テーブルに MotivationID を書き込み、Watch が archive から読んで watchlist に反映する。
 
 
 ## 編集不可フォルダ
@@ -15,7 +15,7 @@
 原則的に、現在作っているモジュールの機能を改善する際はそのモジュール以外の改変禁止。（ただし閲覧OK）
 下記は現在の編集可・不可リストだ。不可のものを編集する際は必ずユーザに承認をもらうこと。
 
-@Discusion 編集不可
+@Analyzer 編集不可
 @Monitor 編集不可
 @Planning 編集不可
 @EventScheduler 編集不可

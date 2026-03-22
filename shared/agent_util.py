@@ -1,13 +1,13 @@
 """
 Claude Agent SDK 共通ユーティリティ（統合版）
 
-各モジュール（Discussion, Monitor, Planning, EventScheduler, Watch）の
+各モジュール（Analyzer, Monitor, Planning, EventScheduler, Watch）の
 AgentUtil.py から共通ロジックを抽出したもの。
 各モジュールの AgentUtil.py はこのファイルを参照する薄いラッパーとして残す。
 
-DISCUSSION_LLM_PROVIDER 環境変数でバックエンドを切り替え可能:
+ANALYZER_LLM_PROVIDER 環境変数でバックエンドを切り替え可能:
   claude（デフォルト）: Claude Code（Claude Agent SDK）
-  glm               : Z.AI / GLM（DISCUSSION_GLM_MODEL で機種指定）
+  glm               : Z.AI / GLM（ANALYZER_GLM_MODEL で機種指定）
 """
 import os
 import sys
@@ -55,7 +55,7 @@ def load_debug_config(phase: str, project_root: Path | None = None) -> dict:
     debug_config.yaml から指定フェーズの表示設定を読み込む。
 
     Args:
-        phase: フェーズ名（例: "monitor", "discussion"）
+        phase: フェーズ名（例: "monitor", "analyzer"）
         project_root: モジュールのルートパス（debug_config.yaml の親ディレクトリ）
     """
     defaults = {"show_options": False, "show_prompt": False, "show_response": False, "show_cost": False}
@@ -190,13 +190,13 @@ async def call_agent(
         project_root: モジュールのルートパス（debug_config.yaml の探索先）
         src_dir: モジュールの src/ パス（common-prompt.md の探索先）
     """
-    _provider = os.environ.get("DISCUSSION_LLM_PROVIDER", "claude").lower()
+    _provider = os.environ.get("ANALYZER_LLM_PROVIDER", "claude").lower()
     if _provider == "glm":
         _shared = Path(__file__).resolve().parent
         if str(_shared) not in sys.path:
             sys.path.insert(0, str(_shared))
         from llm_client import call_glm_agent as _call_glm_agent
-        _glm_model = os.environ.get("DISCUSSION_GLM_MODEL", "glm-4.7-flash")
+        _glm_model = os.environ.get("ANALYZER_GLM_MODEL", "glm-4.7-flash")
         _r = await _call_glm_agent(
             messages, file_path=file_path, model=_glm_model,
             show_options=show_options, show_prompt=show_prompt,
