@@ -92,9 +92,9 @@ monitor_schedules:
 # 実験用スケジュール（test: true で時刻・曜日チェックをスキップし即発火）
   - label: TEST
     description: "テスト用"
-    market: JP
-    hour_jst: 20
-    minute_jst: 50
+    market: JP, US
+    hour_jst: 15
+    minute_jst: 55
     days_of_week: [0, 1, 2, 3, 4, 5, 6]
     skip_spans: []
     test: true
