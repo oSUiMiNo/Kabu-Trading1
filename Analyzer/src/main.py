@@ -9,6 +9,7 @@ Analyzer オーケストレーター（レーン型アーキテクチャ）
 Usage:
     python main.py <銘柄> <投資期間> [モード] [--archive-id ID] [--display-name 名前]
 """
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +30,27 @@ from analyzer_orchestrator import LOGS_DIR
 from lane_orchestrator import run_lane, LaneResult
 from AgentUtil import side_ja, load_debug_config
 from final_judge_orchestrator import run_final_judge_orchestrator
+
+def _ensure_important_indicators(archive_id: str, ticker: str):
+    """important_indicators が未取得なら重要指標ブロックを呼び出す。"""
+    record = safe_db(get_archivelog_by_id, archive_id)
+    if record and record.get("important_indicators"):
+        return
+    ii_dir = Path(__file__).resolve().parent.parent.parent / "ImportantIndicators"
+    venv_python = ii_dir / ".venv" / "Scripts" / "python.exe"
+    if not venv_python.exists():
+        venv_python = ii_dir / ".venv" / "bin" / "python"
+    script = ii_dir / "src" / "main.py"
+    if not script.exists():
+        return
+    try:
+        subprocess.run(
+            [str(venv_python), str(script), "--ticker", ticker, "--archive-id", archive_id],
+            timeout=120,
+        )
+    except Exception as e:
+        print(f"  [{ticker}] 重要指標取得エラー: {e}")
+
 
 def _build_market_context(archive_id: str | None) -> str:
     """archive の monitor/technical データから議論用の市場コンテキストを構築する。"""
@@ -119,6 +141,7 @@ async def run_parallel(
 
     if _db_archivelog_id:
         ensure_technical_data(_db_archivelog_id)
+        _ensure_important_indicators(_db_archivelog_id, ticker)
 
     market_context = _build_market_context(_db_archivelog_id)
     if market_context:

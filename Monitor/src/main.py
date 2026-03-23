@@ -8,6 +8,7 @@ Usage:
     python main.py --ticker NVDA
 """
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -282,6 +283,26 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
     return monitor_record
 
 
+def _run_important_indicators(ticker: str, archive_id: str):
+    """重要指標ブロックを subprocess で呼び出す。"""
+    ii_dir = Path(__file__).resolve().parent.parent.parent / "ImportantIndicators"
+    venv_python = ii_dir / ".venv" / "Scripts" / "python.exe"
+    if not venv_python.exists():
+        venv_python = ii_dir / ".venv" / "bin" / "python"
+    script = ii_dir / "src" / "main.py"
+    if not script.exists():
+        return
+    try:
+        proc = subprocess.run(
+            [str(venv_python), str(script), "--ticker", ticker, "--archive-id", archive_id],
+            timeout=120,
+        )
+        if proc.returncode != 0:
+            print(f"  [{ticker}] 重要指標取得失敗（exit code: {proc.returncode}）")
+    except Exception as e:
+        print(f"  [{ticker}] 重要指標取得エラー: {e}")
+
+
 async def run_single(ticker: str):
     """1銘柄の Monitor チェックを実行する。"""
     ticker = ticker.upper()
@@ -303,6 +324,9 @@ async def run_single(ticker: str):
             target_archive_id = resp.data[0]["id"]
     except Exception:
         pass
+
+    if target_archive_id:
+        _run_important_indicators(ticker, target_archive_id)
 
     result = await check_one_ticker(ticker, archivelog=None, target_archive_id=target_archive_id)
 
