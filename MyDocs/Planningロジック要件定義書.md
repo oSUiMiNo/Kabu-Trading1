@@ -244,13 +244,28 @@ execution_plan:
 
 ## 9. 重要指標の Planning での扱い
 
+### Planning が参照する指標一覧
+
+3者議論で Planning の渡し先に含まれると決まった指標：
+
+| グループ | 指標 | 現在の利用方法 | 将来の利用方法 |
+|---------|------|--------------|-------------|
+| EventRisk | イベントまでの日数 | commentary に渡す | 数値計算に反映（Issue #132） |
+| EventRisk | Implied Move（米国株のみ） | commentary に渡す | 数値計算に反映（Issue #132） |
+| MarketRegime | VIX | commentary に渡す | 数値計算に反映（Issue #132） |
+| 金利動向 | 米10年債利回り、FRB政策金利、日銀政策金利 | commentary に渡す | 数値計算に反映（Issue #132） |
+| Volume Anomaly | ドル出来高（のみ） | commentary に渡す | 流動性の代理指標としてサイズ調整に使用（Issue #130） |
+
+ドル出来高は、3者議論で Liquidity グループ（スプレッド、板厚、日次ドル出来高）として Planning に渡す結論だったが、スプレッド・板厚は無料 API で取得不可のため削除。ドル出来高を Volume Anomaly グループから流動性の代理指標として Planning が参照する形に変更した。初回実装スコープからは除外（Issue #130）。
+
 ### commentary エージェントへのデータ注入（本スコープ）
 
-archive.important_indicators のデータを commentary エージェント（plan-generator.md）のプロンプトに注入する。エージェントは EventRisk（イベント接近度）、MarketRegime（VIX）、金利動向等を参照し、execution_notes や monitoring_hint.reason に状況に応じたコメントを生成する。
+archive.important_indicators の上記指標を commentary エージェント（plan-generator.md）のプロンプトに注入する。エージェントは状況に応じて execution_notes や monitoring_hint.reason にコメントを生成する。
 
-### 数値計算への反映（スコープ外 → Issue #132）
+### 数値計算への反映（スコープ外）
 
-EventRisk・MarketRegime を数値計算（ポジションサイズ調整等）に反映する具体的なルールは未定義。3者議論では渡し先に Planning が含まれていたが、閾値や計算式は議論されていない。具体的なルールが決まり次第 plan_calc.py に組み込む。
+- EventRisk・MarketRegime・金利動向を数値計算（ポジションサイズ調整等）に反映する具体的なルール → Issue #132
+- ドル出来高による流動性ベースのサイズ調整 → Issue #130
 
 ---
 

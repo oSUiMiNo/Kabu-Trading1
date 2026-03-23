@@ -66,6 +66,15 @@ class PlanSpec:
         "自動発注はしない。通知とプラン提示のみ。"
     ])
 
+    # risk_management ブロック
+    max_loss_jpy: int = 0
+    position_size_jpy: int = 0
+    position_size_limited: bool = False
+    take_profit_pct: float = 20.0
+    rr_ratio: float = 0.0
+    min_rr_ratio: float = 1.0
+    rr_status: str = "OK"
+
     # monitoring_hint ブロック
     monitoring_intensity: str = "NORMAL"
     monitoring_reason: str = ""
@@ -139,8 +148,15 @@ def build_yaml(spec: PlanSpec) -> str:
             ("price_block_pct", spec.price_block_pct),
             ("status", spec.data_checks_status),
         )),
-        ("risk_defaults", _ordered_dict(
+        ("risk_management", _ordered_dict(
+            ("max_loss_jpy", spec.max_loss_jpy),
+            ("position_size_jpy", spec.position_size_jpy),
+            ("position_size_limited", spec.position_size_limited),
             ("stop_loss_pct", spec.stop_loss_pct),
+            ("take_profit_pct", spec.take_profit_pct),
+            ("rr_ratio", spec.rr_ratio),
+            ("min_rr_ratio", spec.min_rr_ratio),
+            ("rr_status", spec.rr_status),
         )),
         ("allocation_policy", _ordered_dict(
             ("max_pct", spec.max_pct),

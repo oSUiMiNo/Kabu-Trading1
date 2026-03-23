@@ -11,6 +11,7 @@
 total_budget_jpy: 3000000
 risk_limit_pct: 5.00
 default_take_profit_pct: 20.00
+min_rr_ratio: 1.0
 notes: "テスト用ポートフォリオ（5銘柄: NVDA, TSLA, AMZN, 6702, U）"
 
 # 損切り幅（投資期間別 %）

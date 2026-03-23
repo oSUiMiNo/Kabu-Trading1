@@ -87,6 +87,8 @@ class PlanConfig:
         Confidence.HIGH: 15.0, Confidence.MED: 10.0, Confidence.LOW: 5.0,
     })
 
+    default_take_profit_pct: float = 20.0
+    min_rr_ratio: float = 1.0
 
 
 DEFAULT_CONFIG = PlanConfig()
@@ -143,6 +145,8 @@ def load_plan_config(db_config: dict | None) -> PlanConfig:
         max_allocation_pct=_parse_confidence_jsonb(
             db_config.get("max_allocation_pct"), defaults.max_allocation_pct,
         ),
+        default_take_profit_pct=_num("default_take_profit_pct", defaults.default_take_profit_pct),
+        min_rr_ratio=_num("min_rr_ratio", defaults.min_rr_ratio),
     )
 
 
@@ -227,6 +231,77 @@ class AllocationResult:
     status: str  # "OK" | "NOT_EXECUTABLE_DUE_TO_LOT"
 
 
+@dataclass
+class PositionSizeResult:
+    """ポジションサイジング結果"""
+    max_loss_jpy: int
+    stop_loss_pct: float
+    position_size_jpy: int
+    position_size_limited: bool  # True = ポジションサイジングで投入額が制限された
+
+
+def calc_position_size(
+    budget_total_jpy: int,
+    risk_limit_pct: float,
+    stop_loss_pct: float,
+) -> PositionSizeResult:
+    """ポジションサイジング：許容損失額から投入上限を逆算する。
+
+    max_loss_jpy = budget × risk_limit_pct / 100
+    position_size_jpy = max_loss_jpy / abs(stop_loss_pct / 100)
+
+    stop_loss_pct が 0 の場合は position_size_jpy を無制限（budget と同額）にする。
+    """
+    max_loss_jpy = int(budget_total_jpy * risk_limit_pct / 100)
+
+    if stop_loss_pct == 0:
+        position_size_jpy = budget_total_jpy
+    else:
+        position_size_jpy = int(max_loss_jpy / abs(stop_loss_pct / 100))
+
+    return PositionSizeResult(
+        max_loss_jpy=max_loss_jpy,
+        stop_loss_pct=stop_loss_pct,
+        position_size_jpy=position_size_jpy,
+        position_size_limited=False,
+    )
+
+
+@dataclass
+class RRResult:
+    """リスクリワード比結果"""
+    stop_loss_pct: float
+    take_profit_pct: float
+    rr_ratio: float
+    min_rr_ratio: float
+    status: str  # "OK" | "RR_TOO_LOW"
+
+
+def calc_rr_ratio(
+    stop_loss_pct: float,
+    take_profit_pct: float,
+    min_rr_ratio: float = 1.0,
+) -> RRResult:
+    """リスクリワード比を計算し OK/RR_TOO_LOW を判定する。
+
+    rr_ratio = take_profit_pct / abs(stop_loss_pct)
+    """
+    if stop_loss_pct == 0:
+        rr_ratio = float("inf")
+    else:
+        rr_ratio = take_profit_pct / abs(stop_loss_pct)
+
+    status = "OK" if rr_ratio >= min_rr_ratio else "RR_TOO_LOW"
+
+    return RRResult(
+        stop_loss_pct=stop_loss_pct,
+        take_profit_pct=take_profit_pct,
+        rr_ratio=round(rr_ratio, 2) if rr_ratio != float("inf") else 999.0,
+        min_rr_ratio=min_rr_ratio,
+        status=status,
+    )
+
+
 def calc_allocation(
     budget_total_jpy: int,
     confidence: Confidence,
@@ -235,8 +310,13 @@ def calc_allocation(
     risk_limit_jpy: int | None = None,
     config: PlanConfig | None = None,
     usd_jpy_rate: float | None = None,
+    position_size_jpy: int | None = None,
 ) -> AllocationResult:
-    """配分・株数計算（youken 5.4, 5.6, 5.7）"""
+    """配分・株数計算（youken 5.4, 5.6, 5.7）
+
+    position_size_jpy が指定された場合、confidence ベースの配分額と比較して
+    小さい方を投入額として採用する（ポジションサイジング制限）。
+    """
     cfg = config or DEFAULT_CONFIG
 
     alloc_pct = cfg.max_allocation_pct[confidence]
@@ -245,6 +325,10 @@ def calc_allocation(
 
     if risk_limit_jpy is not None:
         alloc_jpy = min(alloc_jpy, risk_limit_jpy)
+
+    # ポジションサイジング制限
+    if position_size_jpy is not None:
+        alloc_jpy = min(alloc_jpy, position_size_jpy)
 
     lot = LOT_SIZE[market]
 

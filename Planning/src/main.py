@@ -35,6 +35,7 @@ from log_parser import parse_final_judge_from_db
 from plan_calc import (
     Horizon, Market, Confidence, PlanConfig,
     check_freshness, check_price_deviation, calc_confidence, calc_allocation,
+    calc_position_size, calc_rr_ratio,
     load_plan_config, MONITORING_INTENSITY,
 )
 from plan_spec import PlanSpec, generate_plan_id, build_yaml, save_plan_spec
@@ -42,6 +43,48 @@ from plan_spec import PlanSpec, generate_plan_id, build_yaml, save_plan_spec
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 LOGS_DIR = PROJECT_ROOT / "logs"
+
+
+# ═══════════════════════════════════════════════════════
+# Discord 通知（エラー種別で1日1回制限）
+# ═══════════════════════════════════════════════════════
+
+_notified_today: dict[str, str] = {}  # {error_type: date_str}
+
+
+def _notify_planning_error(ticker: str, error_type: str, detail: str):
+    """Planning エラーの Discord 通知。同じエラー種別は1日1回。"""
+    from datetime import timezone, timedelta
+    today_str = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")
+
+    # 1日1回チェック（STOP_LOSS_ZERO は銘柄関係なく1回、それ以外は銘柄ごと）
+    if error_type == "STOP_LOSS_ZERO":
+        key = error_type
+    else:
+        key = f"{error_type}:{ticker}"
+
+    if _notified_today.get(key) == today_str:
+        return
+    _notified_today[key] = today_str
+
+    try:
+        from discord_notifier import notify as _discord_notify
+        from notification_types import NotifyLabel, NotifyPayload
+        import asyncio
+
+        payload = NotifyPayload(
+            label=NotifyLabel.ERROR,
+            ticker=ticker,
+            monitor_data={},
+            error_detail=f"Planning エラー: {error_type}\n{detail}",
+        )
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_discord_notify(payload))
+        except RuntimeError:
+            asyncio.run(_discord_notify(payload))
+    except Exception as e:
+        print(f"  [通知警告] Discord 通知失敗: {e}")
 
 
 # ═══════════════════════════════════════════════════════
@@ -414,10 +457,25 @@ async def run_plan(
     p, confidence = calc_confidence(judgment.vote_for, judgment.vote_against)
     print(f"  confidence: {confidence.value}（p={p}）")
 
-    # --- 5. 配分計算 ---
-    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy, config=cfg, usd_jpy_rate=usd_jpy_rate)
+    # --- 5. ポジションサイジング ---
+    stop_loss = cfg.stop_loss_pct[h]
+    pos_size = calc_position_size(budget_total_jpy, float(risk_limit.rstrip('%')) if risk_limit.endswith('%') else risk_jpy / budget_total_jpy * 100, stop_loss)
+    print(f"  ポジションサイジング: 許容損失{pos_size.max_loss_jpy:,}円 → 投入上限{pos_size.position_size_jpy:,}円")
+
+    # --- 6. 配分計算（ポジションサイジング制限付き） ---
+    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy, config=cfg, usd_jpy_rate=usd_jpy_rate, position_size_jpy=pos_size.position_size_jpy)
+    pos_size.position_size_limited = allocation.allocation_jpy < pos_size.position_size_jpy and allocation.allocation_jpy < int(budget_total_jpy * cfg.max_allocation_pct[confidence] / 100)
+    # position_size_limited: ポジションサイジングで実際に制限された場合のみ True
+    if pos_size.position_size_jpy < int(budget_total_jpy * cfg.max_allocation_pct[confidence] / 100):
+        pos_size.position_size_limited = True
+        print(f"  ※ ポジションサイジングにより投入額を制限")
     print(f"  配分: {allocation.allocation_pct}% = {allocation.allocation_jpy:,}円")
     print(f"  株数: {allocation.quantity}（{allocation.market.value} lot={allocation.lot_size}）→ {allocation.status}")
+
+    # --- 7. RR比計算 ---
+    take_profit = cfg.default_take_profit_pct
+    rr = calc_rr_ratio(stop_loss, take_profit, cfg.min_rr_ratio)
+    print(f"  RR比: {rr.rr_ratio}（損切り{stop_loss}% / 利確{take_profit}%）→ {rr.status}")
     print()
 
     # --- 6. PlanSpec 組立 ---
@@ -453,8 +511,15 @@ async def run_plan(
         price_tolerance_pct=deviation.price_tolerance_pct,
         price_block_pct=deviation.price_block_pct,
         data_checks_status=deviation.status,
-        # risk_defaults
-        stop_loss_pct=cfg.stop_loss_pct[h],
+        # risk_management
+        max_loss_jpy=pos_size.max_loss_jpy,
+        position_size_jpy=pos_size.position_size_jpy,
+        position_size_limited=pos_size.position_size_limited,
+        stop_loss_pct=stop_loss,
+        take_profit_pct=take_profit,
+        rr_ratio=rr.rr_ratio,
+        min_rr_ratio=rr.min_rr_ratio,
+        rr_status=rr.status,
         # allocation_policy
         max_pct=cfg.max_allocation_pct[confidence],
         # portfolio_plan
@@ -470,18 +535,66 @@ async def run_plan(
         monitoring_intensity=MONITORING_INTENSITY[confidence],
     )
 
-    # BLOCK / STALE の場合はプランを差し替え
+    # BLOCK / STALE / RR_TOO_LOW の場合はプランを差し替え + Discord 通知
     if deviation.status == "BLOCK_REEVALUATE":
         spec.execution_notes = ["価格ズレ ±10%超: 停止→再評価要求。数量確定しない。"]
         spec.quantity = 0
         spec.portfolio_status = "BLOCK_REEVALUATE"
+        _notify_planning_error(t, "BLOCK_REEVALUATE", f"価格ズレ {deviation.price_deviation_pct}% > {deviation.price_block_pct}%")
+
+    if rr.status == "RR_TOO_LOW":
+        spec.execution_notes.append(
+            f"RR比 {rr.rr_ratio} < {rr.min_rr_ratio}: 期待値がマイナスのため実行不可。利確ラインの見直しが必要。"
+        )
+        spec.quantity = 0
+        spec.portfolio_status = "RR_TOO_LOW"
+        _notify_planning_error(t, "RR_TOO_LOW", f"RR比 {rr.rr_ratio} < {rr.min_rr_ratio}")
+
+    if stop_loss == 0:
+        _notify_planning_error(t, "STOP_LOSS_ZERO", "stop_loss_pct が 0 のためポジションサイジング計算不可")
 
     if freshness.status == "STALE_REEVALUATE":
         spec.execution_notes.append(
             f"ログ鮮度超過（{freshness.log_age_days}日 > {freshness.max_allowed_days}日）: 再評価推奨"
         )
 
-    # --- 7. エージェント呼び出し（commentary 生成、リトライ付き） ---
+    # --- 重要指標データを commentary に注入 ---
+    ii = _db_archivelog.get("important_indicators")
+    if ii and isinstance(ii, dict):
+        ii_lines = []
+        market_ii = ii.get("market", {})
+        if market_ii:
+            items = []
+            if market_ii.get("vix") is not None:
+                items.append(f"VIX {market_ii['vix']}")
+            if market_ii.get("us_10y_yield") is not None:
+                items.append(f"米10年債 {market_ii['us_10y_yield']}%")
+            if market_ii.get("ffr") is not None:
+                items.append(f"FRB金利 {market_ii['ffr']}%")
+            if market_ii.get("boj_rate") is not None:
+                items.append(f"日銀金利 {market_ii['boj_rate']}%")
+            if items:
+                ii_lines.append(f"市場環境: {', '.join(items)}")
+
+        event = ii.get("event_risk", {})
+        if event.get("nearest_event"):
+            ev_text = f"イベントリスク: {event['nearest_event']} まで {event.get('days_to_event', '?')}日"
+            if event.get("implied_move_pct"):
+                ev_text += f"（期待変動 {event['implied_move_pct']}%）"
+            ii_lines.append(ev_text)
+
+        vol = ii.get("volume", {})
+        if vol.get("dollar_volume") is not None:
+            currency = vol.get("currency", "USD")
+            if currency == "JPY":
+                ii_lines.append(f"売買代金: {vol['dollar_volume']/100_000_000:,.0f}億円")
+            else:
+                ii_lines.append(f"売買代金: ${vol['dollar_volume']/1_000_000:,.0f}M")
+
+        if ii_lines:
+            additional_texts.append(("重要指標（API取得データ）", "\n".join(ii_lines)))
+
+    # --- エージェント呼び出し（commentary 生成、リトライ付き） ---
     print(f">>> commentary 生成（plan-generator エージェント）")
     prompt = build_commentary_prompt(spec, judgment.raw_text, additional_texts)
     agent_file = AGENTS_DIR / "plan-generator.md"
