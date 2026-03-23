@@ -80,6 +80,10 @@ async def run_pipeline(
     wl = safe_db(list_watchlist, active_only=True, market=market) or []
     dn_map = {w["ticker"]: w.get("display_name") or w["ticker"] for w in wl}
 
+    # Technical が archive レコードを作成するため、その前にタイムスタンプを記録
+    # （後続の fetch_monitor_results_since で created_at >= この時刻を使う）
+    pipeline_start = datetime.now(_JST).isoformat()
+
     # ── Phase 1: Technical ──
     print(f"\n{'='*60}")
     print(f"=== Phase 1: Technical ===")
@@ -101,12 +105,11 @@ async def run_pipeline(
     if skip_spans:
         for span in skip_spans:
             mon_args.extend(["--skip-span", span])
-    monitor_start = datetime.now(_JST).isoformat()
     _run_batch("monitor_batch.py", mon_args)
 
     # Monitor 後処理：この実行で作られた結果のみ取得し、対象 market で絞る
     wl_tickers = {w["ticker"] for w in wl}
-    monitor_results = safe_db(fetch_monitor_results_since, monitor_start) or []
+    monitor_results = safe_db(fetch_monitor_results_since, pipeline_start) or []
     monitor_results = [r for r in monitor_results if r["ticker"] in wl_tickers]
     for rec in monitor_results:
         ticker = rec["ticker"]
