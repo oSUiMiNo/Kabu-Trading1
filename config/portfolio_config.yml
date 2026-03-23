@@ -93,8 +93,8 @@ monitor_schedules:
   - label: TEST
     description: "テスト用"
     market: US
-    hour_jst: 20
-    minute_jst: 15
+    hour_jst: 21
+    minute_jst: 40
     days_of_week: [0, 1, 2, 3, 4, 5, 6]
     skip_spans: []
     test: true
