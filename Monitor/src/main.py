@@ -34,8 +34,11 @@ AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 JST = timezone(timedelta(hours=9))
 
 
-def build_check_prompt(ticker: str, archivelog: dict) -> str:
-    """monitor-checker エージェントに渡すプロンプトを組み立てる。"""
+def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None = None) -> str:
+    """monitor-checker エージェントに渡すプロンプトを組み立てる。
+    archivelog: 過去の newplan_full 付きアーカイブ（プラン情報の参照用）
+    today_archive: 今日の archive（重要指標・テクニカルデータの参照用）
+    """
     newplan_full = archivelog.get("newplan_full", "")
     verdict = archivelog.get("verdict", "N/A")
 
@@ -67,6 +70,92 @@ def build_check_prompt(ticker: str, archivelog: dict) -> str:
         except yaml.YAMLError:
             pass
 
+    # テクニカル指標の要約（今日の archive から取得）
+    technical_text = ""
+    _src = today_archive if today_archive else archivelog
+    technical = _src.get("technical")
+    if technical and isinstance(technical, dict) and "timeframes" in technical:
+        tech_lines = []
+        for tf, data in technical["timeframes"].items():
+            if not isinstance(data, dict):
+                continue
+            derived = data.get("indicators", {}).get("derived", {})
+            if derived:
+                trend = derived.get("trend", {})
+                momentum = derived.get("momentum", {})
+                volatility = derived.get("volatility", {})
+                if trend:
+                    tech_lines.append(f"  トレンド: {', '.join(f'{k}={v}' for k, v in trend.items())}")
+                if momentum:
+                    tech_lines.append(f"  モメンタム: {', '.join(f'{k}={v}' for k, v in momentum.items())}")
+                if volatility:
+                    tech_lines.append(f"  ボラティリティ: {', '.join(f'{k}={v}' for k, v in volatility.items())}")
+        if tech_lines:
+            technical_text = "【テクニカル指標】\n" + "\n".join(tech_lines) + "\n\n"
+
+    # 重要指標の要約（今日の archive から取得）
+    indicators_text = ""
+    ii = _src.get("important_indicators")
+    if ii and isinstance(ii, dict):
+        ii_lines = []
+        market = ii.get("market", {})
+        if market:
+            items = []
+            if market.get("vix") is not None:
+                items.append(f"VIX {market['vix']}")
+            if market.get("us_10y_yield") is not None:
+                items.append(f"米10年債 {market['us_10y_yield']}%")
+            if market.get("ffr") is not None:
+                items.append(f"FRB金利 {market['ffr']}%")
+            if market.get("boj_rate") is not None:
+                items.append(f"日銀金利 {market['boj_rate']}%")
+            if items:
+                ii_lines.append(f"  市場環境: {', '.join(items)}")
+
+        event = ii.get("event_risk", {})
+        if event.get("nearest_event"):
+            ev_text = f"  イベントリスク: {event['nearest_event']} まで {event.get('days_to_event', '?')}日"
+            if event.get("implied_move_pct"):
+                ev_text += f"（期待変動 {event['implied_move_pct']}%）"
+            ii_lines.append(ev_text)
+
+        earnings = ii.get("earnings", {})
+        if earnings.get("eps_actual") is not None:
+            ii_lines.append(
+                f"  直近決算: EPS 予想{earnings.get('eps_estimate', '?')} → 実績{earnings['eps_actual']}"
+                f"（サプライズ {earnings.get('eps_surprise_pct', '?')}%）"
+            )
+        if earnings.get("revenue_actual") is not None:
+            rev_text = f"  売上: 実績{earnings['revenue_actual']:,.0f}"
+            if earnings.get("revenue_estimate") is not None:
+                rev_text += f" vs 予想{earnings['revenue_estimate']:,.0f}"
+            if earnings.get("revenue_surprise_pct") is not None:
+                rev_text += f"（サプライズ {earnings['revenue_surprise_pct']}%）"
+            ii_lines.append(rev_text)
+
+        rs = ii.get("relative_strength", {})
+        if rs.get("vs_index_3m_pct") is not None:
+            rs_text = f"  相対強度: 指数対比 {rs['vs_index_3m_pct']:+.1f}%"
+            if rs.get("vs_sector_3m_pct") is not None:
+                rs_text += f", セクター対比 {rs['vs_sector_3m_pct']:+.1f}%"
+            ii_lines.append(rs_text)
+
+        vol = ii.get("volume", {})
+        vol_parts = []
+        if vol.get("volume_ratio_5d") is not None:
+            vol_parts.append(f"5日平均比 {vol['volume_ratio_5d']}倍")
+        if vol.get("dollar_volume") is not None:
+            currency = vol.get("currency", "USD")
+            if currency == "JPY":
+                vol_parts.append(f"売買代金 {vol['dollar_volume']/100_000_000:,.0f}億円")
+            else:
+                vol_parts.append(f"売買代金 ${vol['dollar_volume']/1_000_000:,.0f}M")
+        if vol_parts:
+            ii_lines.append(f"  出来高: {', '.join(vol_parts)}")
+
+        if ii_lines:
+            indicators_text = "【重要指標（API取得データ）】\n" + "\n".join(ii_lines) + "\n\n"
+
     return (
         f"以下の投資プランが現在も有効かチェックしてください。\n"
         f"\n"
@@ -82,8 +171,12 @@ def build_check_prompt(ticker: str, archivelog: dict) -> str:
         f"  強度: {monitoring_hint.get('intensity', 'N/A')}\n"
         f"  理由: {monitoring_hint.get('reason', 'N/A')}\n"
         f"\n"
+        f"{technical_text}"
+        f"{indicators_text}"
         f"上記プランの前提が現在の市場状況でまだ有効か、"
         f"WebSearch で最新の株価・ニュースを調査して判定してください。\n"
+        f"テクニカル指標と重要指標は API から取得した定量データです。"
+        f"これらを参考にしつつ、WebSearch で最新情報を補完してください。\n"
     )
 
 
@@ -142,7 +235,11 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
 
     print(f"  [{ticker}] チェック開始")
 
-    prompt = build_check_prompt(ticker, archivelog)
+    # 今日の archive から重要指標・テクニカルデータを取得してプロンプトに注入
+    today_archive = None
+    if target_archive_id:
+        today_archive = safe_db(get_archivelog_by_id, target_archive_id)
+    prompt = build_check_prompt(ticker, archivelog, today_archive=today_archive)
     agent_file = AGENTS_DIR / "monitor-checker.md"
     dbg = load_debug_config("monitor")
 

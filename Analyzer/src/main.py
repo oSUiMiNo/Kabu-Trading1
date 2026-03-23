@@ -100,6 +100,64 @@ def _build_market_context(archive_id: str | None) -> str:
                     parts.append(f"【テクニカル指標 ({tf})】")
                     parts.extend(lines)
 
+    # 重要指標
+    ii = record.get("important_indicators")
+    if ii and isinstance(ii, dict):
+        market = ii.get("market", {})
+        if market:
+            items = []
+            if market.get("vix") is not None:
+                items.append(f"VIX {market['vix']}")
+            if market.get("us_10y_yield") is not None:
+                items.append(f"米10年債 {market['us_10y_yield']}%")
+            if market.get("ffr") is not None:
+                items.append(f"FRB金利 {market['ffr']}%")
+            if market.get("boj_rate") is not None:
+                items.append(f"日銀金利 {market['boj_rate']}%")
+            if items:
+                parts.append(f"【市場環境】{', '.join(items)}")
+
+        event = ii.get("event_risk", {})
+        if event.get("nearest_event"):
+            ev_text = f"【イベントリスク】{event['nearest_event']} まで {event.get('days_to_event', '?')}日"
+            if event.get("implied_move_pct"):
+                ev_text += f"（期待変動 {event['implied_move_pct']}%）"
+            parts.append(ev_text)
+
+        earnings = ii.get("earnings", {})
+        if earnings.get("eps_actual") is not None:
+            parts.append(
+                f"【直近決算】EPS 予想{earnings.get('eps_estimate', '?')} → 実績{earnings['eps_actual']}"
+                f"（サプライズ {earnings.get('eps_surprise_pct', '?')}%）"
+            )
+        if earnings.get("revenue_actual") is not None:
+            rev_text = f"【売上】実績{earnings['revenue_actual']:,.0f}"
+            if earnings.get("revenue_estimate") is not None:
+                rev_text += f" vs 予想{earnings['revenue_estimate']:,.0f}"
+            if earnings.get("revenue_surprise_pct") is not None:
+                rev_text += f"（サプライズ {earnings['revenue_surprise_pct']}%）"
+            parts.append(rev_text)
+
+        rs = ii.get("relative_strength", {})
+        if rs.get("vs_index_3m_pct") is not None:
+            rs_text = f"【相対強度】指数対比 {rs['vs_index_3m_pct']:+.1f}%"
+            if rs.get("vs_sector_3m_pct") is not None:
+                rs_text += f", セクター対比 {rs['vs_sector_3m_pct']:+.1f}%"
+            parts.append(rs_text)
+
+        vol = ii.get("volume", {})
+        vol_parts = []
+        if vol.get("volume_ratio_5d") is not None:
+            vol_parts.append(f"5日平均比 {vol['volume_ratio_5d']}倍")
+        if vol.get("dollar_volume") is not None:
+            currency = vol.get("currency", "USD")
+            if currency == "JPY":
+                vol_parts.append(f"売買代金 {vol['dollar_volume']/100_000_000:,.0f}億円")
+            else:
+                vol_parts.append(f"売買代金 ${vol['dollar_volume']/1_000_000:,.0f}M")
+        if vol_parts:
+            parts.append(f"【出来高】{', '.join(vol_parts)}")
+
     return "\n".join(parts) if parts else ""
 
 

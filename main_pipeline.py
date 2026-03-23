@@ -91,6 +91,8 @@ async def run_pipeline(
     tech_args = []
     if target_ticker:
         tech_args.extend(["--ticker", target_ticker])
+    if market:
+        tech_args.extend(["--market", market])
     _run_batch("technical_batch.py", tech_args)
 
     # ── Phase 2: Monitor ──

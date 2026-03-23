@@ -36,9 +36,10 @@ async def _run_one(ticker: str, python: str, script: str, extra_args: list[str])
     return ticker, proc.returncode
 
 
-async def run(target_ticker: str | None = None):
+async def run(target_ticker: str | None = None, market: str | None = None):
+    market_label = f" [{market}]" if market else ""
     print(f"\n{'='*60}")
-    print(f"=== Technical Batch ===")
+    print(f"=== Technical Batch{market_label} ===")
     print(f"{'='*60}")
 
     if target_ticker:
@@ -46,9 +47,9 @@ async def run(target_ticker: str | None = None):
         market_map = {}
         create_archive = False
     else:
-        watchlist = safe_db(list_watchlist, active_only=True)
+        watchlist = safe_db(list_watchlist, active_only=True, market=market)
         if not watchlist:
-            print("  watchlist に active な銘柄がありません。")
+            print(f"  watchlist に active な銘柄がありません{market_label}。")
             return 0
         tickers = [w["ticker"] for w in watchlist]
         market_map = {w["ticker"]: w.get("market") for w in watchlist}
@@ -87,13 +88,17 @@ async def run(target_ticker: str | None = None):
 
 if __name__ == "__main__":
     target = None
+    _market = None
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         if args[i] == "--ticker" and i + 1 < len(args):
             target = args[i + 1]
             i += 2
+        elif args[i] == "--market" and i + 1 < len(args):
+            _market = args[i + 1].upper()
+            i += 2
         else:
             i += 1
 
-    sys.exit(asyncio.run(run(target)))
+    sys.exit(asyncio.run(run(target, _market)))
