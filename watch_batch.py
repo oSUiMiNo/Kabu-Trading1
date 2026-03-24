@@ -57,17 +57,23 @@ async def run(target_ticker: str | None = None):
     python = _find_venv_python()
     script = str(WATCH_DIR / "src" / "main.py")
 
-    results = await asyncio.gather(*[
-        _run_one(python, script, row["ticker"], row["id"]) for row in pending
-    ])
+    results = await asyncio.gather(
+        *[_run_one(python, script, row["ticker"], row["id"]) for row in pending],
+        return_exceptions=True,
+    )
 
-    ok = sum(1 for _, rc in results if rc == 0)
-    ng = len(results) - ok
+    ok = 0
+    ng = 0
+    for r in results:
+        if isinstance(r, Exception):
+            ng += 1
+            print(f"  [例外] {r}")
+        elif r[1] == 0:
+            ok += 1
+        else:
+            ng += 1
+            print(f"  [{r[0]}] 失敗 (exit code: {r[1]})")
     print(f"  完了: {ok} 成功 / {ng} 失敗 (計 {len(results)} 銘柄)")
-
-    for t, rc in results:
-        if rc != 0:
-            print(f"  [{t}] 失敗 (exit code: {rc})")
 
     return 1 if ng > 0 else 0
 

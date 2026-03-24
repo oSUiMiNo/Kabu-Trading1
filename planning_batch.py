@@ -71,15 +71,20 @@ async def run():
         archive_id = row.get("id", "")
         tasks.append(_run_one(python, script, ticker, span, budget, risk_limit, archive_id))
 
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    ok = sum(1 for _, rc in results if rc == 0)
-    ng = len(results) - ok
+    ok = 0
+    ng = 0
+    for r in results:
+        if isinstance(r, Exception):
+            ng += 1
+            print(f"  [例外] {r}")
+        elif r[1] == 0:
+            ok += 1
+        else:
+            ng += 1
+            print(f"  [{r[0]}] 失敗 (exit code: {r[1]})")
     print(f"  完了: {ok} 成功 / {ng} 失敗 (計 {len(results)} 銘柄)")
-
-    for t, rc in results:
-        if rc != 0:
-            print(f"  [{t}] 失敗 (exit code: {rc})")
 
     return 1 if ng > 0 else 0
 

@@ -195,4 +195,5 @@ if __name__ == "__main__":
     parser.add_argument("--ticker", required=True, help="処理対象の銘柄")
     parser.add_argument("--archive-id", default=None, help="対象の archive ID")
     args = parser.parse_args()
-    anyio.run(lambda: process_one_ticker(args.ticker.upper(), archive_id=args.archive_id))
+    ok = anyio.run(lambda: process_one_ticker(args.ticker.upper(), archive_id=args.archive_id))
+    sys.exit(0 if ok else 1)

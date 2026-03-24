@@ -37,7 +37,7 @@ from supabase_client import (
     get_archivelog_by_id,
     update_archivelog,
 )
-from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA
+from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA, LABEL_COLOR
 from discord_notifier import notify, send_start_notification
 
 
@@ -57,10 +57,11 @@ def _load_event_context() -> dict | None:
 def _run_batch(script_name: str, extra_args: list[str] | None = None) -> int:
     """PJTルートの batch スクリプトを subprocess で実行する。"""
     cmd = [sys.executable, str(PROJECT_ROOT / script_name)] + (extra_args or [])
-    print(f"  起動: {' '.join(cmd)}")
+    print(f"  起動: {' '.join(cmd)}", flush=True)
+    sys.stdout.flush()
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     if result.returncode != 0:
-        print(f"  {script_name} 失敗 (exit code: {result.returncode})")
+        print(f"  {script_name} 失敗 (exit code: {result.returncode})", flush=True)
     return result.returncode
 
 
@@ -73,6 +74,11 @@ async def run_pipeline(
     skip_spans: set[str] | None = None,
 ):
     """Technical → Monitor → Analyzer → Planning → Watch パイプライン。"""
+    from dotenv import load_dotenv
+    env_path = PROJECT_ROOT / ".env.local"
+    if env_path.exists():
+        load_dotenv(env_path, override=False)
+
     event_context = _load_event_context()
     send_start_notification(market)
 
@@ -85,9 +91,9 @@ async def run_pipeline(
     pipeline_start = datetime.now(_JST).isoformat()
 
     # ── Phase 1: Technical ──
-    print(f"\n{'='*60}")
-    print(f"=== Phase 1: Technical ===")
-    print(f"{'='*60}")
+    print(f"\n{'='*60}", flush=True)
+    print(f"=== Phase 1: Technical (market={market}) ===", flush=True)
+    print(f"{'='*60}", flush=True)
     tech_args = []
     if target_ticker:
         tech_args.extend(["--ticker", target_ticker])
@@ -140,19 +146,18 @@ async def run_pipeline(
     ng_tickers = safe_db(fetch_active_for_analyzer) or []
 
     if not ng_tickers:
-        print("\nNG 銘柄なし。Analyzer/Planning/Watch は起動しません。")
+        print("\nNG 銘柄なし。Analyzer/Planning/Watch は起動しません。", flush=True)
         ok_tickers = [rec["ticker"] for rec in monitor_results
                       if (rec.get("monitor") or {}).get("result") == "OK"]
-        if ok_tickers:
-            market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
-            ok_names = [dn_map.get(t, t) for t in ok_tickers]
-            payload = NotifyPayload(
-                label=NotifyLabel.COMPLETE,
-                ticker=f"{market_name} 全銘柄OK",
-                monitor_data={"tickers": ok_names},
-                event_context=event_context,
-            )
-            await notify(payload)
+        market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+        ok_names = [dn_map.get(t, t) for t in ok_tickers]
+        payload = NotifyPayload(
+            label=NotifyLabel.COMPLETE,
+            ticker=f"{market_name} 全銘柄OK",
+            monitor_data={"tickers": ok_names},
+            event_context=event_context,
+        )
+        await notify(payload)
         return
 
     if monitor_only:
@@ -264,4 +269,18 @@ if __name__ == "__main__":
             target = args[i]
             i += 1
 
-    anyio.run(lambda: run_pipeline(target, monitor_only, _market, _skip_spans or None))
+    try:
+        anyio.run(lambda: run_pipeline(target, monitor_only, _market, _skip_spans or None))
+    except Exception as e:
+        print(f"\n[FATAL] パイプライン異常終了: {e}", flush=True)
+        try:
+            from discord_notifier import send_webhook
+            embed = {
+                "title": "❌ [ エラー ]　パイプライン異常終了",
+                "description": str(e)[:2000],
+                "color": LABEL_COLOR.get(NotifyLabel.ERROR, 0x808080),
+            }
+            send_webhook(embed)
+        except Exception:
+            pass
+        sys.exit(1)

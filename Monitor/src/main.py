@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import (
     safe_db,
     get_latest_archivelog_with_newplan,
+    get_archivelog_by_id,
     create_archivelog,
     update_archivelog,
     get_client,
