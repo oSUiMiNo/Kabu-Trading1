@@ -180,6 +180,23 @@ async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool
             )
             await notify(payload)
             print(f"  [{ticker}] Discord 通知送信完了 (label={label.value})")
+            # ── action_log 自動投入 ──
+            try:
+                _al = str(Path(__file__).resolve().parent.parent.parent / "ActionLog" / "src")
+                if _al not in sys.path:
+                    sys.path.insert(0, _al)
+                from auto_populate import populate_from_archive
+                result = populate_from_archive(
+                    ticker=ticker,
+                    archive_id=archivelog_id,
+                    newplan_full=newplan_full,
+                    beginner_summary=payload.beginner_summary,
+                    action_date=archivelog.get("created_at", "")[:10],
+                )
+                if result:
+                    print(f"  [{ticker}] action_log 投入完了 (id={result.get('id')})")
+            except Exception as e:
+                print(f"  [{ticker}] action_log 投入スキップ: {e}")
         else:
             print(f"  [{ticker}] 通知不要（OK + リスクフラグなし）")
     else:

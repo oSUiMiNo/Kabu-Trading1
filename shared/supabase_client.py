@@ -689,3 +689,135 @@ def update_words_entry(
 def delete_words_entry(entry_id: int) -> None:
     """words エントリを削除する。"""
     get_client().from_("words").delete().eq("id", entry_id).execute()
+
+
+# ── action_log ─────────────────────────────────────────────
+
+
+def create_action_log(
+    ticker: str,
+    action_date: str,
+    archive_id: str | None = None,
+    **fields,
+) -> dict:
+    """action_log にレコードを追加。UNIQUE(ticker, archive_id) で二重投入防止。"""
+    row = {"ticker": ticker.upper(), "action_date": action_date, **fields}
+    if archive_id is not None:
+        row["archive_id"] = archive_id
+    resp = get_client().from_("action_log").insert(row).execute()
+    return resp.data[0] if resp.data else {}
+
+
+def list_action_logs(ticker: str, from_date: str, to_date: str) -> list[dict]:
+    """指定銘柄の日付範囲の action_log を日付昇順で取得（月別表示用）。"""
+    resp = (
+        get_client()
+        .from_("action_log")
+        .select("*")
+        .eq("ticker", ticker.upper())
+        .gte("action_date", from_date)
+        .lte("action_date", to_date)
+        .order("action_date")
+        .order("id")
+        .execute()
+    )
+    return resp.data or []
+
+
+def list_all_action_logs(ticker: str) -> list[dict]:
+    """指定銘柄の全 action_log を日付昇順で取得（カスケード再計算用）。"""
+    resp = (
+        get_client()
+        .from_("action_log")
+        .select("*")
+        .eq("ticker", ticker.upper())
+        .order("action_date")
+        .order("id")
+        .execute()
+    )
+    return resp.data or []
+
+
+def update_action_log(log_id: int, **fields) -> dict:
+    """action_log の指定レコードを更新。"""
+    resp = (
+        get_client()
+        .from_("action_log")
+        .update(fields)
+        .eq("id", log_id)
+        .execute()
+    )
+    return resp.data[0] if resp.data else {}
+
+
+def get_latest_action_log(ticker: str) -> dict | None:
+    """指定銘柄の最新 action_log を取得（cumulative_invested の前行取得用）。"""
+    resp = (
+        get_client()
+        .from_("action_log")
+        .select("*")
+        .eq("ticker", ticker.upper())
+        .order("action_date", desc=True)
+        .order("id", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+def list_action_log_archive_ids(ticker: str) -> list[str]:
+    """指定銘柄の全 archive_id を取得（既存投入チェック用）。"""
+    resp = (
+        get_client()
+        .from_("action_log")
+        .select("archive_id")
+        .eq("ticker", ticker.upper())
+        .not_.is_("archive_id", "null")
+        .execute()
+    )
+    return [r["archive_id"] for r in (resp.data or [])]
+
+
+# ── action_log_handoff ─────────────────────────────────────
+
+
+def get_action_log_handoff(ticker: str, year_month: str) -> dict | None:
+    """指定銘柄・月の引き継ぎ文を取得。"""
+    resp = (
+        get_client()
+        .from_("action_log_handoff")
+        .select("*")
+        .eq("ticker", ticker.upper())
+        .eq("year_month", year_month)
+        .limit(1)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+def upsert_action_log_handoff(
+    ticker: str, year_month: str, handoff_text: str
+) -> dict:
+    """引き継ぎ文を保存（既存あれば上書き）。"""
+    existing = get_action_log_handoff(ticker, year_month)
+    if existing:
+        resp = (
+            get_client()
+            .from_("action_log_handoff")
+            .update({"handoff_text": handoff_text, "generated_at": "now()"})
+            .eq("id", existing["id"])
+            .execute()
+        )
+    else:
+        resp = (
+            get_client()
+            .from_("action_log_handoff")
+            .insert({
+                "ticker": ticker.upper(),
+                "year_month": year_month,
+                "handoff_text": handoff_text,
+                "generated_at": "now()",
+            })
+            .execute()
+        )
+    return resp.data[0] if resp.data else {}

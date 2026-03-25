@@ -1,0 +1,13 @@
+[project]
+name = "actionlog"
+version = "0.1.0"
+description = "銘柄ごとの月次アクションログ表示 Web UI"
+requires-python = ">=3.12"
+dependencies = [
+    "nicegui>=3.4.0",
+    "claude-agent-sdk>=0.1.40",
+    "anyio",
+    "pyyaml",
+    "python-dotenv",
+    "postgrest",
+]
