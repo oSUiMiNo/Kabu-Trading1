@@ -109,7 +109,7 @@ def build_action_log_row(
         "action_text": build_action_text(decision, parsed["allocation_jpy"]),
         "story": beginner_summary,
         "decision": decision,
-        "quantity": parsed["quantity"] or 0,
+        "quantity": 0 if (decision or "").upper().strip("*").strip() in _HOLD_DECISIONS else (parsed["quantity"] or 0),
         "price": parsed["current_price"],
         "money_in": _calc_money_in(decision, parsed["allocation_jpy"]),
         "is_auto": True,
@@ -163,3 +163,61 @@ def populate_from_archive(
         **row,
     )
     return result
+
+
+_MONITOR_RESULT_TEXT = {
+    "OK": "確認済み（問題なし）",
+    "NG": "要注意",
+    "ERROR": "チェック失敗",
+}
+
+
+def populate_from_monitor(
+    ticker: str,
+    archive_id: str,
+    monitor_data: dict,
+    action_date: str | None = None,
+) -> dict | None:
+    """monitor 結果のみ（newplan_full なし）の archive から action_log 行を作成する。"""
+    if isinstance(monitor_data, str):
+        try:
+            import json
+            monitor_data = json.loads(monitor_data)
+        except (json.JSONDecodeError, TypeError):
+            monitor_data = {}
+    if not isinstance(monitor_data, dict):
+        monitor_data = {}
+
+    existing_ids = safe_db(list_action_log_archive_ids, ticker) or []
+    if archive_id in existing_ids:
+        return None
+
+    result_str = monitor_data.get("result", "OK")
+    action_text = _MONITOR_RESULT_TEXT.get(result_str, f"監視結果: {result_str}")
+    summary = monitor_data.get("summary", "")
+
+    latest = safe_db(get_latest_action_log, ticker)
+    prev_cumulative = float(latest["cumulative_invested"]) if latest else 0.0
+
+    all_logs = safe_db(list_all_action_logs, ticker) or []
+    total_shares = calc_total_shares(all_logs)
+    price = monitor_data.get("current_price") or 0
+    total_assets = float(price) * total_shares if price else 0.0
+
+    row_result = safe_db(
+        create_action_log,
+        ticker,
+        action_date or datetime.now(_JST).strftime("%Y-%m-%d"),
+        archive_id=archive_id,
+        action_text=action_text,
+        story=summary,
+        decision=result_str,
+        quantity=0,
+        price=price,
+        money_in=0,
+        cumulative_invested=prev_cumulative,
+        total_assets=total_assets,
+        pnl=total_assets - prev_cumulative,
+        is_auto=True,
+    )
+    return row_result

@@ -28,7 +28,7 @@ _JST = timezone(timedelta(hours=9))
 
 # ── JS ヘルパー（通貨フォーマット・損益色分け） ──────────────
 
-ui.add_head_html("""
+ui.add_head_html(shared=True, code="""
 <script>
 function formatJPY(params) {
     if (params.value == null || params.value === '') return '';
@@ -92,8 +92,7 @@ _COLUMN_DEFS = [
         ":editable": "handoffEditable",
         "autoHeight": True,
         "wrapText": True,
-        "flex": 1,
-        "minWidth": 120,
+        "width": 150,
     },
     {
         "headerName": "ストーリー",
@@ -101,8 +100,7 @@ _COLUMN_DEFS = [
         ":editable": "handoffEditable",
         "autoHeight": True,
         "wrapText": True,
-        "flex": 3,
-        "minWidth": 200,
+        "width": 400,
     },
     {
         "headerName": "入れたお金",
@@ -186,7 +184,29 @@ def ticker_page(ticker: str):
     state = {"year": now.year, "month": now.month}
 
     ui.link("← 銘柄選択に戻る", "/").classes("text-sm mb-2")
-    ui.label(f"{ticker}").classes("text-2xl font-bold")
+
+    # ── 銘柄ナビ ──
+    tickers = get_ticker_list()
+    with ui.row().classes("items-center gap-2 my-1"):
+        def prev_ticker():
+            if ticker in tickers:
+                idx = tickers.index(ticker)
+                new_ticker = tickers[(idx - 1) % len(tickers)]
+            else:
+                new_ticker = tickers[0] if tickers else ticker
+            ui.navigate.to(f"/ticker/{new_ticker}")
+
+        def next_ticker():
+            if ticker in tickers:
+                idx = tickers.index(ticker)
+                new_ticker = tickers[(idx + 1) % len(tickers)]
+            else:
+                new_ticker = tickers[0] if tickers else ticker
+            ui.navigate.to(f"/ticker/{new_ticker}")
+
+        ui.button("←", on_click=prev_ticker).props("flat dense")
+        ui.label(f"{ticker}").classes("text-2xl font-bold min-w-[100px] text-center")
+        ui.button("→", on_click=next_ticker).props("flat dense")
 
     # ── 月ナビ ──
     with ui.row().classes("items-center gap-2 my-2"):
@@ -217,12 +237,10 @@ def ticker_page(ticker: str):
         {
             "columnDefs": _COLUMN_DEFS,
             "rowData": [],
-            "domLayout": "autoHeight",
             "stopEditingWhenCellsLoseFocus": True,
-            "getRowId": "params => String(params.data.id || params.data.action_date)",
         },
         theme="balham",
-    ).style("height: unset").classes("w-full")
+    ).classes("w-full").style("height: calc(100vh - 180px)")
 
     # ── データ読み込み・表示更新 ──
     def refresh_grid():

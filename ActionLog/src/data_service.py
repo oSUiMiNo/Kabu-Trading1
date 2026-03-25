@@ -22,7 +22,7 @@ from supabase_client import (
     list_action_log_archive_ids,
 )
 from calc_engine import recalculate_from, calc_pnl
-from auto_populate import populate_from_archive
+from auto_populate import populate_from_archive, populate_from_monitor
 
 
 def get_monthly_data(ticker: str, year: int, month: int) -> list[dict]:
@@ -112,9 +112,9 @@ def populate_existing_archives(ticker: str) -> int:
     resp = (
         get_client()
         .from_("archive")
-        .select("id, ticker, created_at, newplan_full")
+        .select("id, ticker, created_at, newplan_full, monitor")
         .eq("ticker", ticker.upper())
-        .not_.is_("newplan_full", "null")
+        .not_.is_("monitor", "null")
         .order("created_at")
         .execute()
     )
@@ -125,13 +125,22 @@ def populate_existing_archives(ticker: str) -> int:
         if arc["id"] in existing_ids:
             continue
         action_date = arc["created_at"][:10] if arc.get("created_at") else None
-        result = populate_from_archive(
-            ticker=ticker,
-            archive_id=arc["id"],
-            newplan_full=arc["newplan_full"],
-            beginner_summary="",
-            action_date=action_date,
-        )
+
+        if arc.get("newplan_full"):
+            result = populate_from_archive(
+                ticker=ticker,
+                archive_id=arc["id"],
+                newplan_full=arc["newplan_full"],
+                beginner_summary="",
+                action_date=action_date,
+            )
+        else:
+            result = populate_from_monitor(
+                ticker=ticker,
+                archive_id=arc["id"],
+                monitor_data=arc.get("monitor") or {},
+                action_date=action_date,
+            )
         if result:
             count += 1
     return count
