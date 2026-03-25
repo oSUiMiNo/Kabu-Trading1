@@ -1,6 +1,6 @@
 ---
 description: 前月のアクションログから今月への引き継ぎ文を生成する
-model: claude-opus-4-6
+model: glm-4.7
 allowed_tools: []
 ---
 

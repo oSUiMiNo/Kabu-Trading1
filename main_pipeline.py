@@ -36,6 +36,8 @@ from supabase_client import (
     fetch_monitor_results_since,
     get_archivelog_by_id,
     update_archivelog,
+    upsert_holding,
+    list_action_logs,
 )
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA, LABEL_COLOR
 from discord_notifier import notify, send_start_notification
@@ -100,6 +102,33 @@ async def run_pipeline(
     if market:
         tech_args.extend(["--market", market])
     _run_batch("technical_batch.py", tech_args)
+
+    # ── holdings.current_price を最新化 ──
+    try:
+        from supabase_client import get_client
+        import yaml as _yaml
+        _wl = safe_db(list_watchlist) or []
+        _today = datetime.now(_JST).strftime("%Y-%m-%d")
+        for _w in _wl:
+            _tk = _w["ticker"]
+            if target_ticker and _tk != target_ticker:
+                continue
+            _resp = (
+                get_client().from_("archive").select("technical")
+                .eq("ticker", _tk).not_.is_("technical", "null")
+                .order("created_at", desc=True).limit(1).execute()
+            )
+            if _resp.data:
+                _tech = _resp.data[0].get("technical")
+                if isinstance(_tech, str):
+                    _tech = _yaml.safe_load(_tech) if _tech else {}
+                if isinstance(_tech, dict):
+                    _price = _tech.get("latest_price")
+                    if _price:
+                        safe_db(upsert_holding, _tk, current_price=_price, price_updated_at=_today)
+                        print(f"  [holdings] {_tk}: current_price={_price}")
+    except Exception as e:
+        print(f"  [holdings] 更新スキップ: {e}")
 
     # ── Phase 2: Monitor ──
     print(f"\n{'='*60}")

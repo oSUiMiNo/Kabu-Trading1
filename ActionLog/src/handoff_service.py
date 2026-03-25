@@ -1,8 +1,8 @@
 """
-引き継ぎ文の生成・キャッシュ
+引き継ぎ文・ストーリー生成
 
-月切り替え時に前月のアクションログから引き継ぎ文を Opus で生成し、
-DB にキャッシュする。2回目以降はキャッシュから即座に返す。
+- 引き継ぎ文：月切り替え時に前月のアクションログから GLM-4.7 で生成し DB にキャッシュ
+- ストーリー：各行のストーリーを、その月の流れに沿った文章として GLM-4.7 で生成
 """
 from __future__ import annotations
 
@@ -14,10 +14,15 @@ from supabase_client import (
     safe_db,
     get_action_log_handoff,
     upsert_action_log_handoff,
+    list_action_logs,
+    list_all_action_logs,
+    update_action_log,
 )
+from llm_client import call_glm
 
 from data_service import get_monthly_data
-from AgentUtil import call_agent, extract_text
+
+import calendar
 
 _COMMANDS_DIR = Path(__file__).resolve().parent.parent / ".claude" / "commands"
 
@@ -67,8 +72,8 @@ async def generate_handoff(ticker: str, year: int, month: int) -> str | None:
     prompt = _build_prompt(ticker, prev_year, prev_month, prev_rows)
     file_path = str(_COMMANDS_DIR / "handoff-generator.md")
 
-    result = await call_agent(prompt, file_path=file_path)
-    text = extract_text(result)
+    result = await call_glm(prompt, file_path=file_path, model="glm-4.7")
+    text = result.text if result else None
     return text.strip() if text else None
 
 
@@ -96,3 +101,119 @@ def get_cached_handoff(ticker: str, year: int, month: int) -> str | None:
     if cached and cached.get("handoff_text"):
         return cached["handoff_text"]
     return None
+
+
+# ── ストーリー生成 ─────────────────────────────────────────
+
+
+def _build_story_prompt(
+    ticker: str,
+    handoff_text: str | None,
+    previous_stories: list[dict],
+    current_row: dict,
+) -> str:
+    """ストーリー生成サブエージェントに渡すプロンプトを構築する。"""
+    lines = [f"銘柄: {ticker}", ""]
+
+    if handoff_text:
+        lines.append(f"引き継ぎ文（先月のまとめ）: {handoff_text}")
+        lines.append("")
+
+    if previous_stories:
+        lines.append("今月のこれまでのストーリー:")
+        for s in previous_stories:
+            date = str(s.get("action_date", ""))[:10]
+            action = s.get("action_text", "")
+            story = s.get("story", "")
+            lines.append(f"- {date} [{action}]: {story}")
+        lines.append("")
+
+    lines.append("今回の行の情報:")
+    date = str(current_row.get("action_date", ""))[:10]
+    action = current_row.get("action_text", "")
+    lines.append(f"- 日付: {date}")
+    lines.append(f"- アクション: {action}")
+
+    raw_story = current_row.get("_raw_summary", "") or current_row.get("story", "")
+    if raw_story:
+        lines.append(f"- 元データ: {raw_story}")
+    else:
+        lines.append(f"- 元データ: （なし。アクション内容と前後の流れから簡潔に書いてください）")
+
+    decision = current_row.get("decision", "")
+    if decision:
+        lines.append(f"- 判定: {decision}")
+
+    money_in = current_row.get("money_in", 0)
+    if money_in:
+        lines.append(f"- 投入額: {money_in:,}円" if isinstance(money_in, (int, float)) else f"- 投入額: {money_in}")
+
+    pnl = current_row.get("pnl")
+    if pnl is not None and pnl != 0:
+        lines.append(f"- 損益: {pnl:,}円" if isinstance(pnl, (int, float)) else f"- 損益: {pnl}")
+
+    lines.append("")
+    lines.append("上記の情報をもとに、今月のストーリーの流れに沿った文章を生成してください。")
+    return "\n".join(lines)
+
+
+async def generate_story(
+    ticker: str,
+    current_row: dict,
+    year: int | None = None,
+    month: int | None = None,
+) -> str:
+    """1行分のストーリーを、月の流れに沿った文章として Opus で生成する。"""
+    date_str = str(current_row.get("action_date", ""))[:10]
+    if year is None or month is None:
+        if len(date_str) >= 7:
+            year = int(date_str[:4])
+            month = int(date_str[5:7])
+        else:
+            return current_row.get("story", "") or ""
+
+    handoff_text = get_cached_handoff(ticker, year, month)
+
+    from_date = f"{year:04d}-{month:02d}-01"
+    last_day = calendar.monthrange(year, month)[1]
+    to_date = f"{year:04d}-{month:02d}-{last_day:02d}"
+    month_rows = safe_db(list_action_logs, ticker, from_date, to_date) or []
+
+    current_id = current_row.get("id")
+    previous_stories = []
+    for r in month_rows:
+        if r["id"] == current_id:
+            break
+        if r.get("story"):
+            previous_stories.append(r)
+
+    prompt = _build_story_prompt(ticker, handoff_text, previous_stories, current_row)
+    file_path = str(_COMMANDS_DIR / "story-generator.md")
+
+    result = await call_glm(prompt, file_path=file_path, model="glm-4.7")
+    text = result.text if result else None
+    return text.strip() if text else (current_row.get("story", "") or "")
+
+
+async def regenerate_all_stories(ticker: str) -> int:
+    """指定銘柄の全行のストーリーを先頭から順に再生成する。"""
+    all_rows = safe_db(list_all_action_logs, ticker) or []
+    if not all_rows:
+        return 0
+
+    count = 0
+    for row in all_rows:
+        date_str = str(row.get("action_date", ""))[:10]
+        if len(date_str) < 7:
+            continue
+
+        row["_raw_summary"] = row.get("story", "")
+
+        new_story = await generate_story(ticker, row)
+        if new_story:
+            safe_db(update_action_log, row["id"], story=new_story)
+            row["story"] = new_story
+            count += 1
+            print(f"  [{ticker}] {date_str}: ストーリー再生成完了")
+
+    return count

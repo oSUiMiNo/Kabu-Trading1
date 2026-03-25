@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "nicegui>=3.4.0",
     "claude-agent-sdk>=0.1.40",
+    "openai>=2.20",
     "anyio",
     "pyyaml",
     "python-dotenv",

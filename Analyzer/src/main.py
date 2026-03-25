@@ -84,18 +84,46 @@ def _build_market_context(archive_id: str | None) -> str:
         for tf, data in technical["timeframes"].items():
             if not isinstance(data, dict):
                 continue
-            derived = data.get("indicators", {}).get("derived", {})
+            indicators = data.get("indicators", {})
+            raw = indicators.get("raw", {})
+            derived = indicators.get("derived", {})
             if derived:
                 trend = derived.get("trend", {})
                 momentum = derived.get("momentum", {})
                 volatility = derived.get("volatility", {})
+                volume_d = derived.get("volume", {})
                 lines = []
                 if trend:
-                    lines.append(f"  トレンド: {', '.join(f'{k}={v}' for k, v in trend.items())}")
+                    t_parts = [f"{k}={v}" for k, v in trend.items()]
+                    for rk in ("sma_20", "sma_50", "sma_200", "adx"):
+                        rv = raw.get(rk)
+                        if rv is not None:
+                            t_parts.append(f"{rk}={rv}")
+                    lines.append(f"  トレンド: {', '.join(t_parts)}")
                 if momentum:
-                    lines.append(f"  モメンタム: {', '.join(f'{k}={v}' for k, v in momentum.items())}")
+                    m_parts = [f"{k}={v}" for k, v in momentum.items()]
+                    for rk in ("rsi_14", "stoch_k"):
+                        rv = raw.get(rk)
+                        if rv is not None:
+                            m_parts.append(f"{rk}={round(rv, 1) if isinstance(rv, float) else rv}")
+                    macd_raw = raw.get("macd")
+                    if isinstance(macd_raw, dict) and macd_raw.get("macd") is not None:
+                        m_parts.append(f"macd={round(macd_raw['macd'], 2)}")
+                    lines.append(f"  モメンタム: {', '.join(m_parts)}")
                 if volatility:
-                    lines.append(f"  ボラティリティ: {', '.join(f'{k}={v}' for k, v in volatility.items())}")
+                    v_parts = [f"{k}={v}" for k, v in volatility.items()]
+                    for rk in ("atr", "natr"):
+                        rv = raw.get(rk)
+                        if rv is not None:
+                            v_parts.append(f"{rk}={round(rv, 2) if isinstance(rv, float) else rv}")
+                    lines.append(f"  ボラティリティ: {', '.join(v_parts)}")
+                if volume_d:
+                    vol_parts = [f"{k}={v}" for k, v in volume_d.items()]
+                    for rk in ("mfi",):
+                        rv = raw.get(rk)
+                        if rv is not None:
+                            vol_parts.append(f"{rk}={round(rv, 1) if isinstance(rv, float) else rv}")
+                    lines.append(f"  出来高: {', '.join(vol_parts)}")
                 if lines:
                     parts.append(f"【テクニカル指標 ({tf})】")
                     parts.extend(lines)

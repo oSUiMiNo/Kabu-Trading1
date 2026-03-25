@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import re
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
@@ -26,6 +27,11 @@ _JST = timezone(timedelta(hours=9))
 
 _SELL_DECISIONS = {"SELL", "REDUCE"}
 _HOLD_DECISIONS = {"HOLD", "NO_BUY", "NOT_BUY_WAIT"}
+
+def _normalize_decision(raw: str) -> str:
+    """decision 値から括弧・記号を除去して正規化する。"""
+    return re.sub(r'[（）\(\)\*\s]', '', raw or '').strip().upper()
+
 
 _ACTION_TEXT_MAP = {
     "SELL": "売った",
@@ -61,7 +67,7 @@ def parse_newplan_full(yaml_str: str) -> dict:
 
 def build_action_text(decision: str, allocation_jpy: float | None) -> str:
     """decision と配分額からアクションログ短文を生成する。"""
-    decision_upper = (decision or "").upper().strip("*").strip()
+    decision_upper = _normalize_decision(decision)
 
     if decision_upper in _ACTION_TEXT_MAP:
         return _ACTION_TEXT_MAP[decision_upper]
@@ -73,14 +79,18 @@ def build_action_text(decision: str, allocation_jpy: float | None) -> str:
         if decision_upper == "ADD":
             return f"{amount}円買い増した"
 
-    return decision_upper or "不明"
+    return "不明"
+
+_KNOWN_DECISIONS = {"BUY", "SELL", "ADD", "REDUCE", "HOLD", "NO_BUY", "NOT_BUY_WAIT"}
 
 
 def _calc_money_in(decision: str, allocation_jpy: float | None) -> float:
     """decision に基づいて money_in の符号を決定する。"""
-    decision_upper = (decision or "").upper().strip("*").strip()
+    decision_upper = _normalize_decision(decision)
     amount = float(allocation_jpy or 0)
 
+    if decision_upper not in _KNOWN_DECISIONS:
+        return 0.0
     if decision_upper in _SELL_DECISIONS:
         return -amount
     if decision_upper in _HOLD_DECISIONS:
@@ -109,7 +119,7 @@ def build_action_log_row(
         "action_text": build_action_text(decision, parsed["allocation_jpy"]),
         "story": beginner_summary,
         "decision": decision,
-        "quantity": 0 if (decision or "").upper().strip("*").strip() in _HOLD_DECISIONS else (parsed["quantity"] or 0),
+        "quantity": (parsed["quantity"] or 0) if _normalize_decision(decision) in ("BUY", "ADD") else 0,
         "price": parsed["current_price"],
         "money_in": _calc_money_in(decision, parsed["allocation_jpy"]),
         "is_auto": True,
@@ -145,7 +155,7 @@ def populate_from_archive(
     row["cumulative_invested"] = prev_cumulative + row["money_in"]
 
     new_quantity = row["quantity"]
-    decision_upper = (row["decision"] or "").upper().strip("*").strip()
+    decision_upper = _normalize_decision(row["decision"])
     if decision_upper in _SELL_DECISIONS:
         shares_after = total_shares - new_quantity
     else:
@@ -166,7 +176,7 @@ def populate_from_archive(
 
 
 _MONITOR_RESULT_TEXT = {
-    "OK": "確認済み（問題なし）",
+    "OK": "OK",
     "NG": "要注意",
     "ERROR": "チェック失敗",
 }
