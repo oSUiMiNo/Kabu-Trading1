@@ -38,6 +38,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 | **Watch** | watchlist 更新 + Discord 業務通知 | `watch_batch.py`<br>`Watch/src/main.py` |
 | **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/main.py` |
 | **NightWorker** | archive 品質レビュー + Issue 作成 + 用語集統合 | `NightWorker/src/main.py`<br>`NightWorker/src/words_consolidator.py` |
+| **ActionLog** | 月次アクションログ表示 Web UI（NiceGUI） | `ActionLog/src/main.py` |
 | **shared** | DB・通知・LLM クライアント共通 | `shared/supabase_client.py`<br>`shared/discord_notifier.py`<br>`shared/llm_client.py` |
 
 ---
@@ -153,6 +154,9 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 | `event_watch` | イベント watch スケジュール |
 | `portfolio_config` | 全設定値（YAML → DB 同期） |
 | `archive_reviews` | archive 品質レビュー結果 |
+| `holdings` | 保有銘柄情報（株数・平均取得単価・現在価格） |
+| `action_log` | ActionLog アプリ用のアクション履歴 |
+| `action_log_handoff` | ActionLog の月別引き継ぎ文キャッシュ |
 
 ### 伝言板方式の開始条件
 
@@ -176,6 +180,6 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 | 新アーキテクチャ設計.md | 現行アーキテクチャの設計書 |
 | Discord通知.md | 通知ラベルの種類・色・送信タイミング |
 | リスクフラグ.md | monitor-checker が付与するタグ定義 |
-| Monitor入力情報の追加.md | Monitor に渡すべき追加情報の設計 |
+| 各ブロック不足入力情報.md | 各ブロックに渡すべき追加情報の設計 |
 | pgcronトリガー.md | pg_cron + pg_net による二重化トリガー |
 | 設定管理.md | portfolio_config テーブルの管理方法 |

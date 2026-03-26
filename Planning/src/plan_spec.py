@@ -75,9 +75,10 @@ class PlanSpec:
     min_rr_ratio: float = 1.0
     rr_status: str = "OK"
 
-    # monitoring_hint ブロック
-    monitoring_intensity: str = "NORMAL"
-    monitoring_reason: str = ""
+    # holdings ブロック
+    existing_shares: int = 0
+    existing_avg_cost: float = 0.0
+    existing_investment_jpy: float = 0.0
 
 
 def generate_plan_id(ticker: str, seq: int) -> str:
@@ -173,15 +174,16 @@ def build_yaml(spec: PlanSpec) -> str:
             )),
             ("quantity", spec.quantity),
             ("status", spec.portfolio_status),
+            ("holdings", _ordered_dict(
+                ("existing_shares", spec.existing_shares),
+                ("existing_avg_cost", spec.existing_avg_cost),
+                ("existing_investment_jpy", spec.existing_investment_jpy),
+            )),
         )),
         ("execution_plan", _ordered_dict(
             ("order_style", spec.order_style),
             ("entry_rule", spec.entry_rule),
             ("notes", spec.execution_notes),
-        )),
-        ("monitoring_hint", _ordered_dict(
-            ("intensity", spec.monitoring_intensity),
-            ("reason", spec.monitoring_reason),
         )),
     )
 

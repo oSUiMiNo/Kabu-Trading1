@@ -51,13 +51,6 @@ LOT_SIZE: dict[Market, int] = {
     Market.US: 1,
 }
 
-# 7.2 monitoring intensity（confidence→ラベル）
-MONITORING_INTENSITY: dict[Confidence, str] = {
-    Confidence.HIGH: "STRONG",
-    Confidence.MED: "NORMAL",
-    Confidence.LOW: "LIGHT",
-}
-
 
 # ═══════════════════════════════════════════════════════
 # PlanConfig: DB由来の投資パラメータ
@@ -244,12 +237,14 @@ def calc_position_size(
     budget_total_jpy: int,
     risk_limit_pct: float,
     stop_loss_pct: float,
+    existing_investment_jpy: float = 0,
 ) -> PositionSizeResult:
     """ポジションサイジング：許容損失額から投入上限を逆算する。
 
     max_loss_jpy = budget × risk_limit_pct / 100
-    position_size_jpy = max_loss_jpy / abs(stop_loss_pct / 100)
+    position_size_jpy = max_loss_jpy / abs(stop_loss_pct / 100) - existing_investment_jpy
 
+    existing_investment_jpy: 既保有分の投入額（JPY）。新規分の上限からこの分を差し引く。
     stop_loss_pct が 0 の場合は position_size_jpy を無制限（budget と同額）にする。
     """
     max_loss_jpy = int(budget_total_jpy * risk_limit_pct / 100)
@@ -257,7 +252,8 @@ def calc_position_size(
     if stop_loss_pct == 0:
         position_size_jpy = budget_total_jpy
     else:
-        position_size_jpy = int(max_loss_jpy / abs(stop_loss_pct / 100))
+        total_position_limit = int(max_loss_jpy / abs(stop_loss_pct / 100))
+        position_size_jpy = max(0, total_position_limit - int(existing_investment_jpy))
 
     return PositionSizeResult(
         max_loss_jpy=max_loss_jpy,
@@ -311,17 +307,20 @@ def calc_allocation(
     config: PlanConfig | None = None,
     usd_jpy_rate: float | None = None,
     position_size_jpy: int | None = None,
+    existing_investment_jpy: float = 0,
 ) -> AllocationResult:
     """配分・株数計算（youken 5.4, 5.6, 5.7）
 
     position_size_jpy が指定された場合、confidence ベースの配分額と比較して
     小さい方を投入額として採用する（ポジションサイジング制限）。
+    existing_investment_jpy: 既保有分の投入額（JPY）。残り予算から差し引く。
     """
     cfg = config or DEFAULT_CONFIG
 
     alloc_pct = cfg.max_allocation_pct[confidence]
 
-    alloc_jpy = int(budget_total_jpy * alloc_pct / 100)
+    available_budget = max(0, budget_total_jpy - int(existing_investment_jpy))
+    alloc_jpy = int(available_budget * alloc_pct / 100)
 
     if risk_limit_jpy is not None:
         alloc_jpy = min(alloc_jpy, risk_limit_jpy)

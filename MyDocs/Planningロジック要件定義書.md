@@ -260,7 +260,7 @@ execution_plan:
 
 ### commentary エージェントへのデータ注入（本スコープ）
 
-archive.important_indicators の上記指標を commentary エージェント（plan-generator.md）のプロンプトに注入する。エージェントは状況に応じて execution_notes や monitoring_hint.reason にコメントを生成する。
+archive.important_indicators の上記指標を commentary エージェント（plan-generator.md）のプロンプトに注入する。エージェントは状況に応じて execution_notes にコメントを生成する。
 
 ### 数値計算への反映（スコープ外）
 

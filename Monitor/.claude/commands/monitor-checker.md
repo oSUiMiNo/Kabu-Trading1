@@ -34,7 +34,7 @@ model: claude-haiku-4-5
 
 1. **銘柄**: ティッカーシンボル
 2. **プラン概要**: plan_id、判定結果(BUY/SELL等)、confidence、horizon、
-   プラン時の価格、配分額、根拠リスト、monitoring_hint
+   プラン時の価格、配分額、根拠リスト
 3. **チェック指示**: 何を重点的に確認すべきか
 
 ---

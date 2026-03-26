@@ -25,6 +25,7 @@ from supabase_client import (
     create_archivelog,
     update_archivelog,
     get_client,
+    get_holding,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -47,7 +48,15 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
     horizon = "不明"
     confidence = "N/A"
     basis_text = "  （なし）"
-    monitoring_hint = {}
+    stop_loss_pct = None
+    take_profit_pct = None
+    price_tolerance_pct = None
+    price_block_pct = None
+    allocation_jpy = None
+    plan_quantity = None
+    log_age_days = None
+    max_allowed_days = None
+    freshness_status = None
 
     if newplan_full:
         try:
@@ -55,6 +64,8 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
             if parsed:
                 data_checks = parsed.get("data_checks", {})
                 plan_price = data_checks.get("current_price", "不明")
+                price_tolerance_pct = data_checks.get("price_tolerance_pct")
+                price_block_pct = data_checks.get("price_block_pct")
 
                 decision = parsed.get("decision", {})
                 horizon = decision.get("horizon", "不明")
@@ -67,7 +78,18 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
                         for b in basis_list
                     )
 
-                monitoring_hint = parsed.get("monitoring_hint", {})
+                risk_mgmt = parsed.get("risk_management", {})
+                stop_loss_pct = risk_mgmt.get("stop_loss_pct")
+                take_profit_pct = risk_mgmt.get("take_profit_pct")
+
+                portfolio = parsed.get("portfolio_plan", {})
+                allocation_jpy = portfolio.get("allocation_jpy")
+                plan_quantity = portfolio.get("quantity")
+
+                freshness = parsed.get("freshness", {})
+                log_age_days = freshness.get("log_age_days")
+                max_allowed_days = freshness.get("max_allowed_days")
+                freshness_status = freshness.get("status")
         except yaml.YAMLError:
             pass
 
@@ -185,6 +207,68 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
         if ii_lines:
             indicators_text = "【重要指標（API取得データ）】\n" + "\n".join(ii_lines) + "\n\n"
 
+    # プランの鮮度
+    freshness_text = ""
+    if log_age_days is not None:
+        freshness_text = (
+            f"【プランの鮮度】\n"
+            f"  作成からの経過: {log_age_days}日（上限: {max_allowed_days}日）\n"
+            f"  鮮度: {freshness_status or 'N/A'}\n\n"
+        )
+
+    # リスク管理
+    risk_text = ""
+    if stop_loss_pct is not None or take_profit_pct is not None:
+        risk_lines = []
+        if stop_loss_pct is not None:
+            if plan_price and plan_price != "不明":
+                sl_price = float(plan_price) * (1 + stop_loss_pct / 100)
+                risk_lines.append(f"  損切りライン: {stop_loss_pct}%（= {sl_price:.2f}）")
+            else:
+                risk_lines.append(f"  損切りライン: {stop_loss_pct}%")
+        if take_profit_pct is not None:
+            if plan_price and plan_price != "不明":
+                tp_price = float(plan_price) * (1 + take_profit_pct / 100)
+                risk_lines.append(f"  利確ライン: +{take_profit_pct}%（= {tp_price:.2f}）")
+            else:
+                risk_lines.append(f"  利確ライン: +{take_profit_pct}%")
+        if price_tolerance_pct is not None:
+            risk_lines.append(f"  許容変動幅: ±{price_tolerance_pct}%")
+        if price_block_pct is not None:
+            risk_lines.append(f"  プラン立て直し閾値: ±{price_block_pct}%")
+        risk_text = "【リスク管理】\n" + "\n".join(risk_lines) + "\n\n"
+
+    # プランの規模
+    plan_size_text = ""
+    if allocation_jpy is not None or plan_quantity is not None:
+        size_lines = []
+        if allocation_jpy is not None:
+            size_lines.append(f"  配分額: ¥{allocation_jpy:,.0f}")
+        if plan_quantity is not None:
+            size_lines.append(f"  株数: {plan_quantity}")
+        plan_size_text = "【プランの規模】\n" + "\n".join(size_lines) + "\n\n"
+
+    # 保有状況
+    holding = safe_db(get_holding, ticker) or {}
+    holdings_text = ""
+    if holding and holding.get("shares"):
+        shares = holding["shares"]
+        avg_cost = holding.get("avg_cost", 0)
+        current_p = holding.get("current_price", 0)
+        if avg_cost and current_p:
+            unrealized = (current_p - avg_cost) * shares
+            unrealized_pct = ((current_p - avg_cost) / avg_cost * 100) if avg_cost else 0
+            holdings_text = (
+                f"【現在の保有状況】\n"
+                f"  保有数: {shares}株\n"
+                f"  平均取得単価: {avg_cost}\n"
+                f"  含み損益: {unrealized:+,.2f}（{unrealized_pct:+.1f}%）\n\n"
+            )
+        else:
+            holdings_text = f"【現在の保有状況】\n  保有数: {shares}株\n  平均取得単価: {avg_cost}\n\n"
+    else:
+        holdings_text = "【現在の保有状況】\n  保有なし\n\n"
+
     return (
         f"以下の投資プランが現在も有効かチェックしてください。\n"
         f"\n"
@@ -196,10 +280,10 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
         f"\n"
         f"【判定根拠】\n{basis_text}\n"
         f"\n"
-        f"【モニタリングヒント】\n"
-        f"  強度: {monitoring_hint.get('intensity', 'N/A')}\n"
-        f"  理由: {monitoring_hint.get('reason', 'N/A')}\n"
-        f"\n"
+        f"{freshness_text}"
+        f"{risk_text}"
+        f"{plan_size_text}"
+        f"{holdings_text}"
         f"{technical_text}"
         f"{indicators_text}"
         f"上記プランの前提が現在の市場状況でまだ有効か、"

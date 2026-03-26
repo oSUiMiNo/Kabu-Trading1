@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import (
     safe_db, get_portfolio_config,
     get_latest_archivelog, get_archivelog_by_id, update_archivelog,
+    get_holding,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -36,7 +37,7 @@ from plan_calc import (
     Horizon, Market, Confidence, PlanConfig,
     check_freshness, check_price_deviation, calc_confidence, calc_allocation,
     calc_position_size, calc_rr_ratio,
-    load_plan_config, MONITORING_INTENSITY,
+    load_plan_config,
 )
 from plan_spec import PlanSpec, generate_plan_id, build_yaml, save_plan_spec
 
@@ -243,7 +244,6 @@ def build_commentary_prompt(
 
     エージェントの責務:
     - decision_basis の why_it_matters を日本語で記述
-    - monitoring_hint.reason を生成
     - execution_notes に状況に応じた注記を追加
     - 全ての数値はオーケストレーター算出済み。エージェントは数値を変更しない。
     - additional_texts（議論ログ・判定ログ）を参照して commentary を補強
@@ -280,9 +280,8 @@ def build_commentary_prompt(
         f"1. 銘柄「{spec.ticker}」に関する最新ニュースや市場状況をWeb検索で確認\n"
         f"2. 追加の Analyzer ログがある場合は参照し、根拠の詳細や議論の文脈を把握する\n"
         f"3. decision_basis の各項目に why_it_matters（結論の決め手になった理由を日本語1文。最新情報があれば言及）を付与\n"
-        f"4. monitoring_hint.reason を生成（投票状況・confidence・freshness + 直近イベントを踏まえた1文）\n"
-        f"5. execution_notes に追加すべき注記があれば追加（価格ズレ警告、鮮度警告、市況注記など）\n"
-        f"6. 結果を YAML 形式で出力。数値フィールドは一切変更しないこと。\n"
+        f"4. execution_notes に追加すべき注記があれば追加（価格ズレ警告、鮮度警告、市況注記など）\n"
+        f"5. 結果を YAML 形式で出力。数値フィールドは一切変更しないこと。\n"
         f"\n"
         f"出力は YAML ブロック（```yaml ... ```）のみ。説明文は不要。\n"
     )
@@ -294,7 +293,6 @@ def _merge_commentary(spec: PlanSpec, agent_output: str) -> None:
 
     エージェントが返す YAML ブロックをパースし、以下のフィールドのみを上書き:
     - decision_basis[].why_it_matters
-    - monitoring_hint.reason
     - execution_plan.notes
     """
     # ```yaml ... ``` ブロックを抽出
@@ -318,13 +316,6 @@ def _merge_commentary(spec: PlanSpec, agent_output: str) -> None:
                 wim = ab.get("why_it_matters")
                 if wim:
                     spec.decision_basis[i]["why_it_matters"] = str(wim)
-
-    # monitoring_hint.reason を上書き
-    agent_monitoring = data.get("monitoring_hint", {})
-    if isinstance(agent_monitoring, dict):
-        reason = agent_monitoring.get("reason")
-        if reason:
-            spec.monitoring_reason = str(reason)
 
     # execution_plan.notes を上書き
     agent_exec = data.get("execution_plan", {})
@@ -443,6 +434,17 @@ async def run_plan(
         anchor_price = current_price
         print(f"  基準価格: 省略 → 現在価格と同値 ({anchor_price})")
 
+    # --- 保有状況の取得 ---
+    holding = safe_db(get_holding, t) or {}
+    existing_shares = holding.get("shares", 0) or 0
+    existing_avg_cost = holding.get("avg_cost", 0) or 0
+    _rate = usd_jpy_rate if market == Market.US and usd_jpy_rate else 1.0
+    existing_investment_jpy = existing_avg_cost * existing_shares * _rate
+    if existing_shares:
+        print(f"  保有状況: {existing_shares}株（平均{existing_avg_cost}、投入額{existing_investment_jpy:,.0f}円）")
+    else:
+        print(f"  保有状況: なし")
+
     print()
 
     # --- 2. 鮮度チェック ---
@@ -459,11 +461,11 @@ async def run_plan(
 
     # --- 5. ポジションサイジング ---
     stop_loss = cfg.stop_loss_pct[h]
-    pos_size = calc_position_size(budget_total_jpy, float(risk_limit.rstrip('%')) if risk_limit.endswith('%') else risk_jpy / budget_total_jpy * 100, stop_loss)
+    pos_size = calc_position_size(budget_total_jpy, float(risk_limit.rstrip('%')) if risk_limit.endswith('%') else risk_jpy / budget_total_jpy * 100, stop_loss, existing_investment_jpy=existing_investment_jpy)
     print(f"  ポジションサイジング: 許容損失{pos_size.max_loss_jpy:,}円 → 投入上限{pos_size.position_size_jpy:,}円")
 
     # --- 6. 配分計算（ポジションサイジング制限付き） ---
-    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy, config=cfg, usd_jpy_rate=usd_jpy_rate, position_size_jpy=pos_size.position_size_jpy)
+    allocation = calc_allocation(budget_total_jpy, confidence, current_price, market, risk_jpy, config=cfg, usd_jpy_rate=usd_jpy_rate, position_size_jpy=pos_size.position_size_jpy, existing_investment_jpy=existing_investment_jpy)
     pos_size.position_size_limited = allocation.allocation_jpy < pos_size.position_size_jpy and allocation.allocation_jpy < int(budget_total_jpy * cfg.max_allocation_pct[confidence] / 100)
     # position_size_limited: ポジションサイジングで実際に制限された場合のみ True
     if pos_size.position_size_jpy < int(budget_total_jpy * cfg.max_allocation_pct[confidence] / 100):
@@ -531,8 +533,10 @@ async def run_plan(
         lot_size=allocation.lot_size,
         quantity=allocation.quantity,
         portfolio_status=allocation.status,
-        # monitoring_hint
-        monitoring_intensity=MONITORING_INTENSITY[confidence],
+        # holdings
+        existing_shares=existing_shares,
+        existing_avg_cost=existing_avg_cost,
+        existing_investment_jpy=existing_investment_jpy,
     )
 
     # BLOCK / STALE / RR_TOO_LOW の場合はプランを差し替え + Discord 通知
@@ -593,6 +597,22 @@ async def run_plan(
 
         if ii_lines:
             additional_texts.append(("重要指標（API取得データ）", "\n".join(ii_lines)))
+
+    # 保有状況をコンテキストに追加
+    if existing_shares:
+        _current_val = existing_shares * current_price * _rate
+        _unrealized = _current_val - existing_investment_jpy
+        _unrealized_pct = (_unrealized / existing_investment_jpy * 100) if existing_investment_jpy else 0
+        holdings_lines = [
+            f"保有数: {existing_shares}株",
+            f"平均取得単価: {existing_avg_cost}",
+            f"投入額: {existing_investment_jpy:,.0f}円",
+            f"現在評価額: {_current_val:,.0f}円",
+            f"含み損益: {_unrealized:+,.0f}円（{_unrealized_pct:+.1f}%）",
+        ]
+        additional_texts.append(("現在の保有状況", "\n".join(holdings_lines)))
+    else:
+        additional_texts.append(("現在の保有状況", "保有なし"))
 
     # --- エージェント呼び出し（commentary 生成、リトライ付き） ---
     print(f">>> commentary 生成（plan-generator エージェント）")
