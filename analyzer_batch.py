@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "shared"))
-from supabase_client import safe_db, fetch_active_for_analyzer, list_watchlist
+from supabase_client import safe_db, fetch_active_for_analyzer, list_watchlist, get_holding
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 ANALYZER_DIR = PROJECT_ROOT / "Analyzer"
@@ -62,7 +62,8 @@ async def run():
     tasks = []
     for row in pending:
         ticker = row["ticker"]
-        mode = row.get("mode", "buy")
+        holding = safe_db(get_holding, ticker)
+        mode = "review" if holding and holding.get("shares", 0) > 0 else "buy"
         span = row.get("span", "mid")
         archive_id = row.get("id", "")
         dn = dn_map.get(ticker, "")

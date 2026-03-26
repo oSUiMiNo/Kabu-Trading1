@@ -24,6 +24,7 @@ from supabase_client import (
     get_analyzer_config,
     get_archivelog_by_id,
     ensure_technical_data,
+    get_holding,
 )
 
 from analyzer_orchestrator import LOGS_DIR
@@ -233,10 +234,12 @@ async def run_parallel(
     if market_context:
         initial_prompt = f"{market_context}\n\n{initial_prompt}" if initial_prompt else market_context
 
+    holding = safe_db(get_holding, ticker) or {}
+
     t = ticker.upper()
 
     from analyzer_orchestrator import _HORIZON_LABELS
-    _mode_labels = {"sell": "保有中", "add": "保有中", "buy": "未保有"}
+    _mode_labels = {"sell": "保有中", "add": "保有中", "buy": "未保有", "review": "保有中"}
     mode_label = _mode_labels.get(mode, "未保有")
     horizon_label = _HORIZON_LABELS.get(horizon, horizon)
     print(f"{'='*70}")
@@ -266,6 +269,7 @@ async def run_parallel(
             horizon=horizon,
             discusion_dir=discusion_dir,
             display_name=display_name,
+            holding=holding,
         )
 
     async with anyio.create_task_group() as tg:
@@ -344,6 +348,7 @@ async def run_parallel(
         ticker, agreed_sets, mode=mode,
         disagreed_sets=disagreed_sets, set_sides=set_sides,
         discusion_dir=discusion_dir,
+        holding=holding,
     )
 
     # DB: 最終判定 + セッション完了
@@ -372,7 +377,7 @@ if __name__ == "__main__":
 
     ticker = sys.argv[1]
     horizon = _horizon_map[sys.argv[2]]
-    _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "buy": "buy", "sell": "sell", "add": "add"}
+    _mode_map = {"買う": "buy", "売る": "sell", "買い増す": "add", "見直す": "review", "buy": "buy", "sell": "sell", "add": "add", "review": "review"}
     mode = _mode_map.get(sys.argv[3], "buy") if len(sys.argv) > 3 else "buy"
 
     _archive_id = None

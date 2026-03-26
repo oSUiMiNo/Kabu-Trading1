@@ -150,10 +150,10 @@ def build_final_judge_prompt(
         agreement_info_lines.append(f"  不一致(DISAGREED): {', '.join(f'set{sn}' for sn in disagreed_sets)} — 2体のopinionが不一致。両論を参考材料として扱う。")
     agreement_info = "\n".join(agreement_info_lines)
 
-    if mode in ("sell", "add"):
-        mode_line = "【アクション判定】保有中の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
+    if mode == "review":
+        mode_line = "【アクション判定】保有中の銘柄に対する議論です。選択肢は HOLD / ADD / REDUCE / SELL です。\n\n"
     else:
-        mode_line = "【アクション判定】未保有の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
+        mode_line = "【アクション判定】未保有の銘柄に対する議論です。選択肢は BUY / NO_BUY です。\n\n"
 
     vote_section = ""
     if set_sides is not None:
@@ -215,6 +215,7 @@ async def run_final_judge_orchestrator(
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
     discusion_dir: Path | None = None,
+    holding: dict | None = None,
 ) -> FinalJudgeResult:
     """
     最終判定オーケストレーターを実行。

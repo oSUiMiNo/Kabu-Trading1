@@ -418,7 +418,7 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
                     monitor=error_record, status="error")
         else:
             new_record = safe_db(create_archivelog, ticker,
-                                 archivelog.get("mode", "buy"),
+                                 "review" if (safe_db(get_holding, ticker) or {}).get("shares", 0) > 0 else "buy",
                                  archivelog.get("span", "中期"))
             if new_record:
                 safe_db(update_archivelog, new_record["id"],
@@ -464,7 +464,7 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
         else:
             safe_db(update_archivelog, archivelog["id"], active=False)
             new_record = safe_db(create_archivelog, ticker,
-                                 archivelog.get("mode", "buy"),
+                                 "review" if (safe_db(get_holding, ticker) or {}).get("shares", 0) > 0 else "buy",
                                  archivelog.get("span", "中期"))
             if new_record:
                 safe_db(update_archivelog, new_record["id"],
@@ -478,7 +478,7 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
                     monitor=monitor_record, status="completed")
         else:
             new_record = safe_db(create_archivelog, ticker,
-                                 archivelog.get("mode", "buy"),
+                                 "review" if (safe_db(get_holding, ticker) or {}).get("shares", 0) > 0 else "buy",
                                  archivelog.get("span", "中期"))
             if new_record:
                 safe_db(update_archivelog, new_record["id"],

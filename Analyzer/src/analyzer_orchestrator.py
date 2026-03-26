@@ -76,22 +76,31 @@ def check_convergence(export: dict | None, prev_export: dict | None) -> bool:
     )
 
 
-def _mode_directive(mode: str) -> str:
-    """議論のスタンス指示行を返す（5択統一）"""
-    if mode in ("sell", "add"):
-        holding = "※ この銘柄は現在保有中です。\n"
+def _mode_directive(mode: str, holding: dict | None = None) -> str:
+    """議論のスタンス指示行を返す"""
+    if mode == "review":
+        shares = (holding or {}).get("shares", 0)
+        avg_cost = (holding or {}).get("avg_cost", 0)
+        holding_line = f"※ この銘柄を現在{shares}株保有しています（平均取得単価{avg_cost}）。\n"
+        return (
+            "【アクション判定】\n"
+            f"{holding_line}"
+            "この保有に対してどうすべきか議論してください。\n"
+            "選択肢：\n"
+            "- 現状維持（HOLD）: 何もしない\n"
+            "- 買い増す（ADD）: 保有分に追加購入する\n"
+            "- 売り減らす（REDUCE）: 保有分の一部を売却する\n"
+            "- 売る（SELL）: 保有分を全て売却する\n\n"
+        )
     else:
-        holding = "※ この銘柄は現在未保有です。\n"
-    return (
-        "【アクション判定】\n"
-        f"{holding}"
-        "この銘柄に対して最適なアクションを、以下の5つから1つ選んでスタンスとしてください。\n"
-        "- 買う（BUY）: 新規に購入する\n"
-        "- 売る（SELL）: 保有分を全て売却する\n"
-        "- 買い増す（ADD）: 保有分に追加購入する\n"
-        "- 売り減らす（REDUCE）: 保有分の一部を売却する\n"
-        "- 現状維持（HOLD）: 何もしない\n\n"
-    )
+        return (
+            "【アクション判定】\n"
+            "※ この銘柄は現在未保有です。\n"
+            "購入すべきか議論してください。\n"
+            "選択肢：\n"
+            "- 買う（BUY）: 購入する\n"
+            "- 買わない（NO_BUY）: 購入しない\n\n"
+        )
 
 
 _HORIZON_LABELS: dict[str, str] = {
@@ -124,10 +133,10 @@ def _ticker_label(ticker: str, display_name: str = "") -> str:
     return f"{t} ({display_name})" if display_name else t
 
 
-def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None, horizon: str = "mid", display_name: str = "") -> str:
+def build_prompt(ticker: str, role: str, round_num: int, log_path: Path, mode: str = "buy", theme: str | None = None, horizon: str = "mid", display_name: str = "", holding: dict | None = None) -> str:
     """各エージェントに渡すプロンプトを組み立てる"""
     log_abs = log_path.as_posix()
-    directive = _mode_directive(mode)
+    directive = _mode_directive(mode, holding)
     horizon_dir = _horizon_directive(horizon)
     theme_dir = _theme_directive(theme)
     label = _ticker_label(ticker, display_name)
@@ -174,6 +183,7 @@ async def run_analyzer(
     theme: str | None = None,
     horizon: str = "mid",
     display_name: str = "",
+    holding: dict | None = None,
 ):
     """
     オーケストレーターのメインループ。
@@ -183,7 +193,7 @@ async def run_analyzer(
         max_rounds: 最大ラウンド数（Analyst + Devil's Advocate で2ラウンド = 1サイクル）
         initial_prompt: 初回Analystへの追加指示（省略可）
         log_path: ログファイルパス（省略時は logs/{TICKER}.md）
-        mode: 保有状況（"buy" = 未保有、"sell" / "add" = 保有中）
+        mode: "buy" = 未保有、"review" = 保有中
     """
     if log_path is None:
         log_path = get_log_path(ticker)
@@ -219,7 +229,7 @@ async def run_analyzer(
         print(f"---{lane_label} ラウンド{round_num}: {label} {'-' * 30}")
 
         # プロンプト組み立て
-        prompt = build_prompt(ticker, role, round_num, log_path, mode, theme, horizon, display_name)
+        prompt = build_prompt(ticker, role, round_num, log_path, mode, theme, horizon, display_name, holding)
         if initial_prompt and round_num == start_round and role == "analyst":
             prompt = f"{initial_prompt}\n\n{prompt}"
 

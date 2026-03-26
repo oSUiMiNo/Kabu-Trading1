@@ -51,10 +51,10 @@ def build_judge_prompt(
     base = discusion_dir if discusion_dir else LOGS_DIR
     source_log = (base / f"{t}_set{set_num}.md").as_posix()
 
-    if mode in ("sell", "add"):
-        mode_line = "【アクション判定】保有中の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
+    if mode == "review":
+        mode_line = "【アクション判定】保有中の銘柄に対する議論です。選択肢は HOLD / ADD / REDUCE / SELL です。\n\n"
     else:
-        mode_line = "【アクション判定】未保有の銘柄に対する議論です。スタンスは BUY / SELL / ADD / REDUCE / HOLD の5択です。\n\n"
+        mode_line = "【アクション判定】未保有の銘柄に対する議論です。選択肢は BUY / NO_BUY です。\n\n"
 
     return (
         f"{mode_line}"
