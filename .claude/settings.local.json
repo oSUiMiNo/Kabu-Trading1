@@ -106,7 +106,10 @@
       "Bash(gh issue:*)",
       "Bash(uv run python -c \":*)",
       "Bash(find C:UsersosuimDevInvestment -type f \\\\\\(-name *.py -o -name *.md -o -name *.yml -o -name *.yaml -o -name *.json -o -name *.txt -o -name *.sh -o -name .env* -o -name *.toml \\\\\\))",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(npm view:*)",
+      "Bash(gh release:*)"
     ]
   }
 }

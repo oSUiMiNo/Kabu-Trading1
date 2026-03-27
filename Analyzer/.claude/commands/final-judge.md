@@ -83,6 +83,11 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 - `DISAGREED` の set: **0.5**
 - `INCOMPLETE` の set: **0.0**
 
+### 数値矛盾の扱い
+- set 間で同一指標の数値が食い違う場合は、時点・定義・単位・ソース差を確認する
+- 整理できない数値矛盾は未解消のまま最終根拠の主軸にせず、`data_limits` や `conflicts` に記載する
+- 主要論点の未解消数値矛盾がある場合は、`MIXED` または `HOLD` 寄りに倒してよい
+
 ### 3. 最終 supported_side
 - side ごとの重み合計が最大のものを最終 supported_side 候補とする
 - **同点なら `HOLD`**
