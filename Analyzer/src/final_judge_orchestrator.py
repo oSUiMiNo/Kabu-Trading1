@@ -303,8 +303,8 @@ async def run_final_judge_orchestrator(
     content = result.text if result and result.text else ""
     if content:
         # 日本語フィールド名を優先、フォールバックで英語も対応
-        m_side = re.search(r"(?:支持側|supported_side):\s*(\S+)", content)
-        m_agree = re.search(r"(?:総合一致度|overall_agreement):\s*(\S+)", content)
+        m_side = re.search(r"(?:支持側|supported_side|統合支持側|merged_side):\s*\**(\S+?)(?:\*|$|\s)", content)
+        m_agree = re.search(r"(?:総合一致度|overall_agreement):\s*\**(\S+?)(?:\*|$|\s)", content)
         side = m_side.group(1) if m_side else "N/A"
         agree = m_agree.group(1) if m_agree else "N/A"
         print(f"  最終判定: {side_ja(side)}")

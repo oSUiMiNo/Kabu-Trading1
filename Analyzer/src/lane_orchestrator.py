@@ -147,7 +147,7 @@ async def run_lane(
             m_agree = re.search(r"(?:一致度|agreement):\s*\**(\w+)", content)
             if m_agree:
                 agreement = m_agree.group(1)
-            m_side = re.search(r"(?:一致支持側|agreed_supported_side):\s*\**(\S+?)(?:\*|$|\s)", content)
+            m_side = re.search(r"(?:統合支持側|一致支持側|merged_side|agreed_supported_side):\s*\**(\S+?)(?:\*|$|\s)", content)
             if m_side:
                 agreed_side = m_side.group(1)
 
