@@ -99,7 +99,7 @@ def _mode_directive(mode: str, holding: dict | None = None) -> str:
             "購入すべきか議論してください。\n"
             "選択肢：\n"
             "- 買う（BUY）: 購入する\n"
-            "- 買わない（NO_BUY）: 購入しない\n\n"
+            "- 見送る（HOLD）: 購入しない\n\n"
         )
 
 

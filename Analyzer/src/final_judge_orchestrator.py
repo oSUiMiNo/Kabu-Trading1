@@ -153,7 +153,7 @@ def build_final_judge_prompt(
     if mode == "review":
         mode_line = "【アクション判定】保有中の銘柄に対する議論です。選択肢は HOLD / ADD / REDUCE / SELL です。\n\n"
     else:
-        mode_line = "【アクション判定】未保有の銘柄に対する議論です。選択肢は BUY / NO_BUY です。\n\n"
+        mode_line = "【アクション判定】未保有の銘柄に対する議論です。選択肢は BUY / HOLD です。\n\n"
 
     vote_section = ""
     if set_sides is not None:
