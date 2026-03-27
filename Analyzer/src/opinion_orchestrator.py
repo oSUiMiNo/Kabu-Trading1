@@ -26,18 +26,16 @@ def find_set_logs(ticker: str) -> list[Path]:
     return [p for p in all_files if "_opinion_" not in p.name]
 
 
-def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str = "buy", discusion_dir: Path | None = None) -> str:
+def build_opinion_prompt(ticker: str, set_num: int, opinion_num: int, mode: str = "buy", discusion_dir: Path | None = None, horizon: str = "MID") -> str:
     """opinionエージェントに渡すプロンプトを組み立てる"""
     base = discusion_dir if discusion_dir else LOGS_DIR
     log_abs = (base / f"{ticker.upper()}_set{set_num}.md").as_posix()
 
-    if mode == "review":
-        mode_line = "【アクション判定】保有中の銘柄に対する議論ログです。選択肢は HOLD / ADD / REDUCE / SELL です。\n\n"
-    else:
-        mode_line = "【アクション判定】未保有の銘柄に対する議論ログです。選択肢は BUY / NO_BUY です。\n\n"
+    position_status = "HOLDING" if mode == "review" else "NOT_HOLDING"
 
     return (
-        f"{mode_line}"
+        f"position_status: {position_status}\n"
+        f"horizon: {horizon}\n\n"
         f"銘柄「{ticker.upper()}」の議論ログを読み、意見を出してください。\n"
         f"\n"
         f"対象ログ: {log_abs}\n"
@@ -57,12 +55,13 @@ async def run_single_opinion(
     opinion_num: int,
     mode: str = "buy",
     discusion_dir: Path | None = None,
+    horizon: str = "MID",
 ) -> AgentResult:
     """1体のopinionエージェントを実行（最大3回リトライ）"""
     label = f"意見#{opinion_num}"
     print(f"[レーン{set_num}] {label} 起動")
 
-    prompt = build_opinion_prompt(ticker, set_num, opinion_num, mode, discusion_dir)
+    prompt = build_opinion_prompt(ticker, set_num, opinion_num, mode, discusion_dir, horizon)
     agent_file = AGENTS_DIR / "opinion.md"
 
     dbg = load_debug_config("opinion")

@@ -101,7 +101,7 @@ async def run_lane(
         opinion_results: list[AgentResult] = [None] * opinions_per_lane
 
         async def _run_opinion(idx: int, opinion_num: int):
-            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode, discusion_dir=discusion_dir)
+            opinion_results[idx] = await run_single_opinion(ticker, set_num, opinion_num, mode, discusion_dir=discusion_dir, horizon=horizon)
 
         async with anyio.create_task_group() as tg:
             for idx, on in enumerate(opinion_nums):
@@ -130,6 +130,7 @@ async def run_lane(
             judge_num,
             mode,
             discusion_dir=discusion_dir,
+            horizon=horizon,
         )
 
         if judge_result and judge_result.cost:

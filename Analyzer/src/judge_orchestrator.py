@@ -45,24 +45,18 @@ def build_judge_prompt(
     judge_num: int,
     mode: str = "buy",
     discusion_dir: Path | None = None,
+    horizon: str = "MID",
 ) -> str:
     """judgeエージェントに渡すプロンプトを組み立てる（opinionテキストをインライン埋め込み）"""
     t = ticker.upper()
-    base = discusion_dir if discusion_dir else LOGS_DIR
-    source_log = (base / f"{t}_set{set_num}.md").as_posix()
 
-    if mode == "review":
-        mode_line = "【アクション判定】保有中の銘柄に対する議論です。選択肢は HOLD / ADD / REDUCE / SELL です。\n\n"
-    else:
-        mode_line = "【アクション判定】未保有の銘柄に対する議論です。選択肢は BUY / NO_BUY です。\n\n"
+    position_status = "HOLDING" if mode == "review" else "NOT_HOLDING"
 
     return (
-        f"{mode_line}"
-        f"銘柄「{t}」の set{set_num} について判定してください。\n"
+        f"銘柄「{t}」の set{set_num} について、2つの opinion を統合判定してください。\n"
         f"\n"
-        f"【重要】まず元の議論ログを読んでから、opinionを評価してください。\n"
-        f"\n"
-        f"元ログ（Analyst vs Devils）: {source_log}\n"
+        f"position_status: {position_status}\n"
+        f"horizon: {horizon}\n"
         f"judge_no: {judge_num}\n"
         f"\n"
         f"--- opinion_A (opinion#{opinion_a_num}) ここから ---\n"
@@ -73,10 +67,7 @@ def build_judge_prompt(
         f"{opinion_b_text}\n"
         f"--- opinion_B ここまで ---\n"
         f"\n"
-        f"1. 最初に元ログを Read し、議論の内容を把握してください。\n"
-        f"2. 上記の opinion_A / opinion_B テキストから supported_side が一致しているか判定してください。\n"
-        f"3. 結果を **応答テキストとして出力** してください。ファイルの作成は不要です。\n"
-        f"Glob による番号採番は不要です（オーケストレーターが決定済み）。"
+        f"結果を **応答テキストとして出力** してください。ファイルの作成は不要です。"
     )
 
 
@@ -93,12 +84,13 @@ async def run_single_judge(
     judge_num: int,
     mode: str = "buy",
     discusion_dir: Path | None = None,
+    horizon: str = "MID",
 ) -> AgentResult:
     """1体のjudgeエージェントを実行し、結果テキストをファイルに書き出す（最大3回リトライ）"""
     label = f"判定#{judge_num} (意見{opinion_a_num} vs 意見{opinion_b_num})"
     print(f"[レーン{set_num}] {label} 起動")
 
-    prompt = build_judge_prompt(ticker, set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text, judge_num, mode, discusion_dir)
+    prompt = build_judge_prompt(ticker, set_num, opinion_a_num, opinion_a_text, opinion_b_num, opinion_b_text, judge_num, mode, discusion_dir, horizon)
     agent_file = AGENTS_DIR / "judge.md"
 
     dbg = load_debug_config("judge")

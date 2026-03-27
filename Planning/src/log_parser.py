@@ -290,19 +290,21 @@ def _extract_decision_basis(export: dict | None, full_text: str) -> list[Decisio
     """
     basis_list: list[DecisionBasis] = []
 
-    # EXPORT から取得
-    if export and "根拠" in export:
-        items = export["根拠"]
+    # EXPORT から取得（"根拠" キー優先、新形式 "reasons" にもフォールバック）
+    raw_items = None
+    if export:
+        raw_items = export.get("根拠") or export.get("reasons")
+    if raw_items is not None:
+        items = raw_items
         if isinstance(items, list):
             for item in items:
                 if isinstance(item, dict):
-                    # 新形式: 構造化された根拠
-                    # final-judge の "claim" → plan-generator で "why_it_matters" に補強される
+                    # 構造化された根拠（"text" キー優先、旧形式 "claim" にもフォールバック）
                     basis_list.append(DecisionBasis(
                         lane=str(item.get("lane", "")),
                         source_desc=str(item.get("source_desc", "")),
                         source_url=str(item.get("source_url", "")),
-                        text=str(item.get("claim", "")),
+                        text=str(item.get("text", "") or item.get("claim", "")),
                     ))
                 else:
                     # 旧形式フォールバック: テキストのみ
