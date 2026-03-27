@@ -29,6 +29,7 @@ from supabase_client import (
     safe_db, get_portfolio_config,
     get_latest_archivelog, get_archivelog_by_id, update_archivelog,
     get_holding,
+    list_event_masters,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -37,8 +38,9 @@ from plan_calc import (
     Horizon, Market, Confidence, PlanConfig,
     check_freshness, check_price_deviation, calc_confidence, calc_allocation,
     calc_position_size, calc_rr_ratio,
-    load_plan_config,
+    load_plan_config, apply_risk_overlay,
 )
+from risk_policy import evaluate_risk_overlay, load_risk_overlay_config
 from plan_spec import PlanSpec, generate_plan_id, build_yaml, save_plan_spec
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -459,8 +461,21 @@ async def run_plan(
     p, confidence = calc_confidence(judgment.vote_for, judgment.vote_against)
     print(f"  confidence: {confidence.value}（p={p}）")
 
-    # --- 5. ポジションサイジング ---
+    # --- 4.5 Risk Overlay 評価 ---
+    _db_config_for_overlay = safe_db(get_portfolio_config) or {}
+    overlay_cfg = load_risk_overlay_config(_db_config_for_overlay)
+    ii = _db_archivelog.get("important_indicators")
+    event_masters = safe_db(list_event_masters) or []
     stop_loss = cfg.stop_loss_pct[h]
+    risk_overlay = evaluate_risk_overlay(ii, stop_loss, event_masters, overlay_cfg)
+    print(f"  Risk Overlay: regime={risk_overlay.regime_state.value}(cap={risk_overlay.regime_cap})"
+          f" event_cap={risk_overlay.event_cap} combined={risk_overlay.combined_cap}"
+          f" new_entry={'OK' if risk_overlay.allow_new_entry else 'BLOCKED'}"
+          f" shadow={risk_overlay.shadow_mode}")
+    if risk_overlay.blocked_reason:
+        print(f"    blocked: {risk_overlay.blocked_reason}")
+
+    # --- 5. ポジションサイジング ---
     pos_size = calc_position_size(budget_total_jpy, float(risk_limit.rstrip('%')) if risk_limit.endswith('%') else risk_jpy / budget_total_jpy * 100, stop_loss, existing_investment_jpy=existing_investment_jpy)
     print(f"  ポジションサイジング: 許容損失{pos_size.max_loss_jpy:,}円 → 投入上限{pos_size.position_size_jpy:,}円")
 
@@ -473,6 +488,33 @@ async def run_plan(
         print(f"  ※ ポジションサイジングにより投入額を制限")
     print(f"  配分: {allocation.allocation_pct}% = {allocation.allocation_jpy:,}円")
     print(f"  株数: {allocation.quantity}（{allocation.market.value} lot={allocation.lot_size}）→ {allocation.status}")
+
+    # --- 6.5 Risk Overlay 適用 ---
+    is_new_entry = existing_shares == 0
+    risk_adjusted = apply_risk_overlay(
+        allocation, risk_overlay, current_price, market,
+        usd_jpy_rate=usd_jpy_rate, is_new_entry=is_new_entry,
+    )
+    if not risk_overlay.shadow_mode:
+        from plan_calc import AllocationResult
+        allocation = AllocationResult(
+            budget_total_jpy=allocation.budget_total_jpy,
+            allocation_pct=allocation.allocation_pct,
+            allocation_jpy=risk_adjusted.final_size_jpy,
+            market=allocation.market,
+            lot_size=allocation.lot_size,
+            quantity=risk_adjusted.final_quantity,
+            status="BLOCKED_BY_RISK_OVERLAY" if risk_adjusted.blocked else allocation.status,
+        )
+        if risk_adjusted.blocked:
+            print(f"  ★ Risk Overlay BLOCKED: {risk_adjusted.blocked_reason}")
+        elif risk_adjusted.combined_cap < 1.0:
+            print(f"  ★ Risk Overlay 適用: {risk_adjusted.base_size_jpy:,}円 → {risk_adjusted.final_size_jpy:,}円"
+                  f"（×{risk_adjusted.combined_cap}）{risk_adjusted.final_quantity}株")
+    else:
+        if risk_adjusted.combined_cap < 1.0 or risk_adjusted.blocked:
+            print(f"  [Shadow] Risk Overlay: {risk_adjusted.base_size_jpy:,}円 → {risk_adjusted.final_size_jpy:,}円"
+                  f"（×{risk_adjusted.combined_cap}）{'BLOCKED' if risk_adjusted.blocked else ''}")
 
     # --- 7. RR比計算 ---
     take_profit = cfg.default_take_profit_pct
@@ -537,6 +579,21 @@ async def run_plan(
         existing_shares=existing_shares,
         existing_avg_cost=existing_avg_cost,
         existing_investment_jpy=existing_investment_jpy,
+        # risk_overlay
+        risk_overlay_regime=risk_overlay.regime_state.value,
+        risk_overlay_regime_cap=risk_overlay.regime_cap,
+        risk_overlay_event_cap=risk_overlay.event_cap,
+        risk_overlay_combined_cap=risk_overlay.combined_cap,
+        risk_overlay_allow_new_entry=risk_overlay.allow_new_entry,
+        risk_overlay_force_scale_in=risk_overlay.force_scale_in,
+        risk_overlay_shadow_mode=risk_overlay.shadow_mode,
+        risk_overlay_blocked_reason=risk_overlay.blocked_reason,
+        risk_overlay_base_size_jpy=risk_adjusted.base_size_jpy,
+        risk_overlay_final_size_jpy=risk_adjusted.final_size_jpy,
+        risk_overlay_event_name=risk_overlay.event_name,
+        risk_overlay_days_to_event=risk_overlay.days_to_event,
+        risk_overlay_event_tier=risk_overlay.event_tier.value,
+        risk_overlay_event_pressure=risk_overlay.event_pressure,
     )
 
     # BLOCK / STALE / RR_TOO_LOW の場合はプランを差し替え + Discord 通知
@@ -562,8 +619,16 @@ async def run_plan(
             f"ログ鮮度超過（{freshness.log_age_days}日 > {freshness.max_allowed_days}日）: 再評価推奨"
         )
 
+    if risk_adjusted.blocked and not risk_overlay.shadow_mode:
+        spec.execution_notes.append(f"Risk Overlay BLOCKED: {risk_adjusted.blocked_reason}")
+        spec.quantity = 0
+        spec.portfolio_status = "BLOCKED_BY_RISK_OVERLAY"
+    elif risk_overlay.force_scale_in and not risk_overlay.shadow_mode:
+        spec.order_style = "SCALE_IN"
+        spec.execution_notes.append("Risk Overlay: STRESS/CRISIS のため分割エントリー強制")
+
     # --- 重要指標データを commentary に注入 ---
-    ii = _db_archivelog.get("important_indicators")
+    # ii はステップ4.5で取得済み
     if ii and isinstance(ii, dict):
         ii_lines = []
         market_ii = ii.get("market", {})

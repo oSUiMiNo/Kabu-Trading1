@@ -354,3 +354,84 @@ def calc_allocation(
         quantity=shares,
         status=status,
     )
+
+
+# ═══════════════════════════════════════════════════════
+# Risk Overlay 適用
+# ═══════════════════════════════════════════════════════
+
+@dataclass
+class RiskAdjustedResult:
+    base_size_jpy: int
+    regime_cap: float
+    event_cap: float
+    combined_cap: float
+    final_size_jpy: int
+    final_quantity: int
+    blocked: bool
+    blocked_reason: str | None
+
+
+def apply_risk_overlay(
+    allocation: AllocationResult,
+    risk_overlay,
+    current_price: float,
+    market: Market,
+    usd_jpy_rate: float | None = None,
+    is_new_entry: bool = True,
+) -> RiskAdjustedResult:
+    """Risk Overlay の制約を AllocationResult に適用する。
+
+    risk_overlay が None の場合は制約なしでパススルー。
+    """
+    base_jpy = allocation.allocation_jpy
+
+    if risk_overlay is None:
+        return RiskAdjustedResult(
+            base_size_jpy=base_jpy,
+            regime_cap=1.0,
+            event_cap=1.0,
+            combined_cap=1.0,
+            final_size_jpy=base_jpy,
+            final_quantity=allocation.quantity,
+            blocked=False,
+            blocked_reason=None,
+        )
+
+    blocked = not risk_overlay.allow_new_entry and is_new_entry
+    if blocked:
+        return RiskAdjustedResult(
+            base_size_jpy=base_jpy,
+            regime_cap=risk_overlay.regime_cap,
+            event_cap=risk_overlay.event_cap,
+            combined_cap=risk_overlay.combined_cap,
+            final_size_jpy=0,
+            final_quantity=0,
+            blocked=True,
+            blocked_reason=risk_overlay.blocked_reason,
+        )
+
+    final_jpy = int(base_jpy * risk_overlay.combined_cap)
+
+    lot = LOT_SIZE[market]
+    if current_price <= 0:
+        final_qty = 0
+    else:
+        if market == Market.US:
+            if usd_jpy_rate is None or usd_jpy_rate <= 0:
+                final_qty = 0
+            else:
+                final_qty = math.floor((final_jpy / usd_jpy_rate) / current_price / lot) * lot
+        else:
+            final_qty = math.floor(final_jpy / current_price / lot) * lot
+
+    return RiskAdjustedResult(
+        base_size_jpy=base_jpy,
+        regime_cap=risk_overlay.regime_cap,
+        event_cap=risk_overlay.event_cap,
+        combined_cap=risk_overlay.combined_cap,
+        final_size_jpy=final_jpy,
+        final_quantity=final_qty,
+        blocked=False,
+        blocked_reason=None,
+    )

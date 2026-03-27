@@ -80,6 +80,22 @@ class PlanSpec:
     existing_avg_cost: float = 0.0
     existing_investment_jpy: float = 0.0
 
+    # risk_overlay ブロック
+    risk_overlay_regime: str = "NORMAL"
+    risk_overlay_regime_cap: float = 1.0
+    risk_overlay_event_cap: float = 1.0
+    risk_overlay_combined_cap: float = 1.0
+    risk_overlay_allow_new_entry: bool = True
+    risk_overlay_force_scale_in: bool = False
+    risk_overlay_shadow_mode: bool = True
+    risk_overlay_blocked_reason: str | None = None
+    risk_overlay_base_size_jpy: int = 0
+    risk_overlay_final_size_jpy: int = 0
+    risk_overlay_event_name: str | None = None
+    risk_overlay_days_to_event: int | None = None
+    risk_overlay_event_tier: str = "NONE"
+    risk_overlay_event_pressure: float | None = None
+
 
 def generate_plan_id(ticker: str, seq: int) -> str:
     """plan_id を生成: YYYYMMDD-TICKER-SEQ"""
@@ -161,6 +177,24 @@ def build_yaml(spec: PlanSpec) -> str:
         )),
         ("allocation_policy", _ordered_dict(
             ("max_pct", spec.max_pct),
+        )),
+        ("risk_overlay", _ordered_dict(
+            ("regime", spec.risk_overlay_regime),
+            ("regime_cap", spec.risk_overlay_regime_cap),
+            ("event_cap", spec.risk_overlay_event_cap),
+            ("combined_cap", spec.risk_overlay_combined_cap),
+            ("allow_new_entry", spec.risk_overlay_allow_new_entry),
+            ("force_scale_in", spec.risk_overlay_force_scale_in),
+            ("shadow_mode", spec.risk_overlay_shadow_mode),
+            *([("blocked_reason", spec.risk_overlay_blocked_reason)] if spec.risk_overlay_blocked_reason else []),
+            ("base_size_jpy", spec.risk_overlay_base_size_jpy),
+            ("final_size_jpy", spec.risk_overlay_final_size_jpy),
+            ("event", _ordered_dict(
+                *([("name", spec.risk_overlay_event_name)] if spec.risk_overlay_event_name else []),
+                *([("days_to_event", spec.risk_overlay_days_to_event)] if spec.risk_overlay_days_to_event is not None else []),
+                ("tier", spec.risk_overlay_event_tier),
+                *([("event_pressure", spec.risk_overlay_event_pressure)] if spec.risk_overlay_event_pressure is not None else []),
+            )),
         )),
         ("portfolio_plan", _ordered_dict(
             ("budget_total_jpy", spec.budget_total_jpy),
