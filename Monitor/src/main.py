@@ -501,6 +501,10 @@ def _run_important_indicators(ticker: str, archive_id: str):
         venv_python = ii_dir / ".venv" / "bin" / "python"
     script = ii_dir / "src" / "main.py"
     if not script.exists():
+        print(f"  [{ticker}] 重要指標スクリプトが見つかりません: {script}")
+        return
+    if not venv_python.exists():
+        print(f"  [{ticker}] 重要指標 venv が見つかりません: {venv_python}")
         return
     try:
         proc = subprocess.run(

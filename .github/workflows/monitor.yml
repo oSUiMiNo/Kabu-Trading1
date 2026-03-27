@@ -62,6 +62,10 @@ jobs:
         working-directory: Planning/src
         run: uv sync
 
+      - name: Install ImportantIndicators dependencies
+        working-directory: ImportantIndicators
+        run: uv sync --no-install-project
+
       - name: Install Watch dependencies
         working-directory: Watch/src
         run: uv sync

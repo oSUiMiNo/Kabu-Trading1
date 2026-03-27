@@ -43,12 +43,18 @@ def _ensure_important_indicators(archive_id: str, ticker: str):
         venv_python = ii_dir / ".venv" / "bin" / "python"
     script = ii_dir / "src" / "main.py"
     if not script.exists():
+        print(f"  [{ticker}] 重要指標スクリプトが見つかりません: {script}")
+        return
+    if not venv_python.exists():
+        print(f"  [{ticker}] 重要指標 venv が見つかりません: {venv_python}")
         return
     try:
-        subprocess.run(
+        proc = subprocess.run(
             [str(venv_python), str(script), "--ticker", ticker, "--archive-id", archive_id],
             timeout=120,
         )
+        if proc.returncode != 0:
+            print(f"  [{ticker}] 重要指標取得失敗（exit code: {proc.returncode}）")
     except Exception as e:
         print(f"  [{ticker}] 重要指標取得エラー: {e}")
 
