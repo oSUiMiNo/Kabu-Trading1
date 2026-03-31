@@ -60,6 +60,8 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 - `decision.merged_side`
 - `decision.preferred_opinion`
 - `decision.merged_confidence`
+- `opinion_A.supported_side`（個別投票用）
+- `opinion_B.supported_side`（個別投票用）
 - `reasons`
 - `major_risks`
 - `flip_conditions`
@@ -69,48 +71,43 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 
 ## 集約ルール
 
-### 1. set の有効性
-各 set を以下のように扱う。
+### 1. 個別投票の収集
+各 set の judge EXPORT から `opinion_A.supported_side` と `opinion_B.supported_side` を取得する。
+全 set 合計で **4票**（2 set × 2 opinion）を集計する。
+`INCOMPLETE` の set の票は集計に含めない。
 
-- `AGREED`: 高信頼
-- `DISAGREED`: 中信頼
-- `INCOMPLETE`: 低信頼
+### 2. 最終 supported_side の決定
 
-### 2. side の重み
-各 set の `merged_side` を次の重みで集計する。
+#### 未保有（NOT_HOLDING）の場合
+- **BUY は全会一致（全票 BUY）の場合のみ**。1票でも HOLD があれば HOLD とする
+- 全票 HOLD なら HOLD
 
-- `AGREED` の set: **1.0**
-- `DISAGREED` の set: **0.5**
-- `INCOMPLETE` の set: **0.0**
+#### 保有中（HOLDING）の場合
+- **最多票の side** を最終 supported_side とする
+- **同点なら HOLD**
+
+#### 共通ルール
+- `INCOMPLETE` の set しか無い場合は `HOLD`
+- 集計可能な票が0の場合は `HOLD`
 
 ### 数値矛盾の扱い
 - set 間で同一指標の数値が食い違う場合は、時点・定義・単位・ソース差を確認する
 - 整理できない数値矛盾は未解消のまま最終根拠の主軸にせず、`data_limits` や `conflicts` に記載する
 - 主要論点の未解消数値矛盾がある場合は、`MIXED` または `HOLD` 寄りに倒してよい
 
-### 3. 最終 supported_side
-- side ごとの重み合計が最大のものを最終 supported_side 候補とする
-- **同点なら `HOLD`**
-- `INCOMPLETE` しか無い場合は `HOLD`
-- 最大の side があっても、**支持の大半が DISAGREED 由来で、data_limits や major_risks が重い場合**は `HOLD` に倒してよい
-
-### 4. 総合一致度
+### 3. 総合一致度
 - **AGREED_STRONG**
-  - 有効 set がすべて `AGREED`
-  - かつ `merged_side` がすべて同じ
+  - 全票が同じ side
 - **MIXED**
-  - 最終 supported_side は決まるが、
-    - set 間に `DISAGREED` がある
-    - または `merged_side` が割れている
+  - 最終 supported_side は決まるが、票が割れている
 - **INCOMPLETE**
-  - 有効 set が不足している
-  - または最終 supported_side を安全に決める材料が足りない
+  - 有効な票が不足している
 
-### 5. 最終確信度
+### 4. 最終確信度
 - `AGREED_STRONG`:
-  - 最終 supported_side を支持する `AGREED` set の `merged_confidence` 平均を整数に丸める
+  - 全 set の `merged_confidence` 平均を整数に丸める
 - `MIXED`:
-  - 最終 supported_side を支持する有効 set の `merged_confidence` 平均を整数に丸める
+  - 有効 set の `merged_confidence` 平均を整数に丸める
   - ただし **上限は 65**
 - `INCOMPLETE`:
   - `null`
@@ -168,9 +165,14 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 
 ---
 
+## 投票集計
+- 対象: 全 set の全 opinion（INCOMPLETE の set を除く）
+- 集計: {BUY: N, SELL: N, ADD: N, REDUCE: N, HOLD: N}
+
 ## 最終判定
 - 支持側（表示）: **BUY** / **SELL** / **ADD** / **REDUCE** / **HOLD**
 - 支持側（機械）: BUY | SELL | ADD | REDUCE | HOLD
+- 判定ルール: {全会一致 | 最多票 | 同点→HOLD}
 - 総合一致度: **AGREED_STRONG** | **MIXED** | **INCOMPLETE**
 - 総合確信度: {0-100|null}
 
@@ -212,8 +214,16 @@ lane_results:
     merged_confidence: {0-100|null}
     summary: "{...}"
 
+votes:
+  BUY: 0
+  SELL: 0
+  ADD: 0
+  REDUCE: 0
+  HOLD: 0
+
 final_decision:
   supported_side: BUY | SELL | ADD | REDUCE | HOLD
+  decision_rule: "全会一致 | 最多票 | 同点→HOLD"
   overall_agreement: AGREED_STRONG | MIXED | INCOMPLETE
   confidence: {0-100|null}
 

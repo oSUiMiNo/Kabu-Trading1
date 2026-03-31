@@ -346,13 +346,17 @@ async def run_parallel(
     print()
 
     set_sides = {}
+    all_opinion_sides = []
     for r in lane_results:
-        if r and r.一致度 == "AGREED" and r.支持側:
-            set_sides[r.レーン番号] = r.支持側
+        if r and r.一致度 != "ERROR":
+            if r.支持側:
+                set_sides[r.レーン番号] = r.支持側
+            all_opinion_sides.extend(r.opinion_sides)
 
     fj_result = await run_final_judge_orchestrator(
         ticker, agreed_sets, mode=mode,
         disagreed_sets=disagreed_sets, set_sides=set_sides,
+        all_opinion_sides=all_opinion_sides,
         discusion_dir=discusion_dir,
         holding=holding,
     )

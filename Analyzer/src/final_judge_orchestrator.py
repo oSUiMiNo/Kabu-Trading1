@@ -47,39 +47,44 @@ def get_next_final_judge_num(ticker: str, discusion_dir: Path | None = None) -> 
 
 
 def compute_vote_tally(
-    agreed_sets: list[int],
-    disagreed_sets: list[int],
-    set_sides: dict[int, str],
+    all_opinion_sides: list[str],
     mode: str,
 ) -> tuple[dict[str, int], int, str]:
     """
-    投票集計と判定を行う（5択対応）。
+    全 Opinion の個別票で投票集計と判定を行う。
 
-    AGREED レーン: supported_side に2票
-    DISAGREED レーン: HOLD に1票（意見が割れたため保守的に扱う）
-
-    判定: 最多得票のスタンスが勝ち。同数の場合は HOLD が優先。
+    未保有（mode="buy"）: BUY は全会一致の場合のみ。1票でも HOLD があれば HOLD。
+    保有中（mode="review"）: 最多票が勝ち。同点なら HOLD。
 
     Returns:
         (vote_counts, total_votes, verdict)
     """
     votes: dict[str, int] = {s: 0 for s in VALID_STANCES}
 
-    for sn in agreed_sets:
-        side = set_sides.get(sn, "HOLD").upper()
-        if side in votes:
-            votes[side] += 2
+    for side in all_opinion_sides:
+        s = side.upper()
+        if s in votes:
+            votes[s] += 1
         else:
-            votes["HOLD"] += 2
-
-    for sn in disagreed_sets:
-        votes["HOLD"] += 1
+            votes["HOLD"] += 1
 
     total = sum(votes.values())
 
-    max_count = max(votes.values()) if total > 0 else 0
-    top_stances = [s for s, c in votes.items() if c == max_count]
-    verdict = "HOLD" if "HOLD" in top_stances else top_stances[0] if top_stances else "HOLD"
+    if total == 0:
+        return votes, 0, "HOLD"
+
+    if mode == "buy":
+        if votes["BUY"] == total:
+            verdict = "BUY"
+        else:
+            verdict = "HOLD"
+    else:
+        max_count = max(votes.values())
+        top_stances = [s for s, c in votes.items() if c == max_count]
+        if len(top_stances) == 1:
+            verdict = top_stances[0]
+        else:
+            verdict = "HOLD"
 
     return votes, total, verdict
 
@@ -125,6 +130,7 @@ def build_final_judge_prompt(
     mode: str = "buy",
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
+    all_opinion_sides: list[str] | None = None,
     discusion_dir: Path | None = None,
 ) -> str:
     """final_judgeエージェントに渡すプロンプトを組み立てる（ファイル内容インライン埋め込み）"""
@@ -156,16 +162,18 @@ def build_final_judge_prompt(
         mode_line = "【アクション判定】未保有の銘柄に対する議論です。選択肢は BUY / HOLD です。\n\n"
 
     vote_section = ""
-    if set_sides is not None:
-        votes, total, verdict = compute_vote_tally(
-            agreed_sets, disagreed_sets, set_sides, mode
-        )
+    if all_opinion_sides:
+        votes, total, verdict = compute_vote_tally(all_opinion_sides, mode)
         vote_lines = " / ".join(f"{s}: {c}票" for s, c in votes.items() if c > 0)
+        if mode == "buy":
+            rule_desc = "未保有のため BUY は全会一致の場合のみ。1票でも HOLD があれば HOLD"
+        else:
+            rule_desc = "最多得票が勝ち。同数の場合は HOLD 優先"
         vote_section = (
             f"\n"
             f"【投票集計（オーケストレーター算出・確定値）】\n"
             f"  {vote_lines} / 合計: {total}票\n"
-            f"  適用ルール: 最多得票が勝ち。同数の場合は HOLD 優先\n"
+            f"  適用ルール: {rule_desc}\n"
             f"  → **確定判定: {verdict}**\n"
             f"  ※ この判定は投票ルールに基づく確定値です。最終判定（supported_side）はこれに従ってください。\n"
         )
@@ -214,6 +222,7 @@ async def run_final_judge_orchestrator(
     mode: str = "buy",
     disagreed_sets: list[int] | None = None,
     set_sides: dict[int, str] | None = None,
+    all_opinion_sides: list[str] | None = None,
     discusion_dir: Path | None = None,
     holding: dict | None = None,
 ) -> FinalJudgeResult:
@@ -237,10 +246,10 @@ async def run_final_judge_orchestrator(
     all_sets = sorted(set(agreed_sets) | set(disagreed_sets))
     target_sets_str = ", ".join(f"set{sn}" for sn in all_sets)
 
-    if set_sides is not None:
-        votes, _total, verdict = compute_vote_tally(
-            agreed_sets, disagreed_sets, set_sides, mode
-        )
+    if all_opinion_sides:
+        votes, _total, verdict = compute_vote_tally(all_opinion_sides, mode)
+    elif set_sides is not None:
+        votes, verdict = {s: 0 for s in VALID_STANCES}, "UNKNOWN"
     else:
         votes, verdict = {}, "UNKNOWN"
 
@@ -257,7 +266,7 @@ async def run_final_judge_orchestrator(
     print(f"  出力: {t}_final_judge_{final_no}.md")
     print()
 
-    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, discusion_dir)
+    prompt = build_final_judge_prompt(ticker, final_no, agreed_sets, mode, disagreed_sets, set_sides, all_opinion_sides, discusion_dir)
     agent_file = AGENTS_DIR / "final-judge.md"
 
     MAX_AGENT_RETRIES = 3

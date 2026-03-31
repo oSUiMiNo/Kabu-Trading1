@@ -40,6 +40,7 @@ class LaneResult:
     支持側: str | None
     合計コスト: float
     db_data: dict = field(default_factory=dict)
+    opinion_sides: list[str] = field(default_factory=list)
 
 
 def get_set_log_path(ticker: str, set_num: int, discusion_dir: Path | None = None) -> Path:
@@ -151,6 +152,12 @@ async def run_lane(
             if m_side:
                 agreed_side = m_side.group(1)
 
+        # 各 Opinion の supported_side を抽出
+        _opinion_sides = []
+        for _op_text in [opinion_a_text, opinion_b_text]:
+            _m = re.search(r"supported_side:\s*(\w+)", _op_text) if _op_text else None
+            _opinion_sides.append(_m.group(1).upper() if _m else "HOLD")
+
         # DB用データを構築（書き込みは main が行う）
         _final_export = get_last_export(log_path)
         _discussion_md = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
@@ -182,6 +189,7 @@ async def run_lane(
             支持側=agreed_side,
             合計コスト=total_cost,
             db_data=lane_db_data,
+            opinion_sides=_opinion_sides,
         )
 
     except Exception as e:
