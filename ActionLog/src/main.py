@@ -33,7 +33,7 @@ ui.add_head_html(shared=True, code="""
 <script>
 function formatJPY(params) {
     if (params.value == null || params.value === '') return '';
-    return new Intl.NumberFormat('ja-JP').format(params.value);
+    return new Intl.NumberFormat('ja-JP', {maximumFractionDigits: 0}).format(params.value);
 }
 function pnlCellStyle(params) {
     if (params.value == null || params.value === '') return {};
