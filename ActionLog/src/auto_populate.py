@@ -55,6 +55,8 @@ def parse_newplan_full(yaml_str: str) -> dict:
     portfolio = data.get("portfolio_plan", {})
     checks = data.get("data_checks", {})
 
+    instrument = portfolio.get("instrument_lot", {})
+
     return {
         "decision": decision_block.get("final", ""),
         "allocation_jpy": portfolio.get("allocation_jpy"),
@@ -62,6 +64,8 @@ def parse_newplan_full(yaml_str: str) -> dict:
         "current_price": checks.get("current_price"),
         "confidence": decision_block.get("confidence", ""),
         "horizon": decision_block.get("horizon", ""),
+        "usd_jpy_rate": portfolio.get("usd_jpy_rate"),
+        "market": instrument.get("market", "JP"),
     }
 
 
@@ -162,7 +166,12 @@ def populate_from_archive(
         shares_after = total_shares + new_quantity
 
     price = float(row["price"] or 0)
-    row["total_assets"] = price * shares_after
+    parsed = parse_newplan_full(newplan_full)
+    usd_jpy = float(parsed.get("usd_jpy_rate") or 0)
+    if parsed.get("market") == "US" and usd_jpy > 0:
+        row["total_assets"] = price * shares_after * usd_jpy
+    else:
+        row["total_assets"] = price * shares_after
     row["pnl"] = row["total_assets"] - row["cumulative_invested"]
 
     result = safe_db(
@@ -187,6 +196,8 @@ def populate_from_monitor(
     archive_id: str,
     monitor_data: dict,
     action_date: str | None = None,
+    market: str = "JP",
+    usd_jpy_rate: float | None = None,
 ) -> dict | None:
     """monitor 結果のみ（newplan_full なし）の archive から action_log 行を作成する。"""
     if isinstance(monitor_data, str):

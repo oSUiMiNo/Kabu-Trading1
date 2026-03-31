@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from nicegui import ui
+from nicegui import app, ui
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
 from supabase_client import safe_db, get_action_log_handoff
@@ -21,6 +21,7 @@ from data_service import (
     get_ticker_list,
     get_available_months,
     populate_existing_archives,
+    auto_populate_all,
 )
 from handoff_service import get_cached_handoff, get_or_generate_handoff
 
@@ -156,23 +157,6 @@ def index_page():
         else:
             ui.label("銘柄がありません。先に archive を取り込んでください。").classes("text-gray-500")
 
-        ui.separator().classes("my-4")
-
-        ui.label("既存 archive の取り込み").classes("text-sm font-bold")
-
-        import_ticker = ui.input(label="銘柄コード（例: NVDA）").classes("w-full")
-        import_result = ui.label("").classes("text-sm mt-1")
-
-        def do_import():
-            t = (import_ticker.value or "").strip().upper()
-            if not t:
-                import_result.set_text("銘柄コードを入力してください")
-                return
-            count = populate_existing_archives(t)
-            import_result.set_text(f"{t}: {count} 件取り込みました")
-            ui.navigate.to(f"/ticker/{t}")
-
-        ui.button("取り込み", on_click=do_import).classes("mt-2")
 
 
 # ── アクションログページ ──────────────────────────────────
@@ -301,5 +285,12 @@ def ticker_page(ticker: str):
 
 
 # ── 起動 ──────────────────────────────────────────────
+
+@app.on_startup
+def on_startup():
+    count = auto_populate_all()
+    if count:
+        print(f"[ActionLog] 起動時自動取り込み: {count} 件")
+
 
 ui.run(port=8080, title="ActionLog", reload=False)

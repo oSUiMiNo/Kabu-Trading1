@@ -146,6 +146,17 @@ def populate_existing_archives(ticker: str) -> int:
     return count
 
 
+def auto_populate_all() -> int:
+    """watchlist の全 active 銘柄について未取り込みの archive を自動取り込みする。"""
+    watchlist = safe_db(list_watchlist, active_only=True) or []
+    total = 0
+    for w in watchlist:
+        t = w.get("ticker")
+        if t:
+            total += populate_existing_archives(t)
+    return total
+
+
 def get_ticker_list() -> list[str]:
     """action_log に存在する銘柄一覧 + watchlist の active 銘柄を取得する。"""
     resp = (
