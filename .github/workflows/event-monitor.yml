@@ -139,6 +139,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           EVENT_CONTEXT: ${{ steps.check.outputs.event_details }}
         run: |
           MARKETS="${{ steps.resolve.outputs.markets }}"
