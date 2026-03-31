@@ -74,6 +74,8 @@ def _find_archive_for_ticker(ticker: str) -> dict | None:
 _SKIP_NOTIFICATION_FIELDS = {
     "event_risk.implied_move_pct",
     "event_risk.implied_move_source",
+    "event_risk.nearest_event",
+    "event_risk.days_to_event",
     "earnings.revenue_actual",
     "earnings.revenue_estimate",
     "earnings.revenue_surprise_pct",
