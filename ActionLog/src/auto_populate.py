@@ -20,6 +20,7 @@ from supabase_client import (
     list_all_action_logs,
     get_latest_action_log,
     list_action_log_archive_ids,
+    get_holding,
 )
 from calc_engine import calc_total_shares
 
@@ -136,6 +137,8 @@ def populate_from_archive(
     newplan_full: str,
     beginner_summary: str = "",
     action_date: str | None = None,
+    fallback_market: str = "JP",
+    fallback_usd_jpy_rate: float | None = None,
 ) -> dict | None:
     """archive → action_log への変換＋INSERT を一括で行う。
 
@@ -150,28 +153,27 @@ def populate_from_archive(
         ticker, archive_id, newplan_full, beginner_summary, action_date
     )
 
-    all_logs = safe_db(list_all_action_logs, ticker) or []
-    total_shares = calc_total_shares(all_logs)
+    holding = safe_db(get_holding, ticker) or {}
+    actual_shares = int(holding.get("shares") or 0)
 
     latest = safe_db(get_latest_action_log, ticker)
-    prev_cumulative = float(latest["cumulative_invested"]) if latest else 0.0
+    parsed = parse_newplan_full(newplan_full)
+    market = parsed.get("market") or fallback_market
+    usd_jpy = float(parsed.get("usd_jpy_rate") or 0) or float(fallback_usd_jpy_rate or 0)
+    is_us = market == "US" and usd_jpy > 0
+
+    if latest:
+        prev_cumulative = float(latest["cumulative_invested"])
+    else:
+        prev_cumulative = 0.0
 
     row["cumulative_invested"] = prev_cumulative + row["money_in"]
 
-    new_quantity = row["quantity"]
-    decision_upper = _normalize_decision(row["decision"])
-    if decision_upper in _SELL_DECISIONS:
-        shares_after = total_shares - new_quantity
-    else:
-        shares_after = total_shares + new_quantity
-
     price = float(row["price"] or 0)
-    parsed = parse_newplan_full(newplan_full)
-    usd_jpy = float(parsed.get("usd_jpy_rate") or 0)
-    if parsed.get("market") == "US" and usd_jpy > 0:
-        row["total_assets"] = price * shares_after * usd_jpy
+    if is_us:
+        row["total_assets"] = price * actual_shares * usd_jpy
     else:
-        row["total_assets"] = price * shares_after
+        row["total_assets"] = price * actual_shares
     row["pnl"] = row["total_assets"] - row["cumulative_invested"]
 
     result = safe_db(
@@ -217,13 +219,21 @@ def populate_from_monitor(
     action_text = _MONITOR_RESULT_TEXT.get(result_str, f"監視結果: {result_str}")
     summary = monitor_data.get("summary", "")
 
-    latest = safe_db(get_latest_action_log, ticker)
-    prev_cumulative = float(latest["cumulative_invested"]) if latest else 0.0
+    holding = safe_db(get_holding, ticker) or {}
+    actual_shares = int(holding.get("shares") or 0)
 
-    all_logs = safe_db(list_all_action_logs, ticker) or []
-    total_shares = calc_total_shares(all_logs)
+    latest = safe_db(get_latest_action_log, ticker)
+    if latest:
+        prev_cumulative = float(latest["cumulative_invested"])
+    else:
+        prev_cumulative = 0.0
+
     price = monitor_data.get("current_price") or 0
-    total_assets = float(price) * total_shares if price else 0.0
+    usd_jpy = float(usd_jpy_rate or 0)
+    if market == "US" and usd_jpy > 0 and price:
+        total_assets = float(price) * actual_shares * usd_jpy
+    else:
+        total_assets = float(price) * actual_shares if price else 0.0
 
     row_result = safe_db(
         create_action_log,

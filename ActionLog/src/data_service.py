@@ -109,10 +109,37 @@ def populate_existing_archives(ticker: str) -> int:
     """
     existing_ids = set(safe_db(list_action_log_archive_ids, ticker) or [])
 
+    wl = (
+        get_client()
+        .from_("watchlist")
+        .select("market")
+        .eq("ticker", ticker.upper())
+        .limit(1)
+        .execute()
+    )
+    watchlist_market = (wl.data[0].get("market") or "JP") if wl.data else "JP"
+
+    fallback_usd_jpy = None
+    if watchlist_market == "US":
+        rate_q = (
+            get_client()
+            .from_("archive")
+            .select("technical")
+            .not_.is_("technical", "null")
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+        for r in (rate_q.data or []):
+            t = r.get("technical") or {}
+            if isinstance(t, dict) and t.get("usd_jpy_rate"):
+                fallback_usd_jpy = float(t["usd_jpy_rate"])
+                break
+
     resp = (
         get_client()
         .from_("archive")
-        .select("id, ticker, created_at, newplan_full, monitor")
+        .select("id, ticker, created_at, newplan_full, monitor, technical")
         .eq("ticker", ticker.upper())
         .not_.is_("monitor", "null")
         .order("created_at")
@@ -133,13 +160,19 @@ def populate_existing_archives(ticker: str) -> int:
                 newplan_full=arc["newplan_full"],
                 beginner_summary="",
                 action_date=action_date,
+                fallback_market=watchlist_market,
+                fallback_usd_jpy_rate=fallback_usd_jpy,
             )
         else:
+            tech = arc.get("technical") or {}
+            arc_rate = tech.get("usd_jpy_rate") if isinstance(tech, dict) else None
             result = populate_from_monitor(
                 ticker=ticker,
                 archive_id=arc["id"],
                 monitor_data=arc.get("monitor") or {},
                 action_date=action_date,
+                market=watchlist_market,
+                usd_jpy_rate=arc_rate or fallback_usd_jpy,
             )
         if result:
             count += 1

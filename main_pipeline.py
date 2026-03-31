@@ -51,7 +51,10 @@ def _load_event_context() -> dict | None:
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return parsed[0] if parsed else None
+        return parsed
     except (json.JSONDecodeError, TypeError):
         return None
 
