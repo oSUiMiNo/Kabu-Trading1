@@ -1,6 +1,7 @@
 """
 Claude Agent SDK 共通ユーティリティ
 """
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -199,6 +200,8 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
         "user-invocable",
         # コンテキスト制御
         "context",
+        # プロバイダ指定（call_agent 側で処理）
+        "provider",
     }
     for key, value in frontmatter.items():
         if key not in exclude_keys:
@@ -208,6 +211,25 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
     kwargs["system_prompt"] = prompt_str
 
     return ClaudeAgentOptions(**kwargs)
+
+
+def _detect_provider(file_path: str | Path | None) -> tuple[str, str | None]:
+    """エージェント定義ファイルから provider と model を読み取る。"""
+    file_provider = None
+    file_model = None
+    if file_path:
+        try:
+            content = Path(file_path).read_text(encoding="utf-8")
+            if content.startswith("---"):
+                end_idx = content.find("---", 3)
+                if end_idx != -1:
+                    fm = yaml.safe_load(content[3:end_idx].strip()) or {}
+                    file_provider = fm.get("provider")
+                    file_model = fm.get("model")
+        except Exception:
+            pass
+    provider = (file_provider or os.environ.get("ANALYZER_LLM_PROVIDER", "claude")).lower()
+    return provider, str(file_model) if file_model else None
 
 
 async def call_agent(
@@ -220,28 +242,41 @@ async def call_agent(
     show_tools: bool = False,
 ) -> AgentResult:
     """
-    プロンプトを受け取り、Claude Codeに渡して応答を表示し、結果を返す。
+    プロンプトを受け取り、LLMに渡して応答を表示し、結果を返す。
 
-    Args:
-        messages: 文字列または非同期イテレーター（文字列またはAssistantMessageを返す）
-        file_path: エージェント定義ファイルのパス（省略可）
-        show_cost: コスト表示
-        show_tools: ツール使用表示
-
-    Returns:
-        AgentResult: text（応答テキスト）, cost（コスト）, tools_used（使用ツール）
-
-    Usage:
-        import asyncio
-        from AgentUtil import call_agent
-
-        # 応答を受け取って後続処理に使う
-        result = asyncio.run(call_agent("〇〇銘柄を分析して", file_path=".claude/commands/analyst.md"))
-        print(result.text)        # 応答テキスト
-        print(result.cost)        # コスト（USD）
-        print(result.tools_used)  # ["Read", "WebSearch", ...]
+    provider の決定順:
+      1. .md ファイルの provider フィールド（エージェント単位の切り替え）
+      2. ANALYZER_LLM_PROVIDER 環境変数（グローバル切り替え）
+      3. デフォルト "claude"
     """
-    # 文字列ならそのまま使う、非同期イテレーターなら収集
+    _provider, _file_model = _detect_provider(file_path)
+
+    if _provider == "codex":
+        _shared = str(Path(__file__).resolve().parent.parent.parent / "shared")
+        if _shared not in sys.path:
+            sys.path.insert(0, _shared)
+        from llm_client import call_codex as _call_codex
+        _r = await _call_codex(
+            messages, file_path=file_path,
+            show_prompt=show_prompt, show_response=show_response,
+            show_cost=show_cost, show_tools=show_tools,
+        )
+        return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
+
+    if _provider == "glm":
+        _shared = str(Path(__file__).resolve().parent.parent.parent / "shared")
+        if _shared not in sys.path:
+            sys.path.insert(0, _shared)
+        from llm_client import call_glm_agent as _call_glm_agent
+        _glm_model = _file_model or os.environ.get("ANALYZER_GLM_MODEL", "glm-4.7-flash")
+        _r = await _call_glm_agent(
+            messages, file_path=file_path, model=_glm_model,
+            show_options=show_options, show_prompt=show_prompt,
+            show_response=show_response, show_cost=show_cost, show_tools=show_tools,
+        )
+        return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
+
+    # Claude ルート（既存動作）
     if isinstance(messages, str):
         prompt = messages
     else:

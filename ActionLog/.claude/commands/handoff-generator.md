@@ -1,6 +1,7 @@
 ---
 description: 前月のアクションログから今月への引き継ぎ文を生成する
 model: glm-4.7
+provider: glm
 allowed_tools: []
 ---
 

@@ -7,4 +7,5 @@ dependencies = [
     "anyio",
     "pyyaml",
     "postgrest",
+    "openai>=2.20",
 ]

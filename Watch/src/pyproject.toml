@@ -9,4 +9,5 @@ dependencies = [
     "pyyaml",
     "python-dotenv",
     "postgrest",
+    "openai>=2.20",
 ]

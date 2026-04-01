@@ -8,6 +8,8 @@ dependencies = [
     "anyio",
     "pyyaml",
     "postgrest",
+    "openai>=2.20",
+    "openai-codex-sdk>=0.1",
 ]
 
 [dependency-groups]

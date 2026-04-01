@@ -53,6 +53,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZHIPUAI_API_KEY: ${{ secrets.ZHIPUAI_API_KEY }}
         run: |
           MAX="${{ inputs.max_reviews || '20' }}"
           DRY_RUN="${{ inputs.dry_run }}"

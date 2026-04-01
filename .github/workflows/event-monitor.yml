@@ -98,6 +98,24 @@ jobs:
         if: steps.resolve.outputs.should_run == 'true'
         run: uv python install 3.12
 
+      - name: Setup Node.js
+        if: steps.resolve.outputs.should_run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Codex CLI
+        if: steps.resolve.outputs.should_run == 'true'
+        run: npm install -g @openai/codex
+
+      - name: Setup Codex auth
+        if: steps.resolve.outputs.should_run == 'true'
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          mkdir -p ~/.codex
+          echo "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+
       - name: Install Technical dependencies
         if: steps.resolve.outputs.should_run == 'true'
         working-directory: Technical
@@ -140,6 +158,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ZHIPUAI_API_KEY: ${{ secrets.ZHIPUAI_API_KEY }}
           EVENT_CONTEXT: ${{ steps.check.outputs.event_details }}
         run: |
           MARKETS="${{ steps.resolve.outputs.markets }}"

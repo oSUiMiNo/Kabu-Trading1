@@ -46,6 +46,21 @@ jobs:
       - name: Setup Python
         run: uv python install 3.12
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Setup Codex auth
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          mkdir -p ~/.codex
+          echo "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+
       - name: Install Technical dependencies
         working-directory: Technical
         run: uv sync --no-install-project
@@ -77,6 +92,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ZHIPUAI_API_KEY: ${{ secrets.ZHIPUAI_API_KEY }}
         run: |
           ARGS=""
           if [ -n "${{ inputs.market }}" ]; then

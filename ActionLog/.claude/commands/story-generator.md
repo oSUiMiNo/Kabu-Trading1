@@ -1,6 +1,7 @@
 ---
 description: 月のストーリーの流れに沿った文章を生成する
 model: glm-4.7
+provider: glm
 allowed_tools: []
 ---
 
