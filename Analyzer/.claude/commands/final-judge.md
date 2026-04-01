@@ -58,7 +58,6 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 ## 各 set の judge から抽出する項目
 - `decision.agreement`
 - `decision.merged_side`
-- `decision.preferred_opinion`
 - `decision.merged_confidence`
 - `opinion_A.supported_side`（個別投票用）
 - `opinion_B.supported_side`（個別投票用）
