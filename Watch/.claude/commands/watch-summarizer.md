@@ -1,6 +1,7 @@
 ---
 description: archive の情報から watchlist 用サマリーを生成する
-model: claude-haiku-4-5-20251001
+model: glm-4.7
+provider: glm
 allowed_tools: []
 ---
 

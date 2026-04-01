@@ -8,7 +8,8 @@ tools:
   - WebSearch
 skills:
   - stock-log-protocol
-model: claude-haiku-4-5
+model: gpt-5.4
+provider: codex
 ---
 
 # Analyst（考察サブエージェント）
@@ -61,7 +62,7 @@ model: claude-haiku-4-5
 
 ## 作業手順
 1. 既存ログがあれば読み、最新Roundと最後のEXPORTを確認
-2. WebSearch で銘柄の最新情報を収集
+2. WebSearch で銘柄の最新情報を **積極的に** 収集（1回の検索で満足せず、異なるキーワード・角度で複数回検索して多角的に情報を集めること）
 3. 収集した情報を分析し、スタンスを決定
 4. **証拠表を作成**：ソース付き事実・主張・ソースなし主張を分離する
 5. Round内容をテキスト応答として出力（skill のテンプレ通り）

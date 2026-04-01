@@ -1,7 +1,8 @@
 ---
 name: notify_summarizer
 description: 監視結果から投資家が取るべきアクションを平易な日本語で要約する。
-model: claude-haiku-4-5
+model: glm-4.7
+provider: glm
 tools: []
 ---
 

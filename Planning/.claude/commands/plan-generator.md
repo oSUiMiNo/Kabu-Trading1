@@ -5,7 +5,8 @@ tools:
   - Read
   - WebSearch
   - WebFetch
-model: claude-haiku-4-5
+model: gpt-5.4
+provider: codex
 ---
 
 # Plan Generator（テキスト生成サブエージェント）
@@ -60,7 +61,7 @@ model: claude-haiku-4-5
 
 ## Web検索ガイダンス
 
-commentary をより具体的かつ最新の情報で補強するため、以下の場面でWeb検索を行ってよい:
+commentary をより具体的かつ最新の情報で補強するため、必要に応じて以下の場面でWeb検索を行ってよい:
 
 1. **decision_basis の why_it_matters 記述時**: 根拠に関連する最新ニュースや決算情報があれば参照し、「なぜ今この根拠が重要か」を具体化する
 2. **execution_notes 記述時**: 当日の市場状況（相場全体の動向、セクター動向）を踏まえた注記を追加する

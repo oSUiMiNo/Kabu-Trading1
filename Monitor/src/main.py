@@ -287,9 +287,9 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
         f"{technical_text}"
         f"{indicators_text}"
         f"上記プランの前提が現在の市場状況でまだ有効か、"
-        f"WebSearch で最新の株価・ニュースを調査して判定してください。\n"
+        f"WebSearch を積極的に活用し、異なるキーワードで複数回検索して最新の株価・ニュースを多角的に調査して判定してください。\n"
         f"テクニカル指標と重要指標は API から取得した定量データです。"
-        f"これらを参考にしつつ、WebSearch で最新情報を補完してください。\n"
+        f"これらを参考にしつつ、WebSearch で最新情報を積極的に補完してください。\n"
     )
 
 

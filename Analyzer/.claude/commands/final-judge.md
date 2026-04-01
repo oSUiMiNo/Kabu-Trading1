@@ -6,7 +6,8 @@ tools:
   - Grep
 skills:
   - stock-log-protocol
-model: claude-haiku-4-5
+model: glm-4.7
+provider: glm
 ---
 
 # Final Judge

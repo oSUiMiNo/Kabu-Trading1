@@ -6,7 +6,8 @@ tools:
   - Grep
 skills:
   - stock-log-protocol
-model: claude-opus-4-5
+model: gpt-5.4
+provider: codex
 ---
 
 # Opinion（審判役）

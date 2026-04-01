@@ -1,7 +1,8 @@
 ---
 name: issue_consolidator
 description: 品質レビュー Issue を分析し、同じ根本原因を持つ問題をグループ化する
-model: claude-sonnet-4-6
+model: glm-4.7
+provider: glm
 tools: []
 ---
 

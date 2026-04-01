@@ -1,7 +1,8 @@
 ---
 name: archive_reviewer
 description: archive レコード（Analyzer/Planning出力）の品質をレビューする
-model: claude-opus-4-6
+model: glm-4.7
+provider: glm
 tools: []
 ---
 

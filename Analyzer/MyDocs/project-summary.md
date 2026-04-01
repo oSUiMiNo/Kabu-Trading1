@@ -11,7 +11,7 @@
 ## 技術スタック
 
 - **Python 3.10+**（async/await + anyio で並列処理）
-- **Claude Haiku 4.5**（claude-agent-sdk 経由でサブエージェント呼び出し）
+- **GPT-5.4**（Codex SDK 経由）、**GLM-4.7**（Final Judge）
 - 仮想環境は `src/.venv/` に隔離
 
 ---

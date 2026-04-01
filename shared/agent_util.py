@@ -159,7 +159,7 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
         "tools", "allowed-tools",
         "skills", "inherits",
         "disable-model-invocation", "user-invocable",
-        "context",
+        "context", "provider",
     }
     for key, value in frontmatter.items():
         if key not in exclude_keys:
@@ -168,6 +168,35 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
     kwargs["system_prompt"] = prompt_str
 
     return ClaudeAgentOptions(**kwargs)
+
+
+def _detect_provider(file_path: str | Path | None) -> tuple[str, str | None]:
+    """
+    エージェント定義ファイルから provider と model を読み取る。
+
+    優先順位:
+      1. .md ファイルの provider フィールド（エージェント単位）
+      2. ANALYZER_LLM_PROVIDER 環境変数（グローバル）
+      3. デフォルト "claude"
+
+    Returns:
+        (provider, model) — model は .md に明示されていなければ None
+    """
+    file_provider = None
+    file_model = None
+    if file_path:
+        try:
+            content = Path(file_path).read_text(encoding="utf-8")
+            if content.startswith("---"):
+                end_idx = content.find("---", 3)
+                if end_idx != -1:
+                    fm = yaml.safe_load(content[3:end_idx].strip()) or {}
+                    file_provider = fm.get("provider")
+                    file_model = fm.get("model")
+        except Exception:
+            pass
+    provider = (file_provider or os.environ.get("ANALYZER_LLM_PROVIDER", "claude")).lower()
+    return provider, str(file_model) if file_model else None
 
 
 async def call_agent(
@@ -184,19 +213,37 @@ async def call_agent(
     """
     プロンプトを受け取り、LLMに渡して応答を表示し、結果を返す。
 
+    provider の決定順:
+      1. .md ファイルの provider フィールド（エージェント単位の切り替え）
+      2. ANALYZER_LLM_PROVIDER 環境変数（グローバル切り替え）
+      3. デフォルト "claude"
+
     Args:
         messages: 文字列または非同期イテレーター
         file_path: エージェント定義ファイルのパス
         project_root: モジュールのルートパス（debug_config.yaml の探索先）
         src_dir: モジュールの src/ パス（common-prompt.md の探索先）
     """
-    _provider = os.environ.get("ANALYZER_LLM_PROVIDER", "claude").lower()
+    _provider, _file_model = _detect_provider(file_path)
+
+    if _provider == "codex":
+        _shared = Path(__file__).resolve().parent
+        if str(_shared) not in sys.path:
+            sys.path.insert(0, str(_shared))
+        from llm_client import call_codex as _call_codex
+        _r = await _call_codex(
+            messages, file_path=file_path,
+            show_prompt=show_prompt, show_response=show_response,
+            show_cost=show_cost, show_tools=show_tools,
+        )
+        return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
+
     if _provider == "glm":
         _shared = Path(__file__).resolve().parent
         if str(_shared) not in sys.path:
             sys.path.insert(0, str(_shared))
         from llm_client import call_glm_agent as _call_glm_agent
-        _glm_model = os.environ.get("ANALYZER_GLM_MODEL", "glm-4.7-flash")
+        _glm_model = _file_model or os.environ.get("ANALYZER_GLM_MODEL", "glm-4.7-flash")
         _r = await _call_glm_agent(
             messages, file_path=file_path, model=_glm_model,
             show_options=show_options, show_prompt=show_prompt,

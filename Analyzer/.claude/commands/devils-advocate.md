@@ -8,7 +8,8 @@ tools:
   - WebSearch
 skills:
   - stock-log-protocol
-model: claude-haiku-4-5
+model: gpt-5.4
+provider: codex
 ---
 
 # Devil's Advocate（対立スタンス固定サブエージェント）
@@ -43,7 +44,7 @@ model: claude-haiku-4-5
 ## 目的
 - Analystの主張に対し、異なるスタンスから **反論（Counter-Claims）** を作る
 - 反論は揚げ足取りではなく、**判断ミスを減らす論点（下振れ・イベント・前提ズレ・不確実性）**に集中する
-- 必要なら自分で WebSearch してソース付き事実を集め、**証拠表** で事実と主張を分離する
+- **積極的に** WebSearch してソース付き事実を集め（1回で満足せず複数回検索すること）、**証拠表** で事実と主張を分離する
 - ログのフォーマットは **skill: stock-log-protocol** を最優先で遵守する
 
 ## 非目的

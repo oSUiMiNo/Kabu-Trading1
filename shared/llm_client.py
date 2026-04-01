@@ -58,6 +58,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # USD per 1M tokens: (input, cached_input, output)
 _OPENAI_PRICING: dict[str, tuple[float, float, float]] = {
+    "gpt-5.4":      (2.50,  0.25,  15.00),
+    "gpt-5.4-mini": (0.40,  0.04,   3.00),
+    "gpt-5.4-nano": (0.10,  0.01,   0.40),
     "gpt-5.2":      (1.75,  0.175, 14.00),
     "gpt-5.1":      (1.25,  0.125, 10.00),
     "gpt-5":        (1.25,  0.125, 10.00),
@@ -665,6 +668,102 @@ async def call_glm_agent(
     return result
 
 
+async def call_codex(
+    messages,
+    file_path: str | Path | None = None,
+    show_prompt: bool = False,
+    show_response: bool = False,
+    show_cost: bool = True,
+    show_tools: bool = False,
+) -> AgentResult:
+    """
+    Codex SDK (ChatGPT Plus 枠) でプロンプトを実行する。
+
+    codex CLI バイナリを子プロセスとして起動し、ChatGPT Plus のサブスクリプション枠で
+    GPT-5.4 等のモデルを利用する。モデルや reasoning effort は ~/.codex/config.toml で設定。
+
+    Args:
+        messages: プロンプト文字列、list[dict]（OpenAI形式）、または非同期イテレーター
+        file_path: エージェント定義ファイル (.md)。本文が system prompt として
+                   プロンプトの先頭に注入される
+        show_prompt: プロンプトをコンソール出力
+        show_response: レスポンスをコンソール出力
+        show_cost: コスト情報をコンソール出力（Codex SDK ではサブスク枠のため常に $0）
+        show_tools: 使用ツールをコンソール出力
+
+    Returns:
+        AgentResult (text, cost=0, tools_used)
+    """
+    from openai_codex_sdk import Codex
+    from openai_codex_sdk.codex import CodexOptions
+    import shutil
+
+    codex_exe = shutil.which("codex")
+    if codex_exe is None:
+        codex_exe = shutil.which("codex.exe")
+
+    config = parse_agent_file(file_path) if file_path else None
+
+    if isinstance(messages, str):
+        prompt = messages
+    elif isinstance(messages, list):
+        prompt = "\n".join(
+            m.get("content", "") for m in messages if m.get("role") != "system"
+        )
+    else:
+        parts: list[str] = []
+        async for msg in messages:
+            if isinstance(msg, str):
+                parts.append(msg)
+        prompt = "\n".join(parts)
+
+    prompt = _inline_file_refs(prompt)
+
+    system_prompt = config.system_prompt if config else ""
+    if system_prompt:
+        full_prompt = f"# 指示\n\n{system_prompt}\n\n# タスク\n\n{prompt}"
+    else:
+        full_prompt = prompt
+
+    if show_prompt:
+        print("╔══════════ リク (Codex SDK) ══════════")
+        if system_prompt:
+            preview = system_prompt[:200] + "..." if len(system_prompt) > 200 else system_prompt
+            print(f"  [system] {preview}")
+        preview = prompt[:200] + "..." if len(prompt) > 200 else prompt
+        print(f"  [prompt] {preview}")
+        print("╚══════════════════════════════════")
+
+    opts = CodexOptions(codex_path_override=codex_exe) if codex_exe else CodexOptions()
+    codex = Codex(opts)
+    thread = codex.start_thread()
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            turn = await thread.run(full_prompt)
+            break
+        except Exception as e:
+            if attempt == MAX_RETRIES - 1:
+                raise
+            delay = _RETRY_DELAYS[min(attempt, len(_RETRY_DELAYS) - 1)]
+            print(f"  [Codex リトライ] {type(e).__name__}: {delay}秒後に再試行 ({attempt + 1}/{MAX_RETRIES})")
+            await asyncio.sleep(delay)
+
+    result = AgentResult()
+    result.text = turn.final_response or ""
+    result.cost = 0.0
+
+    if show_response and result.text:
+        print("╔══════════ レス (Codex SDK) ══════════")
+        print(result.text)
+        print("╚══════════════════════════════════")
+
+    if show_cost:
+        print("  [コスト] ChatGPT Plus 枠（追加料金なし）")
+
+    return result
+
+
 if __name__ == "__main__":
     import sys
 
@@ -676,6 +775,8 @@ if __name__ == "__main__":
             r = await call_glm(prompt, show_response=True)
         elif provider == "glm-agent":
             r = await call_glm_agent(prompt, show_response=True, show_tools=True)
+        elif provider == "codex":
+            r = await call_codex(prompt, show_response=True)
         else:
             r = await call_openai(prompt, show_response=True)
 
