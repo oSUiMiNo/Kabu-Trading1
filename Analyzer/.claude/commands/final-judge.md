@@ -113,11 +113,12 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 - 最終 supported_side が `HOLD` で、主因が同点・割れ・情報不足なら、**55 を上限の目安**とする
 
 ### 6. 根拠のまとめ方
-- 最終 supported_side を支える `reasons` から **共通点を優先**して 3〜6 個に要約する
-- set 間で割れている場合は、**共通点と対立点を分けて**書く
+- **最終 supported_side を支持する理由のみ**を 3〜6 個にまとめる
+- 反対側の理由は reasons に含めない（対立点は `conflicts` に書く）
 - 推測しない
 
 ### 7. 主要リスク
+- 各 risk に **どの投資行動の観点から見たリスクか（side）** を明記する
 - 各 set の `major_risks` から、**共通または重要なもの**を最大5個に統合する
 
 ### 8. スタンス変更条件
@@ -177,11 +178,14 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 
 ## 根拠
 - 3〜6個
+- **最終判定を支持する理由のみ**
 - 各項目に set 由来を付ける
 - 形式: "{主張の要約}（set: set{N}）"
 
 ## 主要リスク
 - 最大5個
+- 各項目に **どの投資行動の観点か（side）** を付ける
+- 形式: "{リスクの要約}（side: {HOLD|BUY|...}）"
 
 ## スタンス変更条件
 - 最大5個
@@ -231,7 +235,8 @@ reasons:
     text: "{理由1}"
 
 major_risks:
-  - "{リスク1}"
+  - side: "{HOLD|BUY|SELL|ADD|REDUCE}"
+    text: "{リスク1}"
 
 flip_conditions:
   - "{条件1}"
