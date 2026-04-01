@@ -115,6 +115,10 @@ jobs:
         run: |
           mkdir -p ~/.codex
           echo "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+          cat > ~/.codex/config.toml << 'EOF'
+          model = "gpt-5.4"
+          model_reasoning_effort = "high"
+          EOF
 
       - name: Install Technical dependencies
         if: steps.resolve.outputs.should_run == 'true'

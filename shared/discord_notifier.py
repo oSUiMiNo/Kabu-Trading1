@@ -131,17 +131,23 @@ def build_embed(payload: NotifyPayload) -> dict:
     if label == NotifyLabel.COMPLETE:
         tickers = md.get("tickers", [])
         ng_tickers = md.get("ng_tickers", [])
-        count = len(tickers)
+        error_tickers = md.get("error_tickers", [])
+        count = len(tickers) + len(error_tickers)
         fields.append({"name": "チェック数", "value": f"{count} 銘柄", "inline": True})
         if tickers:
-            fields.append({"name": "銘柄", "value": ", ".join(tickers)})
+            fields.append({"name": "OK銘柄", "value": ", ".join(tickers)})
         if ng_tickers:
             fields.append({"name": "NG銘柄（再プラン済み）", "value": ", ".join(ng_tickers)})
-        description = (
-            "全銘柄のチェックとプラン更新が完了しました。"
-            if ng_tickers
-            else "全銘柄のプランが現在の市場状況に対して有効です。"
-        )
+        if error_tickers:
+            fields.append({"name": "エラー銘柄", "value": ", ".join(error_tickers)})
+        if error_tickers and not tickers:
+            description = "全銘柄でエラーが発生しました。個別のエラー通知を確認してください。"
+        elif error_tickers:
+            description = "一部銘柄でエラーが発生しました。正常な銘柄のプランは有効です。"
+        elif ng_tickers:
+            description = "全銘柄のチェックとプラン更新が完了しました。"
+        else:
+            description = "全銘柄のプランが現在の市場状況に対して有効です。"
         return {"title": title, "description": description, "color": color, "timestamp": timestamp, "fields": fields}
 
     current_price = md.get("current_price", "?")

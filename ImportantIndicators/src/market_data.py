@@ -82,24 +82,30 @@ def fetch_market_data() -> dict:
                 if not tnx_series.empty:
                     result["us_10y_yield"] = round(float(tnx_series.iloc[-1]), 3)
 
-    # FRED API で政策金利取得
+    # FRED API で政策金利取得（リトライ付き）
     fred = _get_fred()
     if fred:
         # FRB 政策金利（日次実効レート）
-        try:
-            ffr_series = fred.get_series("DFF")
-            if ffr_series is not None and not ffr_series.empty:
-                result["ffr"] = round(float(ffr_series.iloc[-1]), 2)
-        except Exception as e:
-            print(f"  [警告] FRED FRB政策金利取得失敗: {e}")
+        def _fetch_ffr():
+            s = fred.get_series("DFF")
+            if s is None or s.empty:
+                raise ValueError("FRB政策金利: 空のレスポンス")
+            return round(float(s.iloc[-1]), 2)
+
+        ffr_val = retry_with_backoff(_fetch_ffr)
+        if ffr_val is not None:
+            result["ffr"] = ffr_val
 
         # 日銀政策金利
-        try:
-            boj_series = fred.get_series("IRSTCI01JPM156N")
-            if boj_series is not None and not boj_series.empty:
-                result["boj_rate"] = round(float(boj_series.iloc[-1]), 2)
-        except Exception as e:
-            print(f"  [警告] FRED 日銀政策金利取得失敗: {e}")
+        def _fetch_boj():
+            s = fred.get_series("IRSTCI01JPM156N")
+            if s is None or s.empty:
+                raise ValueError("日銀政策金利: 空のレスポンス")
+            return round(float(s.iloc[-1]), 2)
+
+        boj_val = retry_with_backoff(_fetch_boj)
+        if boj_val is not None:
+            result["boj_rate"] = boj_val
 
     return result
 

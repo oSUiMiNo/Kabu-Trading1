@@ -181,12 +181,21 @@ async def run_pipeline(
         print("\nNG 銘柄なし。Analyzer/Planning/Watch は起動しません。", flush=True)
         ok_tickers = [rec["ticker"] for rec in monitor_results
                       if (rec.get("monitor") or {}).get("result") == "OK"]
+        error_tickers = [rec["ticker"] for rec in monitor_results
+                         if (rec.get("monitor") or {}).get("result") == "ERROR"]
         market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
         ok_names = [dn_map.get(t, t) for t in ok_tickers]
+        error_names = [dn_map.get(t, t) for t in error_tickers]
+        if error_tickers and not ok_tickers:
+            title = f"{market_name} 全銘柄エラー"
+        elif error_tickers:
+            title = f"{market_name} チェック完了（一部エラー）"
+        else:
+            title = f"{market_name} 全銘柄OK"
         payload = NotifyPayload(
             label=NotifyLabel.COMPLETE,
-            ticker=f"{market_name} 全銘柄OK",
-            monitor_data={"tickers": ok_names},
+            ticker=title,
+            monitor_data={"tickers": ok_names, "error_tickers": error_names},
             event_context=event_context,
         )
         await notify(payload)

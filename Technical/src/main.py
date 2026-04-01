@@ -145,7 +145,7 @@ async def process_one_ticker(
             print(f"  [{ticker}] 取得失敗: {last_error}")
 
     if technical_data is None:
-        print(f"  [{ticker}] リトライ上限到達 — エラーとして記録")
+        print(f"  [{ticker}] リトライ上限到達 - エラーとして記録")
         error_data = {
             "fetched_at": now.isoformat(),
             "error": f"リトライ {MAX_RETRIES} 回失敗: {last_error}",
