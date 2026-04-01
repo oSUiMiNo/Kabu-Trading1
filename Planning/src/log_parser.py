@@ -132,24 +132,41 @@ def _extract_agreement_from_export(export: dict) -> str | None:
     return None
 
 
-def _extract_votes_from_export(export: dict) -> tuple[int, int] | None:
+def _extract_votes_from_export(export: dict, decision: str | None = None) -> tuple[int, int] | None:
     """
     EXPORT yaml から投票数を抽出する。
 
-    5択スタンス対応:
-      action = BUY + SELL + ADD + REDUCE
-      safe   = HOLD
+    最終判定側の票 = vote_for、それ以外 = vote_against。
+    decision が不明な場合は旧ロジック（action/safe 2分法）にフォールバック。
     """
-    # 投票集計キーを探す（部分一致）
+    # votes キーを探す
     vote_section = None
     for key in export:
-        if "投票集計" in str(key):
+        key_str = str(key)
+        if key_str == "votes" or "投票集計" in key_str:
             vote_section = export[key]
             break
 
     if not vote_section or not isinstance(vote_section, dict):
         return None
 
+    # decision が分かっていれば、最終判定側 vs それ以外で集計
+    if decision:
+        decision_upper = decision.strip("*").strip().upper()
+        vote_for = 0
+        vote_against = 0
+        for key, value in vote_section.items():
+            if not isinstance(value, (int, float)):
+                continue
+            v = int(value)
+            if str(key).upper() == decision_upper:
+                vote_for += v
+            else:
+                vote_against += v
+        if vote_for > 0 or vote_against > 0:
+            return vote_for, vote_against
+
+    # フォールバック: 旧ロジック（action/safe 2分法）
     action_votes = 0
     safe_votes = 0
     for key, value in vote_section.items():
@@ -157,10 +174,8 @@ def _extract_votes_from_export(export: dict) -> tuple[int, int] | None:
         if not isinstance(value, (int, float)):
             continue
         v = int(value)
-        # Action stances: BUY, SELL, ADD, REDUCE
         if any(s in key_upper for s in ("BUY", "SELL", "ADD", "REDUCE")):
             action_votes += v
-        # Safe stance: HOLD
         elif "HOLD" in key_upper:
             safe_votes += v
 
@@ -222,32 +237,35 @@ def _infer_votes_from_export(export: dict, decision_raw: str) -> tuple[int, int]
     return None
 
 
-def _extract_votes_from_text(text: str) -> tuple[int, int] | None:
+def _extract_votes_from_text(text: str, decision: str | None = None) -> tuple[int, int] | None:
     """
     本文テキストから投票数をフォールバック抽出する。
 
-    5択スタンス対応:
-    - "BUY: N" / "HOLD: N" / "BUY票: N" / "HOLD票: N"
+    decision が分かっていれば最終判定側 vs それ以外で集計。
     """
-    action_total = 0
-    safe_total = 0
+    all_stances = ("BUY", "SELL", "ADD", "REDUCE", "HOLD")
+    counts: dict[str, int] = {}
     found = False
 
-    for stance in ("BUY", "SELL", "ADD", "REDUCE"):
+    for stance in all_stances:
         m = re.search(rf"{stance}[票]?[:\s]*(\d+)", text)
         if m:
-            action_total += int(m.group(1))
+            counts[stance] = int(m.group(1))
             found = True
 
-    m = re.search(r"HOLD[票]?[:\s]*(\d+)", text)
-    if m:
-        safe_total += int(m.group(1))
-        found = True
+    if not found:
+        return None
 
-    if found:
-        return action_total, safe_total
+    if decision:
+        decision_upper = decision.strip("*").strip().upper()
+        vote_for = counts.get(decision_upper, 0)
+        vote_against = sum(v for s, v in counts.items() if s != decision_upper)
+        return vote_for, vote_against
 
-    return None
+    # フォールバック: 旧ロジック
+    action_total = sum(counts.get(s, 0) for s in ("BUY", "SELL", "ADD", "REDUCE"))
+    safe_total = counts.get("HOLD", 0)
+    return action_total, safe_total
 
 
 def _extract_decision_from_text(text: str) -> str | None:
@@ -372,9 +390,9 @@ def parse_final_judge_from_db(fj_data: dict, ticker: str, created_at: str) -> Pa
     if vote_for is None or vote_against is None:
         votes = None
         if export:
-            votes = _extract_votes_from_export(export)
+            votes = _extract_votes_from_export(export, decision_raw)
         if not votes:
-            votes = _extract_votes_from_text(text)
+            votes = _extract_votes_from_text(text, decision_raw)
         if not votes and export:
             votes = _infer_votes_from_export(export, decision_raw)
         vote_for = votes[0] if votes else 0

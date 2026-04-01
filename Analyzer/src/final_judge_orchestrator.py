@@ -325,14 +325,10 @@ async def run_final_judge_orchestrator(
 
     print("=" * 60)
 
-    # 投票を action/safe に集約（Planning互換）
-    if set_sides is not None:
-        _action = ("BUY", "SELL", "ADD", "REDUCE")
-        action_votes = sum(votes.get(s, 0) for s in _action)
-        safe_votes = votes.get("HOLD", 0)
-    else:
-        action_votes = 0
-        safe_votes = 0
+    # 投票を最終判定側 vs それ以外に集約（Planning互換）
+    verdict_upper = verdict.upper() if verdict else "HOLD"
+    action_votes = votes.get(verdict_upper, 0)
+    safe_votes = sum(v for s, v in votes.items() if s != verdict_upper)
 
     fj_db_data = {
         "votes": votes if set_sides is not None else {},
