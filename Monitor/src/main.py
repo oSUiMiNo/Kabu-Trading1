@@ -475,7 +475,7 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
         if target_archive_id:
             safe_db(update_archivelog, target_archive_id,
                     MotivationID=0, active=False,
-                    monitor=monitor_record, status="completed")
+                    monitor=monitor_record)
         else:
             new_record = safe_db(create_archivelog, ticker,
                                  "review" if (safe_db(get_holding, ticker) or {}).get("shares", 0) > 0 else "buy",
@@ -483,7 +483,7 @@ async def check_one_ticker(ticker: str, archivelog: dict | None = None, target_a
             if new_record:
                 safe_db(update_archivelog, new_record["id"],
                         MotivationID=0, active=False,
-                        monitor=monitor_record, status="completed")
+                        monitor=monitor_record)
 
     status = monitor_record["result"]
     print(f"  [{ticker}] 結果: {status}")

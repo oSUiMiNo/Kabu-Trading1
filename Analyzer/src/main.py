@@ -367,7 +367,6 @@ async def run_parallel(
             update_archivelog, _db_archivelog_id,
             final_judge=fj_result.db_data,
             verdict=fj_result.判定結果,
-            status="completed",
         )
 
 
