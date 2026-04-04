@@ -248,24 +248,25 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
             size_lines.append(f"  株数: {plan_quantity}")
         plan_size_text = "【プランの規模】\n" + "\n".join(size_lines) + "\n\n"
 
-    # 保有状況
-    holding = safe_db(get_holding, ticker) or {}
+    # 保有状況（archive.technical.holdings_snapshot から取得）
+    _tech_for_hs = (_src.get("technical") or {}) if isinstance(_src.get("technical"), dict) else {}
+    _hs = _tech_for_hs.get("holdings_snapshot") or {}
     holdings_text = ""
-    if holding and holding.get("shares"):
-        shares = holding["shares"]
-        avg_cost = holding.get("avg_cost", 0)
-        current_p = holding.get("current_price", 0)
-        if avg_cost and current_p:
-            unrealized = (current_p - avg_cost) * shares
-            unrealized_pct = ((current_p - avg_cost) / avg_cost * 100) if avg_cost else 0
+    _hs_shares = _hs.get("shares", 0) or 0
+    _hs_avg_cost = _hs.get("avg_cost", 0) or 0
+    if _hs_shares:
+        _hs_current_p = _tech_for_hs.get("latest_price", 0) or 0
+        if _hs_avg_cost and _hs_current_p:
+            unrealized = (_hs_current_p - _hs_avg_cost) * _hs_shares
+            unrealized_pct = ((_hs_current_p - _hs_avg_cost) / _hs_avg_cost * 100) if _hs_avg_cost else 0
             holdings_text = (
                 f"【現在の保有状況】\n"
-                f"  保有数: {shares}株\n"
-                f"  平均取得単価: {avg_cost}\n"
+                f"  保有数: {_hs_shares}株\n"
+                f"  平均取得単価: {_hs_avg_cost}\n"
                 f"  含み損益: {unrealized:+,.2f}（{unrealized_pct:+.1f}%）\n\n"
             )
         else:
-            holdings_text = f"【現在の保有状況】\n  保有数: {shares}株\n  平均取得単価: {avg_cost}\n\n"
+            holdings_text = f"【現在の保有状況】\n  保有数: {_hs_shares}株\n  平均取得単価: {_hs_avg_cost}\n\n"
     else:
         holdings_text = "【現在の保有状況】\n  保有なし\n\n"
 

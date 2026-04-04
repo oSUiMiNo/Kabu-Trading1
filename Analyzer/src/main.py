@@ -24,7 +24,6 @@ from supabase_client import (
     get_analyzer_config,
     get_archivelog_by_id,
     ensure_technical_data,
-    get_holding,
 )
 
 from analyzer_orchestrator import LOGS_DIR
@@ -240,7 +239,9 @@ async def run_parallel(
     if market_context:
         initial_prompt = f"{market_context}\n\n{initial_prompt}" if initial_prompt else market_context
 
-    holding = safe_db(get_holding, ticker) or {}
+    _arc = safe_db(get_archivelog_by_id, _db_archivelog_id) if _db_archivelog_id else None
+    _arc_tech = (_arc.get("technical") or {}) if _arc and isinstance(_arc.get("technical"), dict) else {}
+    holding = _arc_tech.get("holdings_snapshot") or {}
 
     t = ticker.upper()
 

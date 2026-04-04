@@ -28,7 +28,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import (
     safe_db, get_portfolio_config,
     get_latest_archivelog, get_archivelog_by_id, update_archivelog,
-    get_holding,
     list_event_masters,
 )
 
@@ -436,10 +435,11 @@ async def run_plan(
         anchor_price = current_price
         print(f"  基準価格: 省略 → 現在価格と同値 ({anchor_price})")
 
-    # --- 保有状況の取得 ---
-    holding = safe_db(get_holding, t) or {}
-    existing_shares = holding.get("shares", 0) or 0
-    existing_avg_cost = holding.get("avg_cost", 0) or 0
+    # --- 保有状況の取得（archive.technical.holdings_snapshot） ---
+    _p_tech = (_db_archivelog.get("technical") or {}) if isinstance(_db_archivelog.get("technical"), dict) else {}
+    _p_hs = _p_tech.get("holdings_snapshot") or {}
+    existing_shares = _p_hs.get("shares", 0) or 0
+    existing_avg_cost = _p_hs.get("avg_cost", 0) or 0
     _rate = usd_jpy_rate if market == Market.US and usd_jpy_rate else 1.0
     existing_investment_jpy = existing_avg_cost * existing_shares * _rate
     if existing_shares:

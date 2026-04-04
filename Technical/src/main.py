@@ -24,6 +24,7 @@ from supabase_client import (
     create_archivelog,
     update_archivelog,
     get_client,
+    get_holding,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -154,6 +155,11 @@ async def process_one_ticker(
         await _notify_error(ticker, last_error)
         return error_data
 
+    holding = safe_db(get_holding, ticker) or {}
+    technical_data["holdings_snapshot"] = {
+        "shares": holding.get("shares", 0) or 0,
+        "avg_cost": holding.get("avg_cost", 0) or 0,
+    }
     safe_db(update_archivelog, archive_id, technical=technical_data)
     print(f"  [{ticker}] テクニカル取得完了")
     return technical_data
