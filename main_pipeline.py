@@ -70,6 +70,35 @@ def _run_batch(script_name: str, extra_args: list[str] | None = None) -> int:
     return result.returncode
 
 
+def _sync_holding_prices(wl: list[dict], target_ticker: str | None = None):
+    """Technical が取得した最新株価を holdings.current_price に反映する。"""
+    try:
+        from supabase_client import get_client
+        import yaml as _yaml
+        today = datetime.now(_JST).strftime("%Y-%m-%d")
+        for w in wl:
+            tk = w["ticker"]
+            if target_ticker and tk != target_ticker:
+                continue
+            resp = (
+                get_client().from_("archive").select("technical")
+                .eq("ticker", tk).not_.is_("technical", "null")
+                .order("created_at", desc=True).limit(1).execute()
+            )
+            if not resp.data:
+                continue
+            tech = resp.data[0].get("technical")
+            if isinstance(tech, str):
+                tech = _yaml.safe_load(tech) if tech else {}
+            if isinstance(tech, dict):
+                price = tech.get("latest_price")
+                if price:
+                    safe_db(upsert_holding, tk, current_price=price, price_updated_at=today)
+                    print(f"  [holdings] {tk}: current_price={price}")
+    except Exception as e:
+        print(f"  [holdings] 更新スキップ: {e}")
+
+
 # ── パイプライン本体 ─────────────────────────────────────
 
 async def run_pipeline(
@@ -107,31 +136,7 @@ async def run_pipeline(
     _run_batch("technical_batch.py", tech_args)
 
     # ── holdings.current_price を最新化 ──
-    try:
-        from supabase_client import get_client
-        import yaml as _yaml
-        _wl = safe_db(list_watchlist) or []
-        _today = datetime.now(_JST).strftime("%Y-%m-%d")
-        for _w in _wl:
-            _tk = _w["ticker"]
-            if target_ticker and _tk != target_ticker:
-                continue
-            _resp = (
-                get_client().from_("archive").select("technical")
-                .eq("ticker", _tk).not_.is_("technical", "null")
-                .order("created_at", desc=True).limit(1).execute()
-            )
-            if _resp.data:
-                _tech = _resp.data[0].get("technical")
-                if isinstance(_tech, str):
-                    _tech = _yaml.safe_load(_tech) if _tech else {}
-                if isinstance(_tech, dict):
-                    _price = _tech.get("latest_price")
-                    if _price:
-                        safe_db(upsert_holding, _tk, current_price=_price, price_updated_at=_today)
-                        print(f"  [holdings] {_tk}: current_price={_price}")
-    except Exception as e:
-        print(f"  [holdings] 更新スキップ: {e}")
+    _sync_holding_prices(wl, target_ticker)
 
     # ── Phase 2: Monitor ──
     print(f"\n{'='*60}")
