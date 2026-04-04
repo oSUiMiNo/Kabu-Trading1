@@ -1,4 +1,4 @@
-"""
+﻿"""
 通知機能の単体テスト
 
 対象:
@@ -246,10 +246,10 @@ class TestCompleteEmbed(unittest.TestCase):
         self.assertIn("全銘柄のプランが現在の市場状況に対して有効です。", embed["description"])
         field_names = [f["name"] for f in embed["fields"]]
         self.assertIn("チェック数", field_names)
-        self.assertIn("銘柄", field_names)
+        self.assertIn("OK銘柄", field_names)
         count_field = next(f for f in embed["fields"] if f["name"] == "チェック数")
         self.assertEqual(count_field["value"], "3 銘柄")
-        tickers_field = next(f for f in embed["fields"] if f["name"] == "銘柄")
+        tickers_field = next(f for f in embed["fields"] if f["name"] == "OK銘柄")
         self.assertEqual(tickers_field["value"], "NVDA, AAPL, TSLA")
 
     def test_complete_jp_embed(self):
