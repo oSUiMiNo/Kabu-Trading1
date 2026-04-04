@@ -40,7 +40,7 @@
 | 1 | 読取 | archive | id, prev_plan_ids | `create_archivelog` 内部で前回プランIDを取得し `prev_plan_ids` チェーンを構築（※プラン中身は不使用） |
 | 2 | 読取 | holdings | shares | mode 判定（shares > 0 → "review", それ以外 → "buy"） |
 | 3 | 書込 | archive | id, ticker, mode, span, status, prev_plan_ids | `create_archivelog` でレコード新規作成（status="running"） |
-| 4 | 書込 | archive | technical | テクニカル指標（latest_price, timeframes, usd_jpy_rate 等） |
+| 4 | 書込 | archive | technical | テクニカル指標（latest_price, timeframes, usd_jpy_rate, holdings_snapshot 等） |
 | 5 | 書込 | archive | status | "completed" or "error" |
 
 ※ `create_archive=False` の場合はステップ1-3 の代わりに `technical IS NULL` の既存 archive を検索
@@ -75,7 +75,7 @@
 |---|------|---------|--------|------|
 | 1 | 読取 | archive | newplan_full | `get_latest_archivelog_with_newplan` で前回プラン取得 |
 | 2 | 読取 | archive | technical, important_indicators | 株価・テクニカル指標・市場指標 |
-| 3 | 読取 | holdings | shares, avg_cost | 保有状況（プロンプトに注入） |
+| 3 | 読取 | archive | technical.holdings_snapshot | 保有状況（プロンプトに注入。スタンドアロン時は holdings を直接参照） |
 | 4 | ── | （エージェント呼び出し：WebSearch でチェック実行） | | |
 | 5 | 読取 | archive | technical.latest_price | current_price のソース（tech_price 優先） |
 | 6 | 書込 | archive | monitor | {result, current_price, plan_price, price_change_pct, summary, risk_flags, ng_reason, cost_usd} |
@@ -102,7 +102,7 @@
 | # | 操作 | テーブル | カラム | 内容 |
 |---|------|---------|--------|------|
 | 1 | 読取 | archive | id, ticker, active | `fetch_active_for_analyzer`（NG かつ active な銘柄） |
-| 2 | 読取 | holdings | shares | mode 判定（"review" / "buy"） |
+| 2 | 読取 | archive | mode | mode 参照（Technical が設定済み） |
 
 #### Analyzer/src/main.py
 
@@ -110,7 +110,7 @@
 |---|------|---------|--------|------|
 | 1 | 読取 | archive | technical, monitor, important_indicators | マーケットコンテキスト構築 |
 | 2 | 読取 | portfolio_config | analyzer_num_lanes, analyzer_max_rounds, analyzer_opinions_per_lane | Analyzer 設定 |
-| 3 | 読取 | holdings | shares | 保有状況をコンテキストに含める |
+| 3 | 読取 | archive | technical.holdings_snapshot | 保有状況をコンテキストに含める |
 | 4 | ── | （複数レーン並行：Analyst ↔ DA 議論 → Opinion → Judge） | | |
 | 5 | 書込 | archive | lanes | 各レーンの議論ログ（opinion, judge, discussion_md, agreement） |
 | 6 | ── | （Final Judge 実行） | | |
@@ -137,7 +137,7 @@
 | 2 | 読取 | archive | technical | 株価・テクニカル指標 |
 | 3 | 読取 | archive | monitor | 監視結果（価格変動） |
 | 4 | 読取 | archive | important_indicators | 市場指標 |
-| 5 | 読取 | holdings | shares, avg_cost | 保有状況（ポジションサイジング） |
+| 5 | 読取 | archive | technical.holdings_snapshot | 保有状況（ポジションサイジング） |
 | 6 | 読取 | portfolio_config | total_budget_jpy, risk_limit_pct, stop_loss_pct, default_take_profit_pct, max_allocation_pct, price_block_pct, max_log_age_days, min_rr_ratio | 予算・リスク設定 |
 | 7 | 読取 | event_master | * | リスクオーバーレイ |
 | 8 | ── | （鮮度チェック → 価格ズレ判定 → confidence 算出 → 配分計算 → YAML 生成） | | |
@@ -179,20 +179,16 @@
 | 4 | 読取 | archive | id, ticker, monitor, mode, status | `fetch_monitor_results_since`（Monitor 結果取得） |
 | 5 | ── | （ERROR/CHECK 銘柄に Discord 通知） | | |
 | 6 | 読取 | archive | id, ticker, active, MotivationID | `fetch_active_for_analyzer`（NG 銘柄検出） |
-| 7 | 読取 | holdings | shares, avg_cost | 保有状況参照（populate_from_monitor 内部） |
-| 8 | 読取 | action_log | * | cumulative_invested / total_shares 算出 |
-| 9 | 書込 | action_log | ticker, archive_id, action_date, action_text, story, decision, ... | 保有中+OK → `populate_from_monitor`（プラン継続の記録） |
-| 10 | 読取 | archive | id, ticker, active, MotivationID | `fetch_active_for_analyzer`（NG 銘柄検出） |
-| 11 | ── | （NG 銘柄なし → COMPLETE 通知で終了） | | |
-| 12 | ── | （Phase 3: analyzer_batch.py 実行） | | |
-| 13 | 読取 | archive | final_judge | `get_archivelog_by_id` で Analyzer 完了確認 |
-| 14 | 書込 | archive | status, active | Analyzer 失敗時 → "failed" + active=false |
-| 15 | ── | （Phase 4: planning_batch.py 実行） | | |
-| 16 | 読取 | archive | id, ticker, active | `fetch_active_for_planning`（Planning 失敗検出） |
-| 17 | 書込 | archive | status, active | Planning 失敗時 → "failed" + active=false |
-| 18 | ── | （Phase 5: watch_batch.py 実行） | | |
-| 19 | ── | （Phase 6: actionlog_batch.py 実行） | | |
-| 20 | ── | （COMPLETE 通知） | | |
+| 7 | ── | （NG 銘柄なし → Phase 6 実行後 COMPLETE 通知で終了） | | |
+| 8 | ── | （Phase 3: analyzer_batch.py 実行） | | |
+| 9 | 読取 | archive | final_judge | `get_archivelog_by_id` で Analyzer 完了確認 |
+| 10 | 書込 | archive | status, active | Analyzer 失敗時 → "failed" + active=false |
+| 11 | ── | （Phase 4: planning_batch.py 実行） | | |
+| 12 | 読取 | archive | id, ticker, active | `fetch_active_for_planning`（Planning 失敗検出） |
+| 13 | 書込 | archive | status, active | Planning 失敗時 → "failed" + active=false |
+| 14 | ── | （Phase 5: watch_batch.py 実行） | | |
+| 15 | ── | （Phase 6: actionlog_batch.py 実行） | | |
+| 16 | ── | （COMPLETE 通知） | | |
 
 ---
 
@@ -299,7 +295,7 @@
 |---------|---------------------------|
 | **archive** | Technical（main.py）、Monitor（main.py）、Analyzer（main.py）、Planning（main.py）、Watch（main.py）、main_pipeline.py、NightWorker（main.py）、各 batch ファイル |
 | **watchlist** | 全 batch ファイル、main_pipeline.py、Watch（main.py）、ActionLog（auto_populate.py, data_service.py） |
-| **holdings** | Technical（main.py）、Monitor（main.py）、Analyzer（main.py）、Planning（main.py）、ActionLog（auto_populate.py, data_service.py）、analyzer_batch.py |
+| **holdings** | Technical（main.py）、Monitor（main.py：スタンドアロン実行時のみ）、ActionLog（auto_populate.py, data_service.py, pipeline_main.py） |
 | **portfolio_config** | Monitor（main.py, event_watch_check.py）、Analyzer（main.py）、Planning（main.py）、planning_batch.py |
 | **action_log** | ActionLog（pipeline_main.py, auto_populate.py, data_service.py, handoff_service.py） |
 | **action_log_handoff** | ActionLog（handoff_service.py）のみ |
