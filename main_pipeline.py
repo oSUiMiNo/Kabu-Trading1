@@ -37,7 +37,6 @@ from supabase_client import (
     get_archivelog_by_id,
     update_archivelog,
     upsert_holding,
-    list_action_logs,
 )
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA, LABEL_COLOR
 from discord_notifier import notify, send_start_notification
@@ -179,36 +178,18 @@ async def run_pipeline(
             )
             await notify(payload)
 
-    # 保有中 + OK → ActionLog に記録（プラン継続の記録）
-    _al_path = str(PROJECT_ROOT / "ActionLog" / "src")
-    if _al_path not in sys.path:
-        sys.path.insert(0, _al_path)
-    for rec in monitor_results:
-        ticker = rec["ticker"]
-        monitor_data = rec.get("monitor") or {}
-        mode = rec.get("mode", "")
-        if monitor_data.get("result") != "OK" or mode != "review":
-            continue
-        try:
-            from auto_populate import populate_action_log
-            wl_entry = next((w for w in wl if w["ticker"] == ticker), {})
-            wl_market = wl_entry.get("market", "JP")
-            result = populate_action_log(
-                ticker=ticker,
-                archive_id=rec["id"],
-                monitor_data=monitor_data,
-                fallback_market=wl_market,
-            )
-            if result:
-                print(f"  [{ticker}] OK（保有中）→ action_log 記録 (id={result.get('id')})")
-        except Exception as e:
-            print(f"  [{ticker}] OK action_log 記録スキップ: {e}")
-
     # NG 銘柄の有無を DB から確認（伝言板方式）
     ng_tickers = safe_db(fetch_active_for_analyzer) or []
 
     if not ng_tickers:
         print("\nNG 銘柄なし。Analyzer/Planning/Watch は起動しません。", flush=True)
+
+        # ── Phase 6: ActionLog（OK path） ──
+        print(f"\n{'='*60}")
+        print(f"=== Phase 6: ActionLog ===")
+        print(f"{'='*60}")
+        _run_batch("actionlog_batch.py")
+
         ok_tickers = [rec["ticker"] for rec in monitor_results
                       if (rec.get("monitor") or {}).get("result") == "OK"]
         error_tickers = [rec["ticker"] for rec in monitor_results
@@ -293,6 +274,12 @@ async def run_pipeline(
     print(f"=== Phase 5: Watch ===")
     print(f"{'='*60}")
     _run_batch("watch_batch.py")
+
+    # ── Phase 6: ActionLog ──
+    print(f"\n{'='*60}")
+    print(f"=== Phase 6: ActionLog ===")
+    print(f"{'='*60}")
+    _run_batch("actionlog_batch.py")
 
     # ── COMPLETE 通知 ──
     print(f"\n{'='*60}")

@@ -8,9 +8,9 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 ## システム全体像
 
 ```
-[Technical] → [Monitor] → [Analyzer] → [Planning] → [Watch]
-                 ↑                                        |
-                 └────────── archive テーブル ←────────────┘
+[Technical] → [Monitor] → [Analyzer] → [Planning] → [Watch] → [ActionLog]
+                 ↑                                                    |
+                 └──────────────── archive テーブル ←──────────────────┘
 ```
 
 1. **Technical** が watchlist 全銘柄のテクニカル指標を取得し archive に記録
@@ -18,6 +18,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 3. **Analyzer** が NG 銘柄を複数エージェントで議論し最終判定を出す
 4. **Planning** が最終判定からプラン YAML を生成
 5. **Watch** がプラン結果をもとに watchlist を更新し、Discord に業務通知を送信
+6. **ActionLog** が action_log テーブルへの記録投入と holdings の同期を実行
 
 全ブロックが同一の archive レコードに順番に書き足す。ブロックごとに別レコードを作らない。
 
@@ -36,6 +37,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 | **Analyzer** | 複数レーン並列議論 + 最終判定 | `analyzer_batch.py`<br>`Analyzer/src/main.py` |
 | **Planning** | プラン YAML 生成 | `planning_batch.py`<br>`Planning/src/main.py` |
 | **Watch** | watchlist 更新 + Discord 業務通知 | `watch_batch.py`<br>`Watch/src/main.py` |
+| **ActionLog** | action_log 投入 + holdings 同期（Phase 6） | `actionlog_batch.py`<br>`ActionLog/src/pipeline_main.py` |
 | **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/main.py` |
 | **NightWorker** | archive 品質レビュー + Issue 作成 + 用語集統合 | `NightWorker/src/main.py`<br>`NightWorker/src/words_consolidator.py` |
 | **ActionLog** | 月次アクションログ表示 Web UI（NiceGUI） | `ActionLog/src/main.py` |
@@ -166,6 +168,7 @@ GLM-5 を使うには Pro 以上へのアップグレードが必要
 | Analyzer | `active = True AND final_judge IS NULL` |
 | Planning | `active = True AND final_judge IS NOT NULL AND newplan_full IS NULL` |
 | Watch | `active = True AND status = 'completed' AND newplan_full IS NOT NULL` |
+| ActionLog | `active = False AND monitor IS NOT NULL AND archive.id が action_log に未登録` |
 
 ---
 

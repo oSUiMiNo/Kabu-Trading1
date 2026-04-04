@@ -778,6 +778,34 @@ def list_action_log_archive_ids(ticker: str) -> list[str]:
     return [r["archive_id"] for r in (resp.data or [])]
 
 
+def fetch_pending_for_actionlog() -> list[dict]:
+    """action_log 未投入の完了済み archive を取得する（Phase 6 ActionLog 用）。
+
+    条件: monitor IS NOT NULL かつ active=False（パイプライン処理完了）。
+    取得後、action_log テーブルと突き合わせて未投入分のみ返す。
+    """
+    resp = (
+        get_client()
+        .from_("archive")
+        .select("id, ticker, mode")
+        .eq("active", False)
+        .not_.is_("monitor", "null")
+        .order("created_at", desc=True)
+        .limit(100)
+        .execute()
+    )
+    candidates = resp.data or []
+    if not candidates:
+        return []
+
+    tickers = {r["ticker"] for r in candidates}
+    logged_ids: set[str] = set()
+    for tk in tickers:
+        logged_ids.update(list_action_log_archive_ids(tk))
+
+    return [r for r in candidates if r["id"] not in logged_ids]
+
+
 # ── action_log_handoff ─────────────────────────────────────
 
 
