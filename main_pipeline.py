@@ -190,14 +190,14 @@ async def run_pipeline(
         if monitor_data.get("result") != "OK" or mode != "review":
             continue
         try:
-            from auto_populate import populate_from_monitor
+            from auto_populate import populate_action_log
             wl_entry = next((w for w in wl if w["ticker"] == ticker), {})
             wl_market = wl_entry.get("market", "JP")
-            result = populate_from_monitor(
+            result = populate_action_log(
                 ticker=ticker,
                 archive_id=rec["id"],
                 monitor_data=monitor_data,
-                market=wl_market,
+                fallback_market=wl_market,
             )
             if result:
                 print(f"  [{ticker}] OK（保有中）→ action_log 記録 (id={result.get('id')})")

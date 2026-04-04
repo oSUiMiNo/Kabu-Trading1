@@ -6,6 +6,7 @@ action_log テーブルに投入するデータに変換する。
 """
 from __future__ import annotations
 
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -162,11 +163,7 @@ def _insert_with_calc(
     market: str,
     usd_jpy: float,
 ) -> dict | None:
-    """共通の累積計算 + INSERT 処理。
-
-    row には decision, quantity, price, money_in, action_text, story, is_auto 等が入っている前提。
-    cumulative_invested / total_assets / pnl をここで算出し INSERT する。
-    """
+    """累積計算 + INSERT 処理。"""
     existing_ids = safe_db(list_action_log_archive_ids, ticker) or []
     if archive_id in existing_ids:
         return None
@@ -225,63 +222,55 @@ def _insert_with_calc(
     return result
 
 
-def populate_from_archive(
+def populate_action_log(
     ticker: str,
     archive_id: str,
-    newplan_full: str,
+    newplan_full: str | None = None,
+    monitor_data: dict | None = None,
     beginner_summary: str = "",
     action_date: str | None = None,
     fallback_market: str = "JP",
     fallback_usd_jpy_rate: float | None = None,
 ) -> dict | None:
-    """archive（newplan_full 付き）→ action_log への変換＋INSERT。"""
-    row = build_action_log_row(
-        ticker, archive_id, newplan_full, beginner_summary, action_date
-    )
+    """archive または monitor 結果から action_log に1行投入する統合関数。
 
-    market = row.pop("_parsed_market", fallback_market)
-    parsed_usd_jpy = row.pop("_parsed_usd_jpy", 0)
-    row.pop("_parsed_is_us", None)
-    usd_jpy = parsed_usd_jpy or float(fallback_usd_jpy_rate or 0)
-    is_us = market == "US" and usd_jpy > 0
+    newplan_full がある場合は YAML をパースして売買記録を作成。
+    なければ monitor_data から経過記録（OK/NG）を作成。
+    """
+    if newplan_full:
+        row = build_action_log_row(
+            ticker, archive_id, newplan_full, beginner_summary, action_date
+        )
+        market = row.pop("_parsed_market", fallback_market)
+        parsed_usd_jpy = row.pop("_parsed_usd_jpy", 0)
+        row.pop("_parsed_is_us", None)
+        usd_jpy = parsed_usd_jpy or float(fallback_usd_jpy_rate or 0)
+        is_us = market == "US" and usd_jpy > 0
+        if not parsed_usd_jpy and is_us:
+            row["money_in"] = int(_calc_money_in(
+                row["decision"], row["quantity"], float(row["price"] or 0), usd_jpy, True,
+            ))
+    else:
+        md = monitor_data or {}
+        if isinstance(md, str):
+            try:
+                md = json.loads(md)
+            except (json.JSONDecodeError, TypeError):
+                md = {}
+        if not isinstance(md, dict):
+            md = {}
+        result_str = md.get("result", "OK")
+        row = {
+            "action_date": action_date or datetime.now(_JST).strftime("%Y-%m-%d"),
+            "action_text": _MONITOR_RESULT_TEXT.get(result_str, f"監視結果: {result_str}"),
+            "story": md.get("summary", ""),
+            "decision": result_str,
+            "quantity": 0,
+            "price": md.get("current_price") or 0,
+            "money_in": 0,
+            "is_auto": True,
+        }
+        market = fallback_market
+        usd_jpy = float(fallback_usd_jpy_rate or 0)
 
-    if not parsed_usd_jpy and is_us:
-        row["money_in"] = int(_calc_money_in(
-            row["decision"], row["quantity"], float(row["price"] or 0), usd_jpy, True,
-        ))
-
-    return _insert_with_calc(ticker, archive_id, row, market, usd_jpy)
-
-
-def populate_from_monitor(
-    ticker: str,
-    archive_id: str,
-    monitor_data: dict,
-    action_date: str | None = None,
-    market: str = "JP",
-    usd_jpy_rate: float | None = None,
-) -> dict | None:
-    """monitor 結果のみ（newplan_full なし）→ action_log への変換＋INSERT。"""
-    if isinstance(monitor_data, str):
-        try:
-            import json
-            monitor_data = json.loads(monitor_data)
-        except (json.JSONDecodeError, TypeError):
-            monitor_data = {}
-    if not isinstance(monitor_data, dict):
-        monitor_data = {}
-
-    result_str = monitor_data.get("result", "OK")
-    row = {
-        "action_date": action_date or datetime.now(_JST).strftime("%Y-%m-%d"),
-        "action_text": _MONITOR_RESULT_TEXT.get(result_str, f"監視結果: {result_str}"),
-        "story": monitor_data.get("summary", ""),
-        "decision": result_str,
-        "quantity": 0,
-        "price": monitor_data.get("current_price") or 0,
-        "money_in": 0,
-        "is_auto": True,
-    }
-
-    usd_jpy = float(usd_jpy_rate or 0)
     return _insert_with_calc(ticker, archive_id, row, market, usd_jpy)

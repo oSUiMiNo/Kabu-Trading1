@@ -197,12 +197,12 @@ async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool
         _al = str(Path(__file__).resolve().parent.parent.parent / "ActionLog" / "src")
         if _al not in sys.path:
             sys.path.insert(0, _al)
-        from auto_populate import populate_from_archive
+        from auto_populate import populate_action_log
         _wl_entry = next((w for w in wl if w["ticker"] == ticker), {})
         _wl_market = _wl_entry.get("market", "JP")
         _tech = archivelog.get("technical") or {}
         _fb_rate = _tech.get("usd_jpy_rate") if isinstance(_tech, dict) else None
-        result = populate_from_archive(
+        result = populate_action_log(
             ticker=ticker,
             archive_id=archivelog_id,
             newplan_full=newplan_full,
