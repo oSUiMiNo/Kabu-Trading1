@@ -427,7 +427,7 @@ def fetch_monitor_results_since(since_iso: str) -> list[dict]:
     resp = (
         get_client()
         .from_("archive")
-        .select("ticker, monitor, status")
+        .select("id, ticker, monitor, mode, status")
         .gte("created_at", since_iso)
         .not_.is_("monitor", "null")
         .execute()

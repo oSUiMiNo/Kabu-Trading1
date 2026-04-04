@@ -46,16 +46,21 @@ class NotifyPayload:
     plan_comparison: str = ""
 
 
-def classify_label(monitor_data: dict) -> NotifyLabel | None:
+def classify_label(monitor_data: dict, mode: str | None = None) -> NotifyLabel | None:
     """
     Monitor 結果から通知ラベルを判定する。
 
+    保有中（mode="review" または未指定）:
     - NG + 変動率 ≤ -10% → 緊急
     - NG + 変動率 ≥ +10% → 朗報
     - NG（上記以外）     → 警告
     - OK + risk_flags あり → 確認
     - OK + flags なし     → None（通知不要）
     - retries_exhausted   → ERROR
+
+    未保有（mode="buy"）:
+    - NG → None（通知不要：未保有の様子見は通知しない）
+    - OK / ERROR → 保有中と同じ
     """
     if monitor_data.get("retries_exhausted"):
         return NotifyLabel.ERROR
@@ -63,6 +68,8 @@ def classify_label(monitor_data: dict) -> NotifyLabel | None:
     result = monitor_data.get("result", "")
 
     if result == "NG":
+        if mode == "buy":
+            return None
         pct = monitor_data.get("price_change_pct")
         if pct is not None and pct <= -10:
             return NotifyLabel.URGENT

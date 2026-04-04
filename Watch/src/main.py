@@ -158,8 +158,13 @@ async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool
     safe_db(update_watchlist, ticker, **update_fields)
     print(f"  [{ticker}] watchlist 更新完了")
 
+    wl = safe_db(list_watchlist)
+
+    # ── Discord 通知（保有状況に応じてラベル判定） ──
+    _beginner_summary = ""
     if monitor_data:
-        label = classify_label(monitor_data)
+        mode = archivelog.get("mode", "")
+        label = classify_label(monitor_data, mode=mode)
         if label:
             event_context = None
             event_raw = os.environ.get("EVENT_CONTEXT", "")
@@ -169,7 +174,6 @@ async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool
                 except (ValueError, TypeError):
                     pass
             new_plan = _build_new_plan_dict(newplan_full, verdict)
-            wl = safe_db(list_watchlist)
             dn = next((w.get("display_name") or ticker for w in wl if w["ticker"] == ticker), ticker)
             payload = NotifyPayload(
                 label=label,
@@ -181,47 +185,49 @@ async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool
                 plan_comparison=plan_comparison,
             )
             await notify(payload)
+            _beginner_summary = payload.beginner_summary
             print(f"  [{ticker}] Discord 通知送信完了 (label={label.value})")
-            # ── action_log 自動投入 ──
-            try:
-                _al = str(Path(__file__).resolve().parent.parent.parent / "ActionLog" / "src")
-                if _al not in sys.path:
-                    sys.path.insert(0, _al)
-                from auto_populate import populate_from_archive
-                _wl_entry = next((w for w in wl if w["ticker"] == ticker), {})
-                _wl_market = _wl_entry.get("market", "JP")
-                _tech = archivelog.get("technical") or {}
-                _fb_rate = _tech.get("usd_jpy_rate") if isinstance(_tech, dict) else None
-                result = populate_from_archive(
-                    ticker=ticker,
-                    archive_id=archivelog_id,
-                    newplan_full=newplan_full,
-                    beginner_summary=payload.beginner_summary,
-                    action_date=archivelog.get("created_at", "")[:10],
-                    fallback_market=_wl_market,
-                    fallback_usd_jpy_rate=_fb_rate,
-                )
-                if result:
-                    print(f"  [{ticker}] action_log 投入完了 (id={result.get('id')})")
-            except Exception as e:
-                print(f"  [{ticker}] action_log 投入スキップ: {e}")
-
-            # ── holdings 同期（action_log から再計算） ──
-            try:
-                _al = str(Path(__file__).resolve().parent.parent.parent / "ActionLog" / "src")
-                if _al not in sys.path:
-                    sys.path.insert(0, _al)
-                from data_service import _sync_holdings_from_logs
-                _all_logs = safe_db(list_all_action_logs, ticker) or []
-                _sync_holdings_from_logs(ticker, _all_logs)
-                _h = safe_db(get_holding, ticker) or {}
-                print(f"  [{ticker}] holdings 同期: {_h.get('shares', 0)}株, avg_cost={_h.get('avg_cost', 0)}")
-            except Exception as e:
-                print(f"  [{ticker}] holdings 同期スキップ: {e}")
         else:
-            print(f"  [{ticker}] 通知不要（OK + リスクフラグなし）")
+            print(f"  [{ticker}] 通知不要（mode={mode}, result={monitor_data.get('result', '?')}）")
     else:
         print(f"  [{ticker}] monitor データなし。通知スキップ。")
+
+    # ── action_log 自動投入（通知有無にかかわらず実行） ──
+    try:
+        _al = str(Path(__file__).resolve().parent.parent.parent / "ActionLog" / "src")
+        if _al not in sys.path:
+            sys.path.insert(0, _al)
+        from auto_populate import populate_from_archive
+        _wl_entry = next((w for w in wl if w["ticker"] == ticker), {})
+        _wl_market = _wl_entry.get("market", "JP")
+        _tech = archivelog.get("technical") or {}
+        _fb_rate = _tech.get("usd_jpy_rate") if isinstance(_tech, dict) else None
+        result = populate_from_archive(
+            ticker=ticker,
+            archive_id=archivelog_id,
+            newplan_full=newplan_full,
+            beginner_summary=_beginner_summary,
+            action_date=archivelog.get("created_at", "")[:10],
+            fallback_market=_wl_market,
+            fallback_usd_jpy_rate=_fb_rate,
+        )
+        if result:
+            print(f"  [{ticker}] action_log 投入完了 (id={result.get('id')})")
+    except Exception as e:
+        print(f"  [{ticker}] action_log 投入スキップ: {e}")
+
+    # ── holdings 同期（通知有無にかかわらず実行） ──
+    try:
+        _al = str(Path(__file__).resolve().parent.parent.parent / "ActionLog" / "src")
+        if _al not in sys.path:
+            sys.path.insert(0, _al)
+        from data_service import _sync_holdings_from_logs
+        _all_logs = safe_db(list_all_action_logs, ticker) or []
+        _sync_holdings_from_logs(ticker, _all_logs)
+        _h = safe_db(get_holding, ticker) or {}
+        print(f"  [{ticker}] holdings 同期: {_h.get('shares', 0)}株, avg_cost={_h.get('avg_cost', 0)}")
+    except Exception as e:
+        print(f"  [{ticker}] holdings 同期スキップ: {e}")
 
     safe_db(update_archivelog, archivelog["id"], active=False)
     print(f"  [{ticker}] 処理完了（active=False）")

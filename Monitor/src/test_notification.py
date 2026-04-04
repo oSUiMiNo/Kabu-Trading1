@@ -67,6 +67,44 @@ class TestClassifyLabel(unittest.TestCase):
         data = {"result": "NG", "retries_exhausted": True, "price_change_pct": -20.0}
         self.assertEqual(classify_label(data), NotifyLabel.ERROR)
 
+    # ── mode="buy"（未保有）: NG → 通知なし ──
+
+    def test_buy_mode_ng_returns_none(self):
+        data = {"result": "NG", "price_change_pct": -5.0}
+        self.assertIsNone(classify_label(data, mode="buy"))
+
+    def test_buy_mode_ng_large_drop_returns_none(self):
+        data = {"result": "NG", "price_change_pct": -15.0}
+        self.assertIsNone(classify_label(data, mode="buy"))
+
+    def test_buy_mode_ng_large_rise_returns_none(self):
+        data = {"result": "NG", "price_change_pct": 12.5}
+        self.assertIsNone(classify_label(data, mode="buy"))
+
+    def test_buy_mode_ok_with_flags_returns_check(self):
+        data = {"result": "OK", "risk_flags": ["マクロショック"]}
+        self.assertEqual(classify_label(data, mode="buy"), NotifyLabel.CHECK)
+
+    def test_buy_mode_error_returns_error(self):
+        data = {"result": "ERROR", "retries_exhausted": True}
+        self.assertEqual(classify_label(data, mode="buy"), NotifyLabel.ERROR)
+
+    # ── mode="review"（保有中）: 既存と同じ動作 ──
+
+    def test_review_mode_ng_returns_warning(self):
+        data = {"result": "NG", "price_change_pct": -5.0}
+        self.assertEqual(classify_label(data, mode="review"), NotifyLabel.WARNING)
+
+    def test_review_mode_ng_large_drop_returns_urgent(self):
+        data = {"result": "NG", "price_change_pct": -15.0}
+        self.assertEqual(classify_label(data, mode="review"), NotifyLabel.URGENT)
+
+    # ── mode 未指定: 既存と同じ動作（後方互換） ──
+
+    def test_no_mode_ng_returns_warning(self):
+        data = {"result": "NG", "price_change_pct": -5.0}
+        self.assertEqual(classify_label(data), NotifyLabel.WARNING)
+
 
 class TestBuildEmbed(unittest.TestCase):
     """build_embed の Embed 構造テスト"""
