@@ -1,8 +1,8 @@
 """
 archive → action_log 変換モジュール
 
-archive.newplan_full（YAML）を解析し、action_log テーブルに投入するデータに変換する。
-Watch 連携（Step 8）と既存 archive 一括取り込みの両方で使う。
+archive.newplan_full（YAML）または monitor 結果を解析し、
+action_log テーブルに投入するデータに変換する。
 """
 from __future__ import annotations
 
@@ -148,6 +148,83 @@ def build_action_log_row(
     }
 
 
+_MONITOR_RESULT_TEXT = {
+    "OK": "OK",
+    "NG": "要注意",
+    "ERROR": "チェック失敗",
+}
+
+
+def _insert_with_calc(
+    ticker: str,
+    archive_id: str,
+    row: dict,
+    market: str,
+    usd_jpy: float,
+) -> dict | None:
+    """共通の累積計算 + INSERT 処理。
+
+    row には decision, quantity, price, money_in, action_text, story, is_auto 等が入っている前提。
+    cumulative_invested / total_assets / pnl をここで算出し INSERT する。
+    """
+    existing_ids = safe_db(list_action_log_archive_ids, ticker) or []
+    if archive_id in existing_ids:
+        return None
+
+    is_us = market == "US" and usd_jpy > 0
+
+    holding = safe_db(get_holding, ticker) or {}
+    holding_shares = int(holding.get("shares") or 0)
+    holding_avg_cost = float(holding.get("avg_cost") or 0)
+
+    latest = safe_db(get_latest_action_log, ticker)
+    if latest:
+        prev_cumulative = float(latest["cumulative_invested"])
+    else:
+        if is_us:
+            prev_cumulative = int(holding_avg_cost * holding_shares * usd_jpy)
+        else:
+            prev_cumulative = int(holding_avg_cost * holding_shares)
+
+    all_logs = safe_db(list_all_action_logs, ticker) or []
+    log_shares = calc_total_shares(all_logs)
+
+    new_quantity = row.get("quantity", 0)
+    decision_upper = _normalize_decision(row.get("decision", ""))
+    if decision_upper in _SELL_DECISIONS:
+        log_shares_after = log_shares - new_quantity
+    else:
+        log_shares_after = log_shares + new_quantity
+    total_shares = holding_shares + log_shares_after
+
+    price = float(row.get("price") or 0)
+    if is_us:
+        total_assets = int(price * total_shares * usd_jpy)
+    else:
+        total_assets = int(price * total_shares)
+
+    money_in = row.get("money_in", 0)
+    cumulative_invested = int(prev_cumulative + money_in)
+
+    result = safe_db(
+        create_action_log,
+        ticker,
+        row.get("action_date") or datetime.now(_JST).strftime("%Y-%m-%d"),
+        archive_id=archive_id,
+        action_text=row.get("action_text", ""),
+        story=row.get("story", ""),
+        decision=row.get("decision", ""),
+        quantity=new_quantity,
+        price=row.get("price"),
+        money_in=money_in,
+        cumulative_invested=cumulative_invested,
+        total_assets=total_assets,
+        pnl=int(total_assets - cumulative_invested),
+        is_auto=row.get("is_auto", True),
+    )
+    return result
+
+
 def populate_from_archive(
     ticker: str,
     archive_id: str,
@@ -157,15 +234,7 @@ def populate_from_archive(
     fallback_market: str = "JP",
     fallback_usd_jpy_rate: float | None = None,
 ) -> dict | None:
-    """archive → action_log への変換＋INSERT を一括で行う。
-
-    既存投入済みなら None を返す（二重投入防止）。
-    cumulative_invested / total_assets / pnl も計算してセットする。
-    """
-    existing_ids = safe_db(list_action_log_archive_ids, ticker) or []
-    if archive_id in existing_ids:
-        return None
-
+    """archive（newplan_full 付き）→ action_log への変換＋INSERT。"""
     row = build_action_log_row(
         ticker, archive_id, newplan_full, beginner_summary, action_date
     )
@@ -181,52 +250,7 @@ def populate_from_archive(
             row["decision"], row["quantity"], float(row["price"] or 0), usd_jpy, True,
         ))
 
-    holding = safe_db(get_holding, ticker) or {}
-    holding_shares = int(holding.get("shares") or 0)
-    holding_avg_cost = float(holding.get("avg_cost") or 0)
-
-    latest = safe_db(get_latest_action_log, ticker)
-    if latest:
-        prev_cumulative = float(latest["cumulative_invested"])
-    else:
-        if is_us:
-            prev_cumulative = int(holding_avg_cost * holding_shares * usd_jpy)
-        else:
-            prev_cumulative = int(holding_avg_cost * holding_shares)
-    row["cumulative_invested"] = int(prev_cumulative + row["money_in"])
-
-    all_logs = safe_db(list_all_action_logs, ticker) or []
-    log_shares = calc_total_shares(all_logs)
-    new_quantity = row["quantity"]
-    decision_upper = _normalize_decision(row["decision"])
-    if decision_upper in _SELL_DECISIONS:
-        log_shares_after = log_shares - new_quantity
-    else:
-        log_shares_after = log_shares + new_quantity
-    total_shares = holding_shares + log_shares_after
-
-    price = float(row["price"] or 0)
-    if is_us:
-        row["total_assets"] = int(price * total_shares * usd_jpy)
-    else:
-        row["total_assets"] = int(price * total_shares)
-    row["pnl"] = int(row["total_assets"] - row["cumulative_invested"])
-
-    result = safe_db(
-        create_action_log,
-        row.pop("ticker"),
-        row.pop("action_date"),
-        archive_id=row.pop("archive_id"),
-        **row,
-    )
-    return result
-
-
-_MONITOR_RESULT_TEXT = {
-    "OK": "OK",
-    "NG": "要注意",
-    "ERROR": "チェック失敗",
-}
+    return _insert_with_calc(ticker, archive_id, row, market, usd_jpy)
 
 
 def populate_from_monitor(
@@ -237,7 +261,7 @@ def populate_from_monitor(
     market: str = "JP",
     usd_jpy_rate: float | None = None,
 ) -> dict | None:
-    """monitor 結果のみ（newplan_full なし）の archive から action_log 行を作成する。"""
+    """monitor 結果のみ（newplan_full なし）→ action_log への変換＋INSERT。"""
     if isinstance(monitor_data, str):
         try:
             import json
@@ -247,54 +271,17 @@ def populate_from_monitor(
     if not isinstance(monitor_data, dict):
         monitor_data = {}
 
-    existing_ids = safe_db(list_action_log_archive_ids, ticker) or []
-    if archive_id in existing_ids:
-        return None
-
     result_str = monitor_data.get("result", "OK")
-    action_text = _MONITOR_RESULT_TEXT.get(result_str, f"監視結果: {result_str}")
-    summary = monitor_data.get("summary", "")
-
-    holding = safe_db(get_holding, ticker) or {}
-    holding_shares = int(holding.get("shares") or 0)
-    holding_avg_cost = float(holding.get("avg_cost") or 0)
-
-    all_logs = safe_db(list_all_action_logs, ticker) or []
-    log_shares = calc_total_shares(all_logs)
-    total_shares = holding_shares + log_shares
+    row = {
+        "action_date": action_date or datetime.now(_JST).strftime("%Y-%m-%d"),
+        "action_text": _MONITOR_RESULT_TEXT.get(result_str, f"監視結果: {result_str}"),
+        "story": monitor_data.get("summary", ""),
+        "decision": result_str,
+        "quantity": 0,
+        "price": monitor_data.get("current_price") or 0,
+        "money_in": 0,
+        "is_auto": True,
+    }
 
     usd_jpy = float(usd_jpy_rate or 0)
-    is_us = market == "US" and usd_jpy > 0
-
-    latest = safe_db(get_latest_action_log, ticker)
-    if latest:
-        prev_cumulative = float(latest["cumulative_invested"])
-    else:
-        if is_us:
-            prev_cumulative = int(holding_avg_cost * holding_shares * usd_jpy)
-        else:
-            prev_cumulative = int(holding_avg_cost * holding_shares)
-
-    price = monitor_data.get("current_price") or 0
-    if is_us and price:
-        total_assets = int(float(price) * total_shares * usd_jpy)
-    else:
-        total_assets = int(float(price) * total_shares) if price else 0
-
-    row_result = safe_db(
-        create_action_log,
-        ticker,
-        action_date or datetime.now(_JST).strftime("%Y-%m-%d"),
-        archive_id=archive_id,
-        action_text=action_text,
-        story=summary,
-        decision=result_str,
-        quantity=0,
-        price=price,
-        money_in=0,
-        cumulative_invested=int(prev_cumulative),
-        total_assets=total_assets,
-        pnl=int(total_assets - prev_cumulative),
-        is_auto=True,
-    )
-    return row_result
+    return _insert_with_calc(ticker, archive_id, row, market, usd_jpy)
