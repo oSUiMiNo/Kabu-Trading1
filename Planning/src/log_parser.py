@@ -43,6 +43,7 @@ class ParsedJudgment:
     overall_agreement: str              # "AGREED_STRONG" | "MIXED" | "INCOMPLETE"
     log_date: datetime                  # ログ作成日時
     decision_basis: list[DecisionBasis] # 根拠リスト
+    conflicts: list[str]                # 対立点リスト（MIXED時に存在）
     raw_text: str                       # ログ全文（エージェントに渡す用）
 
 
@@ -350,6 +351,21 @@ def _extract_decision_basis(export: dict | None, full_text: str) -> list[Decisio
     return basis_list
 
 
+def _extract_conflicts(export: dict | None) -> list[str]:
+    """EXPORT yaml から対立点リストを抽出する。"""
+    if not export:
+        return []
+    raw = export.get("対立点") or export.get("conflicts")
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw:
+        text = str(item).strip()
+        if text and text not in ("なし", "(なし)", "（なし）", ""):
+            result.append(text)
+    return result
+
+
 def parse_final_judge_from_db(fj_data: dict, ticker: str, created_at: str) -> ParsedJudgment:
     """
     DB の archive.final_judge dict から ParsedJudgment を生成する。
@@ -401,6 +417,9 @@ def parse_final_judge_from_db(fj_data: dict, ticker: str, created_at: str) -> Pa
     # --- 根拠 ---
     basis = _extract_decision_basis(export, text)
 
+    # --- 対立点 ---
+    conflicts = _extract_conflicts(export)
+
     # --- ログ日時 ---
     try:
         log_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
@@ -417,6 +436,7 @@ def parse_final_judge_from_db(fj_data: dict, ticker: str, created_at: str) -> Pa
         overall_agreement=agreement,
         log_date=log_date,
         decision_basis=basis,
+        conflicts=conflicts,
         raw_text=text,
     )
 
@@ -479,6 +499,9 @@ def parse_final_judge(log_path: Path) -> ParsedJudgment:
     # --- 根拠 ---
     basis = _extract_decision_basis(export, text)
 
+    # --- 対立点 ---
+    conflicts = _extract_conflicts(export)
+
     # --- ログ日時 ---
     log_date = datetime.fromtimestamp(os.path.getmtime(log_path))
 
@@ -491,5 +514,6 @@ def parse_final_judge(log_path: Path) -> ParsedJudgment:
         overall_agreement=agreement,
         log_date=log_date,
         decision_basis=basis,
+        conflicts=conflicts,
         raw_text=text,
     )

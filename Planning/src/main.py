@@ -272,6 +272,7 @@ def build_commentary_prompt(
     spec: PlanSpec,
     raw_judge_text: str,
     additional_texts: list[tuple[str, str]] | None = None,
+    conflicts: list[str] | None = None,
 ) -> str:
     """
     plan-generator エージェントに渡すプロンプトを組み立てる。
@@ -284,6 +285,7 @@ def build_commentary_prompt(
 
     Args:
         additional_texts: [(ラベル, テキスト内容), ...] 形式の追加コンテキスト
+        conflicts: 対立点リスト（MIXED時に存在）
     """
     yaml_str = build_yaml(spec)
 
@@ -298,6 +300,15 @@ def build_commentary_prompt(
             f"{''.join(parts)}"
         )
 
+    conflicts_section = ""
+    if conflicts:
+        conflicts_list = "\n".join(f"  - {c}" for c in conflicts)
+        conflicts_section = (
+            f"\n"
+            f"【対立点（Analyzer set 間の意見相違）】\n"
+            f"{conflicts_list}\n"
+        )
+
     return (
         f"以下の PlanSpec（機械算出済み）に対して、テキスト応答として commentary フィールドを生成してください。\n"
         f"\n"
@@ -308,6 +319,7 @@ def build_commentary_prompt(
         f"--- ここから ---\n"
         f"{raw_judge_text}\n"
         f"--- ここまで ---\n"
+        f"{conflicts_section}"
         f"{additional_section}"
         f"\n"
         f"【あなたの作業】\n"
@@ -315,7 +327,8 @@ def build_commentary_prompt(
         f"2. 追加の Analyzer ログがある場合は参照し、根拠の詳細や議論の文脈を把握する\n"
         f"3. decision_basis の各項目に why_it_matters（結論の決め手になった理由を日本語1文。最新情報があれば言及）を付与\n"
         f"4. execution_notes に追加すべき注記があれば追加（価格ズレ警告、鮮度警告、市況注記など）\n"
-        f"5. 結果を YAML 形式で出力。数値フィールドは一切変更しないこと。\n"
+        f"5. 対立点がある場合は、execution_notes と why_it_matters で言及する\n"
+        f"6. 結果を YAML 形式で出力。数値フィールドは一切変更しないこと。\n"
         f"\n"
         f"出力は YAML ブロック（```yaml ... ```）のみ。説明文は不要。\n"
     )
@@ -691,6 +704,11 @@ async def run_plan(
         spec.order_style = "SCALE_IN"
         spec.execution_notes.append("Risk Overlay: STRESS/CRISIS のため分割エントリー強制")
 
+    # --- 対立点の注記（Issue #140） ---
+    if judgment.conflicts:
+        for conflict in judgment.conflicts:
+            spec.execution_notes.append(f"[対立点] {conflict}")
+
     # --- 重要指標データを commentary に注入 ---
     # ii はステップ4.5で取得済み
     if ii and isinstance(ii, dict):
@@ -745,7 +763,7 @@ async def run_plan(
 
     # --- エージェント呼び出し（commentary 生成、リトライ付き） ---
     print(f">>> commentary 生成（plan-generator エージェント）")
-    prompt = build_commentary_prompt(spec, judgment.raw_text, additional_texts)
+    prompt = build_commentary_prompt(spec, judgment.raw_text, additional_texts, conflicts=judgment.conflicts)
     agent_file = AGENTS_DIR / "plan-generator.md"
 
     dbg = load_debug_config("plan")
