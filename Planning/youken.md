@@ -179,9 +179,9 @@ PlanSpec（機械可読）として出力
 
 価格ズレが ±10%超 の場合：
 
-data_checks.status = BLOCK_REEVALUATE
+data_checks.status = BLOCK_REEVALUATE（検出）
 
-プランは「停止→再評価要求（数量確定しない）」に切り替える
+現在価格ベースで再計算して続行する（portfolio_status = RECALCULATED_PRICE_DEVIATION）
 
 7. 出力（PlanSpec）
 7.1 出力フォーマット（YAML例）
@@ -260,7 +260,7 @@ LOW → LIGHT
 
 BUY/SELL/ADD/REDUCE/HOLD の全ケースで PlanSpecを必ず出力
 
-価格ズレが ±10%超の場合、必ず BLOCK_REEVALUATE に切り替わる
+価格ズレが ±10%超の場合、現在価格ベースで再計算して続行する（RECALCULATED_PRICE_DEVIATION）
 
 出力に根拠（lane/source_desc/source_url）が含まれて追跡可能
 

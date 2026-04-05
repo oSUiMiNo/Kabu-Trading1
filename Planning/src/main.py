@@ -89,6 +89,39 @@ def _notify_planning_error(ticker: str, error_type: str, detail: str):
         print(f"  [通知警告] Discord 通知失敗: {e}")
 
 
+def _notify_price_recalculated(ticker: str, deviation):
+    """価格ズレ再計算の Discord 通知（WARNING）。1日1回。"""
+    from datetime import timezone, timedelta
+    today_str = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")
+    key = f"RECALC:{ticker}"
+    if _notified_today.get(key) == today_str:
+        return
+    _notified_today[key] = today_str
+
+    try:
+        from discord_notifier import notify as _discord_notify
+        from notification_types import NotifyLabel, NotifyPayload
+        import asyncio
+
+        payload = NotifyPayload(
+            label=NotifyLabel.WARNING,
+            ticker=ticker,
+            monitor_data={},
+            error_detail=(
+                f"価格ズレ {deviation.price_deviation_pct}% > {deviation.price_block_pct}%\n"
+                f"基準価格 {deviation.anchor_price} → 現在価格 {deviation.current_price}\n"
+                f"現在価格ベースで再計算して続行"
+            ),
+        )
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_discord_notify(payload))
+        except RuntimeError:
+            asyncio.run(_discord_notify(payload))
+    except Exception as e:
+        print(f"  [通知警告] Discord 通知失敗: {e}")
+
+
 # ═══════════════════════════════════════════════════════
 # ユーティリティ
 # ═══════════════════════════════════════════════════════
@@ -624,12 +657,15 @@ async def run_plan(
         risk_overlay_commentary_tags=risk_overlay.commentary_tags,
     )
 
-    # BLOCK / STALE / RR_TOO_LOW の場合はプランを差し替え + Discord 通知
+    # 価格ズレ判定（Issue #150: ブロックせず現在価格ベースで続行）
     if deviation.status == "BLOCK_REEVALUATE":
-        spec.execution_notes = ["価格ズレ ±10%超: 停止→再評価要求。数量確定しない。"]
-        spec.quantity = 0
-        spec.portfolio_status = "BLOCK_REEVALUATE"
-        _notify_planning_error(t, "BLOCK_REEVALUATE", f"価格ズレ {deviation.price_deviation_pct}% > {deviation.price_block_pct}%")
+        spec.execution_notes = [
+            f"価格ズレ {deviation.price_deviation_pct}% > {deviation.price_block_pct}%: "
+            f"現在価格({deviation.current_price})ベースで再計算済み。"
+        ]
+        spec.portfolio_status = "RECALCULATED_PRICE_DEVIATION"
+        print(f"  ★ 価格ズレ検出 → 現在価格ベースで続行")
+        _notify_price_recalculated(t, deviation)
 
     if rr.status == "RR_TOO_LOW":
         spec.execution_notes.append(

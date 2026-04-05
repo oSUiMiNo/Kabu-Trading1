@@ -50,7 +50,7 @@ provider: codex
 1. **PlanSpec の数値フィールドは一切変更しない**
 2. `decision_basis` の `lane` / `source_desc` / `source_url` は最終判定ログから確認できるもののみ使用
 3. `why_it_matters` は推測禁止。ログ記載の内容のみを根拠にする
-4. `BLOCK_REEVALUATE` / `STALE_REEVALUATE` の場合は、`execution_plan.notes` に警告文を含める
+4. `RECALCULATED_PRICE_DEVIATION` / `STALE_REEVALUATE` の場合は、`execution_plan.notes` に警告文を含める（価格ズレ時は現在価格ベースで再計算済みである旨を明記）
 6. 出力は日本語で記述
 7. **追加ファイルの利用方針**:
    - `set*.md`（議論ログ）は巨大なため、根拠の詳細確認時のみ Read で参照する
