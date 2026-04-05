@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared")
 from supabase_client import (
     safe_db, get_portfolio_config,
     get_latest_archivelog, get_archivelog_by_id, update_archivelog,
-    list_event_masters,
+    list_event_masters, list_holdings,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -39,7 +39,7 @@ from plan_calc import (
     calc_position_size, calc_rr_ratio,
     load_plan_config, apply_risk_overlay,
 )
-from risk_policy import evaluate_risk_overlay, load_risk_overlay_config
+from risk_policy import evaluate_risk_overlay, load_risk_overlay_config, evaluate_portfolio_constraints
 from plan_spec import PlanSpec, generate_plan_id, build_yaml, save_plan_spec
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -467,13 +467,27 @@ async def run_plan(
     ii = _db_archivelog.get("important_indicators")
     event_masters = safe_db(list_event_masters) or []
     stop_loss = cfg.stop_loss_pct[h]
-    risk_overlay = evaluate_risk_overlay(ii, stop_loss, event_masters, overlay_cfg)
+    risk_overlay = evaluate_risk_overlay(ii, stop_loss, event_masters, overlay_cfg, horizon=h.value)
     print(f"  Risk Overlay: regime={risk_overlay.regime_state.value}(cap={risk_overlay.regime_cap})"
           f" event_cap={risk_overlay.event_cap} combined={risk_overlay.combined_cap}"
           f" new_entry={'OK' if risk_overlay.allow_new_entry else 'BLOCKED'}"
           f" shadow={risk_overlay.shadow_mode}")
     if risk_overlay.blocked_reason:
         print(f"    blocked: {risk_overlay.blocked_reason}")
+    if risk_overlay.override_reason:
+        print(f"    override: {risk_overlay.override_reason}")
+
+    # --- 4.6 ポートフォリオレベル制約 ---
+    all_holdings = safe_db(list_holdings) or []
+    portfolio_constraints = evaluate_portfolio_constraints(
+        all_holdings, budget_total_jpy, risk_overlay.regime_state,
+        overlay_cfg, usd_jpy_rate=usd_jpy_rate,
+    )
+    print(f"  Portfolio: gross={portfolio_constraints.portfolio_gross_jpy:,}円"
+          f" ({portfolio_constraints.portfolio_gross_ratio:.1%})"
+          f" remaining={portfolio_constraints.portfolio_remaining_jpy:,}円"
+          f" positions={portfolio_constraints.active_position_count}"
+          f" new_allowed={'OK' if portfolio_constraints.new_position_allowed else 'BLOCKED'}")
 
     # --- 5. ポジションサイジング ---
     pos_size = calc_position_size(budget_total_jpy, float(risk_limit.rstrip('%')) if risk_limit.endswith('%') else risk_jpy / budget_total_jpy * 100, stop_loss, existing_investment_jpy=existing_investment_jpy)
@@ -494,6 +508,8 @@ async def run_plan(
     risk_adjusted = apply_risk_overlay(
         allocation, risk_overlay, current_price, market,
         usd_jpy_rate=usd_jpy_rate, is_new_entry=is_new_entry,
+        budget_total_jpy=budget_total_jpy, stop_loss_pct=stop_loss,
+        portfolio_constraints=portfolio_constraints,
     )
     if not risk_overlay.shadow_mode:
         from plan_calc import AllocationResult
@@ -594,6 +610,18 @@ async def run_plan(
         risk_overlay_days_to_event=risk_overlay.days_to_event,
         risk_overlay_event_tier=risk_overlay.event_tier.value,
         risk_overlay_event_pressure=risk_overlay.event_pressure,
+        risk_overlay_max_risk_bps=risk_adjusted.max_risk_bps,
+        risk_overlay_bps_limit_jpy=risk_adjusted.bps_limit_jpy,
+        risk_overlay_event_state=risk_overlay.event_state.value,
+        risk_overlay_allow_hold_through=risk_overlay.allow_hold_through_event,
+        risk_overlay_post_event_cooldown=risk_overlay.post_event_cooldown_days,
+        risk_overlay_override_reason=risk_overlay.override_reason,
+        risk_overlay_portfolio_gross_jpy=portfolio_constraints.portfolio_gross_jpy,
+        risk_overlay_portfolio_remaining_jpy=risk_adjusted.portfolio_remaining_jpy,
+        risk_overlay_active_positions=portfolio_constraints.active_position_count,
+        risk_overlay_max_new_positions=portfolio_constraints.max_new_positions,
+        risk_overlay_new_position_allowed=portfolio_constraints.new_position_allowed,
+        risk_overlay_commentary_tags=risk_overlay.commentary_tags,
     )
 
     # BLOCK / STALE / RR_TOO_LOW の場合はプランを差し替え + Discord 通知

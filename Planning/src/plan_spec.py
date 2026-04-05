@@ -95,6 +95,18 @@ class PlanSpec:
     risk_overlay_days_to_event: int | None = None
     risk_overlay_event_tier: str = "NONE"
     risk_overlay_event_pressure: float | None = None
+    risk_overlay_max_risk_bps: int = 50
+    risk_overlay_bps_limit_jpy: int | None = None
+    risk_overlay_event_state: str = "NO_EVENT"
+    risk_overlay_allow_hold_through: bool = True
+    risk_overlay_post_event_cooldown: int = 1
+    risk_overlay_override_reason: str | None = None
+    risk_overlay_portfolio_gross_jpy: int = 0
+    risk_overlay_portfolio_remaining_jpy: int | None = None
+    risk_overlay_active_positions: int = 0
+    risk_overlay_max_new_positions: int | None = None
+    risk_overlay_new_position_allowed: bool = True
+    risk_overlay_commentary_tags: list[str] = field(default_factory=list)
 
 
 def generate_plan_id(ticker: str, seq: int) -> str:
@@ -195,6 +207,20 @@ def build_yaml(spec: PlanSpec) -> str:
                 ("tier", spec.risk_overlay_event_tier),
                 *([("event_pressure", spec.risk_overlay_event_pressure)] if spec.risk_overlay_event_pressure is not None else []),
             )),
+            ("max_risk_bps", spec.risk_overlay_max_risk_bps),
+            *([("bps_limit_jpy", spec.risk_overlay_bps_limit_jpy)] if spec.risk_overlay_bps_limit_jpy is not None else []),
+            ("event_state", spec.risk_overlay_event_state),
+            ("allow_hold_through_event", spec.risk_overlay_allow_hold_through),
+            ("post_event_cooldown_days", spec.risk_overlay_post_event_cooldown),
+            *([("override_reason", spec.risk_overlay_override_reason)] if spec.risk_overlay_override_reason else []),
+            ("portfolio", _ordered_dict(
+                ("gross_jpy", spec.risk_overlay_portfolio_gross_jpy),
+                *([("remaining_jpy", spec.risk_overlay_portfolio_remaining_jpy)] if spec.risk_overlay_portfolio_remaining_jpy is not None else []),
+                ("active_positions", spec.risk_overlay_active_positions),
+                *([("max_new_positions", spec.risk_overlay_max_new_positions)] if spec.risk_overlay_max_new_positions is not None else []),
+                ("new_position_allowed", spec.risk_overlay_new_position_allowed),
+            )),
+            *([("commentary_tags", spec.risk_overlay_commentary_tags)] if spec.risk_overlay_commentary_tags else []),
         )),
         ("portfolio_plan", _ordered_dict(
             ("budget_total_jpy", spec.budget_total_jpy),

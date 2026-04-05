@@ -31,6 +31,27 @@ class EventTier(Enum):
     NONE = "NONE"
 
 
+class EventState(Enum):
+    NO_EVENT = "NO_EVENT"
+    PRE_EARNINGS = "PRE_EARNINGS"
+    PRE_MACRO = "PRE_MACRO"
+    EVENT_DAY = "EVENT_DAY"
+
+
+@dataclass
+class EventRiskResult:
+    event_cap: float = 1.0
+    allow_new_entry: bool = True
+    blocked_reason: str | None = None
+    event_name: str | None = None
+    days_to_event: int | None = None
+    event_tier: EventTier = EventTier.NONE
+    event_pressure: float | None = None
+    override_reason: str | None = None
+    event_state: EventState = EventState.NO_EVENT
+    allow_hold_through_event: bool = True
+
+
 @dataclass
 class RiskOverlayConfig:
     shadow_mode: bool = True
@@ -51,6 +72,9 @@ class RiskOverlayConfig:
     ep_band_1: float = 0.7
     ep_band_2: float = 1.0
     ep_band_3: float = 1.3
+    post_event_cooldown_days: int = 1
+    stress_max_new_positions: int = 1
+    crisis_max_new_positions: int = 0
 
 
 DEFAULT_RISK_OVERLAY_CONFIG = RiskOverlayConfig()
@@ -70,6 +94,12 @@ class RiskOverlay:
     days_to_event: int | None
     event_tier: EventTier
     event_pressure: float | None
+    max_risk_bps: int = 50
+    override_reason: str | None = None
+    event_state: EventState = EventState.NO_EVENT
+    allow_hold_through_event: bool = True
+    post_event_cooldown_days: int = 1
+    commentary_tags: list[str] = field(default_factory=list)
     signals: dict = field(default_factory=dict)
 
 
@@ -108,6 +138,9 @@ def load_risk_overlay_config(db_config: dict | None) -> RiskOverlayConfig:
         ep_band_1=_g("ep_band_1", 0.7),
         ep_band_2=_g("ep_band_2", 1.0),
         ep_band_3=_g("ep_band_3", 1.3),
+        post_event_cooldown_days=_g("post_event_cooldown_days", 1),
+        stress_max_new_positions=_g("stress_max_new_positions", 1),
+        crisis_max_new_positions=_g("crisis_max_new_positions", 0),
     )
 
 
@@ -176,29 +209,29 @@ def evaluate_event_risk(
     stop_loss_pct: float,
     event_masters: list[dict],
     config: RiskOverlayConfig | None = None,
-) -> tuple[float, bool, str | None, str | None, int | None, EventTier, float | None]:
+    horizon: str | None = None,
+) -> EventRiskResult:
     """EventRisk を評価する。
 
-    Returns:
-        (event_cap, allow_new_entry, blocked_reason,
-         event_name, days_to_event, event_tier, event_pressure)
+    horizon が MID/LONG の場合、「停止」→「縮小」に緩和する Override を適用する。
     """
     cfg = config or DEFAULT_RISK_OVERLAY_CONFIG
-    none_result = (1.0, True, None, None, None, EventTier.NONE, None)
+    _is_long_horizon = horizon in ("MID", "LONG")
 
     if not event_risk or not isinstance(event_risk, dict):
-        return none_result
+        return EventRiskResult()
 
     event_name = event_risk.get("nearest_event")
     days_to_event = event_risk.get("days_to_event")
     implied_move = event_risk.get("implied_move_pct")
 
     if event_name is None or days_to_event is None:
-        return none_result
+        return EventRiskResult()
 
     event_cap = 1.0
     allow_new_entry = True
     blocked_reason = None
+    override_reason = None
 
     matched = _match_event_master(event_name, event_masters)
     importance = (matched.get("importance") or "").lower() if matched else ""
@@ -209,10 +242,16 @@ def evaluate_event_risk(
     else:
         event_tier = EventTier.NONE
 
-    if _is_earnings_event(event_name):
+    is_earnings = _is_earnings_event(event_name)
+
+    if is_earnings:
         if days_to_event <= cfg.earnings_freeze_days:
-            allow_new_entry = False
-            blocked_reason = f"決算まで{days_to_event}営業日（freeze閾値: {cfg.earnings_freeze_days}日）"
+            if _is_long_horizon:
+                event_cap = min(event_cap, 0.5)
+                override_reason = f"中長期 Override: 決算freeze → cap=0.5（horizon={horizon}）"
+            else:
+                allow_new_entry = False
+                blocked_reason = f"決算まで{days_to_event}営業日（freeze閾値: {cfg.earnings_freeze_days}日）"
         elif days_to_event <= cfg.earnings_reduce_days:
             event_cap = min(event_cap, cfg.earnings_reduce_cap)
 
@@ -225,16 +264,44 @@ def evaluate_event_risk(
     if implied_move is not None and stop_loss_pct != 0:
         event_pressure = round(implied_move / abs(stop_loss_pct), 4)
         if event_pressure > cfg.ep_band_3:
-            allow_new_entry = False
-            if blocked_reason is None:
-                blocked_reason = f"event_pressure={event_pressure:.2f} > {cfg.ep_band_3}（損切り幅超過）"
+            if _is_long_horizon:
+                event_cap = min(event_cap, 0.3)
+                if override_reason is None:
+                    override_reason = f"中長期 Override: pressure block → cap=0.3（horizon={horizon}）"
+            else:
+                allow_new_entry = False
+                if blocked_reason is None:
+                    blocked_reason = f"event_pressure={event_pressure:.2f} > {cfg.ep_band_3}（損切り幅超過）"
         elif event_pressure > cfg.ep_band_2:
             event_cap = min(event_cap, 0.5)
         elif event_pressure > cfg.ep_band_1:
             event_cap = min(event_cap, 0.75)
 
-    return (event_cap, allow_new_entry, blocked_reason,
-            event_name, days_to_event, event_tier, event_pressure)
+    if days_to_event == 0:
+        event_state = EventState.EVENT_DAY
+    elif is_earnings and days_to_event <= cfg.earnings_reduce_days:
+        event_state = EventState.PRE_EARNINGS
+    elif event_tier in (EventTier.TIER1, EventTier.TIER2) and days_to_event <= 3:
+        event_state = EventState.PRE_MACRO
+    else:
+        event_state = EventState.NO_EVENT
+
+    allow_hold_through_event = True
+    if not _is_long_horizon and is_earnings and days_to_event <= cfg.earnings_freeze_days:
+        allow_hold_through_event = False
+
+    return EventRiskResult(
+        event_cap=event_cap,
+        allow_new_entry=allow_new_entry,
+        blocked_reason=blocked_reason,
+        event_name=event_name,
+        days_to_event=days_to_event,
+        event_tier=event_tier,
+        event_pressure=event_pressure,
+        override_reason=override_reason,
+        event_state=event_state,
+        allow_hold_through_event=allow_hold_through_event,
+    )
 
 
 def evaluate_risk_overlay(
@@ -242,6 +309,7 @@ def evaluate_risk_overlay(
     stop_loss_pct: float,
     event_masters: list[dict],
     config: RiskOverlayConfig | None = None,
+    horizon: str | None = None,
 ) -> RiskOverlay:
     """MarketRegime + EventRisk を統合評価する。"""
     cfg = config or DEFAULT_RISK_OVERLAY_CONFIG
@@ -256,40 +324,135 @@ def evaluate_risk_overlay(
         market_data, breadth_pct, cfg,
     )
 
-    (event_cap, allow_new_entry, blocked_reason,
-     event_name, days_to_event, event_tier, event_pressure) = evaluate_event_risk(
-        event_risk, stop_loss_pct, event_masters, cfg,
+    er = evaluate_event_risk(
+        event_risk, stop_loss_pct, event_masters, cfg, horizon=horizon,
     )
+
+    allow_new_entry = er.allow_new_entry
+    blocked_reason = er.blocked_reason
 
     if regime_state == RegimeState.CRISIS:
         allow_new_entry = False
         if blocked_reason is None:
             blocked_reason = "CRISIS: 新規エントリー停止"
+        max_risk_bps = cfg.crisis_max_risk_bps
+    elif regime_state == RegimeState.STRESS:
+        max_risk_bps = cfg.stress_max_risk_bps
+    else:
+        max_risk_bps = cfg.normal_max_risk_bps
 
-    combined_cap = regime_cap * event_cap
+    combined_cap = regime_cap * er.event_cap
 
     signals = {}
     if market_data and isinstance(market_data, dict):
         signals["vix"] = market_data.get("vix")
         signals["us_10y_yield"] = market_data.get("us_10y_yield")
     signals["breadth_pct"] = breadth_pct
+    signals["nearest_event"] = er.event_name
+    signals["days_to_event"] = er.days_to_event
     if event_risk and isinstance(event_risk, dict):
-        signals["nearest_event"] = event_risk.get("nearest_event")
-        signals["days_to_event"] = event_risk.get("days_to_event")
         signals["implied_move_pct"] = event_risk.get("implied_move_pct")
+
+    tags: list[str] = []
+    if regime_state in (RegimeState.STRESS, RegimeState.CRISIS):
+        tags.append("high_systematic_risk")
+    if er.event_state == EventState.PRE_EARNINGS:
+        tags.append("binary_event_near")
+    if er.event_pressure is not None and er.event_pressure > cfg.ep_band_2:
+        tags.append("event_pressure_elevated")
+    if force_scale_in:
+        tags.append("scale_in_forced")
+    if not allow_new_entry:
+        tags.append("entry_blocked")
 
     return RiskOverlay(
         regime_state=regime_state,
         regime_cap=regime_cap,
-        event_cap=event_cap,
+        event_cap=er.event_cap,
         combined_cap=round(combined_cap, 4),
         allow_new_entry=allow_new_entry,
         force_scale_in=force_scale_in,
         shadow_mode=cfg.shadow_mode,
         blocked_reason=blocked_reason,
-        event_name=event_name,
-        days_to_event=days_to_event,
-        event_tier=event_tier,
-        event_pressure=event_pressure,
+        event_name=er.event_name,
+        days_to_event=er.days_to_event,
+        event_tier=er.event_tier,
+        event_pressure=er.event_pressure,
+        max_risk_bps=max_risk_bps,
+        override_reason=er.override_reason,
+        event_state=er.event_state,
+        allow_hold_through_event=er.allow_hold_through_event,
+        post_event_cooldown_days=cfg.post_event_cooldown_days,
+        commentary_tags=tags,
         signals=signals,
+    )
+
+
+# ═══════════════════════════════════════════════════════
+# ポートフォリオレベル制約
+# ═══════════════════════════════════════════════════════
+
+@dataclass
+class PortfolioConstraints:
+    portfolio_gross_jpy: int
+    portfolio_gross_ratio: float
+    portfolio_gross_cap: float
+    portfolio_remaining_jpy: int
+    active_position_count: int
+    max_new_positions: int | None
+    new_position_allowed: bool
+
+
+def evaluate_portfolio_constraints(
+    holdings: list[dict],
+    budget_total_jpy: int,
+    regime_state: RegimeState,
+    config: RiskOverlayConfig | None = None,
+    usd_jpy_rate: float | None = None,
+) -> PortfolioConstraints:
+    """現在の保有銘柄から、ポートフォリオレベルの制約を計算する。"""
+    cfg = config or DEFAULT_RISK_OVERLAY_CONFIG
+
+    gross_jpy = 0
+    active_count = 0
+    rate = usd_jpy_rate or 1.0
+
+    for h in (holdings or []):
+        shares = h.get("shares", 0) or 0
+        if shares <= 0:
+            continue
+        active_count += 1
+        price = h.get("current_price", 0) or 0
+        market = (h.get("market") or "JP").upper()
+        if market == "US":
+            gross_jpy += int(shares * price * rate)
+        else:
+            gross_jpy += int(shares * price)
+
+    if regime_state == RegimeState.CRISIS:
+        portfolio_gross_cap = cfg.crisis_portfolio_cap
+        max_new_positions = cfg.crisis_max_new_positions
+    elif regime_state == RegimeState.STRESS:
+        portfolio_gross_cap = cfg.stress_portfolio_cap
+        max_new_positions = cfg.stress_max_new_positions
+    else:
+        portfolio_gross_cap = 1.0
+        max_new_positions = None
+
+    gross_ratio = gross_jpy / budget_total_jpy if budget_total_jpy > 0 else 0.0
+    max_gross_jpy = int(budget_total_jpy * portfolio_gross_cap)
+    remaining_jpy = max(0, max_gross_jpy - gross_jpy)
+
+    new_position_allowed = True
+    if max_new_positions is not None and active_count >= max_new_positions:
+        new_position_allowed = False
+
+    return PortfolioConstraints(
+        portfolio_gross_jpy=gross_jpy,
+        portfolio_gross_ratio=round(gross_ratio, 4),
+        portfolio_gross_cap=portfolio_gross_cap,
+        portfolio_remaining_jpy=remaining_jpy,
+        active_position_count=active_count,
+        max_new_positions=max_new_positions,
+        new_position_allowed=new_position_allowed,
     )

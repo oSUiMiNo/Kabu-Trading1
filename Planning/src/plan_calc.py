@@ -370,6 +370,9 @@ class RiskAdjustedResult:
     final_quantity: int
     blocked: bool
     blocked_reason: str | None
+    max_risk_bps: int = 50
+    bps_limit_jpy: int | None = None
+    portfolio_remaining_jpy: int | None = None
 
 
 def apply_risk_overlay(
@@ -379,6 +382,9 @@ def apply_risk_overlay(
     market: Market,
     usd_jpy_rate: float | None = None,
     is_new_entry: bool = True,
+    budget_total_jpy: int = 0,
+    stop_loss_pct: float = 0,
+    portfolio_constraints: "PortfolioConstraints | None" = None,
 ) -> RiskAdjustedResult:
     """Risk Overlay の制約を AllocationResult に適用する。
 
@@ -398,7 +404,20 @@ def apply_risk_overlay(
             blocked_reason=None,
         )
 
-    blocked = not risk_overlay.allow_new_entry and is_new_entry
+    max_risk_bps = risk_overlay.max_risk_bps
+
+    # ブロック判定（overlay + ポートフォリオ制約を統合）
+    blocked = False
+    blocked_reason = None
+    if not risk_overlay.allow_new_entry and is_new_entry:
+        blocked = True
+        blocked_reason = risk_overlay.blocked_reason
+    elif portfolio_constraints is not None and is_new_entry and not portfolio_constraints.new_position_allowed:
+        blocked = True
+        blocked_reason = "ポートフォリオ新規建て上限超過"
+
+    portfolio_remaining_jpy = portfolio_constraints.portfolio_remaining_jpy if portfolio_constraints else None
+
     if blocked:
         return RiskAdjustedResult(
             base_size_jpy=base_jpy,
@@ -408,10 +427,21 @@ def apply_risk_overlay(
             final_size_jpy=0,
             final_quantity=0,
             blocked=True,
-            blocked_reason=risk_overlay.blocked_reason,
+            blocked_reason=blocked_reason,
+            max_risk_bps=max_risk_bps,
+            portfolio_remaining_jpy=portfolio_remaining_jpy,
         )
 
     final_jpy = int(base_jpy * risk_overlay.combined_cap)
+
+    bps_limit_jpy = None
+    if budget_total_jpy > 0 and stop_loss_pct != 0:
+        max_risk_jpy = budget_total_jpy * max_risk_bps / 10_000
+        bps_limit_jpy = int(max_risk_jpy / abs(stop_loss_pct / 100))
+        final_jpy = min(final_jpy, bps_limit_jpy)
+
+    if portfolio_remaining_jpy is not None:
+        final_jpy = min(final_jpy, portfolio_remaining_jpy)
 
     lot = LOT_SIZE[market]
     if current_price <= 0:
@@ -434,4 +464,7 @@ def apply_risk_overlay(
         final_quantity=final_qty,
         blocked=False,
         blocked_reason=None,
+        max_risk_bps=max_risk_bps,
+        bps_limit_jpy=bps_limit_jpy,
+        portfolio_remaining_jpy=portfolio_remaining_jpy,
     )
