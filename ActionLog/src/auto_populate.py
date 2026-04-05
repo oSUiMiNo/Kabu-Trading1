@@ -192,7 +192,7 @@ def _insert_with_calc(
         log_shares_after = log_shares - new_quantity
     else:
         log_shares_after = log_shares + new_quantity
-    total_shares = holding_shares + log_shares_after
+    total_shares = log_shares_after
 
     price = float(row.get("price") or 0)
     if is_us:

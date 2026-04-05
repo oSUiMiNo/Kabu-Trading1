@@ -188,6 +188,11 @@ def populate_existing_archives(ticker: str) -> int:
     for arc in archives:
         if arc["id"] in existing_ids:
             continue
+
+        mon = arc.get("monitor") or {}
+        if isinstance(mon, dict) and mon.get("result") == "ERROR":
+            continue
+
         action_date = arc["created_at"][:10] if arc.get("created_at") else None
 
         tech = arc.get("technical") or {}
@@ -196,7 +201,7 @@ def populate_existing_archives(ticker: str) -> int:
             ticker=ticker,
             archive_id=arc["id"],
             newplan_full=arc.get("newplan_full"),
-            monitor_data=arc.get("monitor") or {},
+            monitor_data=mon,
             action_date=action_date,
             fallback_market=watchlist_market,
             fallback_usd_jpy_rate=arc_rate or fallback_usd_jpy,
