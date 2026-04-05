@@ -17,6 +17,8 @@ from supabase_client import (
     list_action_logs,
     list_all_action_logs,
     update_action_log,
+    get_archivelog_by_id,
+    get_holding,
 )
 from llm_client import call_glm
 
@@ -111,6 +113,8 @@ def _build_story_prompt(
     handoff_text: str | None,
     previous_stories: list[dict],
     current_row: dict,
+    monitor_summary: str = "",
+    holding: dict | None = None,
 ) -> str:
     """ストーリー生成サブエージェントに渡すプロンプトを構築する。"""
     lines = [f"銘柄: {ticker}", ""]
@@ -126,6 +130,25 @@ def _build_story_prompt(
             action = s.get("action_text", "")
             story = s.get("story", "")
             lines.append(f"- {date} [{action}]: {story}")
+        lines.append("")
+
+    if monitor_summary:
+        lines.append(f"議論サマリー（専門的な内容なので初心者向けに噛み砕いて）: {monitor_summary}")
+        lines.append("")
+
+    h = holding or {}
+    shares = int(h.get("shares") or 0)
+    avg_cost = float(h.get("avg_cost") or 0)
+    total_assets = current_row.get("total_assets")
+    cumulative = current_row.get("cumulative_invested")
+    if shares > 0:
+        lines.append("現在の保有状況:")
+        lines.append(f"- 保有株数: {shares}株")
+        lines.append(f"- 平均取得単価: {avg_cost:,.2f}")
+        if total_assets is not None:
+            lines.append(f"- 総資産評価額: {int(float(total_assets)):,}円")
+        if cumulative is not None:
+            lines.append(f"- 累計投資額: {int(float(cumulative)):,}円")
         lines.append("")
 
     lines.append("今回の行の情報:")
@@ -187,7 +210,22 @@ async def generate_story(
         if r.get("story"):
             previous_stories.append(r)
 
-    prompt = _build_story_prompt(ticker, handoff_text, previous_stories, current_row)
+    monitor_summary = ""
+    archive_id = current_row.get("archive_id")
+    if archive_id:
+        arc = safe_db(get_archivelog_by_id, archive_id)
+        if arc:
+            mon = arc.get("monitor") or {}
+            if isinstance(mon, dict):
+                monitor_summary = mon.get("summary", "") or ""
+
+    holding = safe_db(get_holding, ticker) or {}
+
+    prompt = _build_story_prompt(
+        ticker, handoff_text, previous_stories, current_row,
+        monitor_summary=monitor_summary,
+        holding=holding,
+    )
     file_path = str(_COMMANDS_DIR / "story-generator.md")
 
     result = await call_glm(prompt, file_path=file_path, model="glm-4.7")
