@@ -12,7 +12,6 @@ provider: glm
 
 # Final Judge
 
-あなたはサブエージェントとして呼び出されている。
 `logs/` にある **各 set の judge 結果** を読み、**銘柄ごとの最終判断を1つ**にまとめた final_judge ログを **テキスト応答として出力**する。
 
 この Final Judge の役割は、厳密な再監査ではなく、**set ごとの judge を比較・集約して、最終支持側を決めること**である。
@@ -48,11 +47,6 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
 - 同一 set に複数ある場合は **最大K（最新）** を採用する
 - Final Judge は **judge ファイルのみ** を扱う
 
----
-
-## 情報源の優先順位
-1. judge の **EXPORT（yaml）**
-2. judge 本文
 
 ---
 
@@ -113,92 +107,26 @@ supported_side は `BUY` / `SELL` / `ADD` / `REDUCE` / `HOLD` の5択。
   - `null`
 - 最終 supported_side が `HOLD` で、主因が同点・割れ・情報不足なら、**55 を上限の目安**とする
 
-### 6. 根拠のまとめ方
+### 5. 根拠のまとめ方
 - **最終 supported_side を支持する理由のみ**を 3〜6 個にまとめる
 - 反対側の理由は reasons に含めない（対立点は `conflicts` に書く）
 - 推測しない
 
-### 7. 主要リスク
+### 6. 主要リスク
 - 各 risk に **どの投資行動の観点から見たリスクか（side）** を明記する
 - 各 set の `major_risks` から、**共通または重要なもの**を最大5個に統合する
 
-### 8. スタンス変更条件
+### 7. スタンス変更条件
 - 各 set の `flip_conditions` から、**共通または重要なもの**を最大5個に統合する
 
-### 9. データ制限
+### 8. データ制限
 - 各 set の `data_limits` から、**共通または重要なもの**を最大5個に統合する
 
 ---
 
-## 出力方法
-- ファイルへの書き込みは不要
-- 結果は **テキスト応答として出力**する
-- オーケストレーターが応答テキストをログファイルに書き出す
+## 出力
 
----
-
-## 最終判定ログの出力フォーマット（必須）
-
-# 最終判定ログ: {TICKER}
-
-## 入力（検出済み）
-- 対象 set: [set番号のリスト]
-- judgeファイル:
-  - set{N}: "{judgeファイル名}"
-  - set{N}: "{judgeファイル名}"
-
----
-
-## set別判定
-### set{N}
-- 一致度: AGREED | DISAGREED | INCOMPLETE
-- 支持側: BUY | SELL | ADD | REDUCE | HOLD | null
-- 確信度: {0-100|null}
-- 一行要約: "{judgeの要約}"
-- 補足: "{必要なら短く}"
-
-### set{N}
-- 一致度: AGREED | DISAGREED | INCOMPLETE
-- 支持側: BUY | SELL | ADD | REDUCE | HOLD | null
-- 確信度: {0-100|null}
-- 一行要約: "{judgeの要約}"
-- 補足: "{必要なら短く}"
-
----
-
-## 投票集計
-- 対象: 全 set の全 opinion（INCOMPLETE の set を除く）
-- 集計: {BUY: N, SELL: N, ADD: N, REDUCE: N, HOLD: N}
-
-## 最終判定
-- 支持側（表示）: **BUY** / **SELL** / **ADD** / **REDUCE** / **HOLD**
-- 支持側（機械）: BUY | SELL | ADD | REDUCE | HOLD
-- 判定ルール: {全会一致 | 最多票 | 同点→HOLD}
-- 総合一致度: **AGREED_STRONG** | **MIXED** | **INCOMPLETE**
-- 総合確信度: {0-100|null}
-
-## 根拠
-- 3〜6個
-- **最終判定を支持する理由のみ**
-- 各項目に set 由来を付ける
-- 形式: "{主張の要約}（set: set{N}）"
-
-## 主要リスク
-- 最大5個
-- 各項目に **どの投資行動の観点か（side）** を付ける
-- 形式: "{リスクの要約}（side: {HOLD|BUY|...}）"
-
-## スタンス変更条件
-- 最大5個
-
-## データ制限
-- 最大5個
-
-## 対立点（MIXED / INCOMPLETE の場合のみ）
-- 2〜4個
-- どこで割れているか、何が不足しているかを短く書く
-
----
+EXPORT yaml ブロックのみを応答テキストとして出力する。ファイルは作成しない。
 
 ## EXPORT（yaml）
 

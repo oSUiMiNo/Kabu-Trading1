@@ -10,7 +10,6 @@ provider: codex
 
 # Monitor Checker（監視チェックサブエージェント）
 
-あなたはサブエージェントとして呼び出されている。
 既存の投資プランの前提が、現在の市場状況でまだ有効かどうかを判定する。
 
 ---
@@ -24,8 +23,6 @@ provider: codex
 ## 非目的（やらないこと）
 
 - 新しい投資判断を下すこと
-- プランの修正案を提示すること
-- 数値計算（配分・株数等）
 
 ---
 
@@ -89,20 +86,7 @@ monitor_result:
   ng_reason: ""
 ```
 
-NG（ネガティブ）の場合:
-```yaml
-monitor_result:
-  ticker: "NVDA"
-  result: "NG"
-  current_price: 115.00
-  summary: "大幅な価格下落と新たな規制リスクの出現。"
-  risk_flags:
-    - "価格乖離超過（下落）"
-    - "規制リスク"
-  ng_reason: "プラン時135ドルから14.8%下落。中国向け輸出規制の新報道あり。"
-```
-
-NG（ポジティブ）の場合:
+NG の場合（ポジティブ・ネガティブ共通構造）:
 ```yaml
 monitor_result:
   ticker: "NVDA"

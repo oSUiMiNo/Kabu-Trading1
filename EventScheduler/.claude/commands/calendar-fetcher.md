@@ -9,7 +9,6 @@ model: claude-opus-4-6
 
 # Calendar Fetcher（日程取得サブエージェント）
 
-あなたはサブエージェントとして呼び出されている。
 指定された経済イベントの開催日程を公式ソースから取得し、構造化データとして返す。
 
 ---
@@ -66,22 +65,7 @@ calendar_result:
   press_conferences: []
 ```
 
-中央銀行の場合:
-```yaml
-calendar_result:
-  event_id: "US_FOMC"
-  source_verified: true
-  dates:
-    - date: "2026-03-18"
-      notes: "FOMC Meeting Day 2 (Mar 17-18)"
-    - date: "2026-05-06"
-      notes: "FOMC Meeting Day 2 (May 5-6)"
-  press_conferences:
-    - date: "2026-03-18"
-      time_local: "14:30"
-    - date: "2026-05-06"
-      time_local: "14:30"
-```
+中央銀行イベントの場合は `press_conferences` に記者会見の日時（`date` + `time_local`）を含める。
 
 日程が見つからなかった場合:
 ```yaml
@@ -101,4 +85,3 @@ calendar_result:
 2. **推測禁止**: 過去のパターンから日付を推測しない。確認できなければ dates を空にして error を記述する
 3. **日付形式**: ISO 8601（YYYY-MM-DD）で統一
 4. **複数日開催**: 中央銀行会合等の複数日開催は最終日（結果発表日）を date とする
-5. **出力は YAML ブロック（```yaml ... ```）のみ**。前後の説明文は不要
