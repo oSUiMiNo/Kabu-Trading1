@@ -199,12 +199,15 @@ async def run_pipeline(
         error_names = [dn_map.get(t, t) for t in error_tickers]
         if error_tickers and not ok_tickers:
             title = f"{market_name} 全銘柄エラー"
+            summary_label = NotifyLabel.ERROR
         elif error_tickers:
             title = f"{market_name} チェック完了（一部エラー）"
+            summary_label = NotifyLabel.COMPLETE
         else:
             title = f"{market_name} 全銘柄OK"
+            summary_label = NotifyLabel.COMPLETE
         payload = NotifyPayload(
-            label=NotifyLabel.COMPLETE,
+            label=summary_label,
             ticker=title,
             monitor_data={"tickers": ok_names, "error_tickers": error_names},
             event_context=event_context,
