@@ -213,23 +213,77 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(**kwargs)
 
 
-def _detect_provider(file_path: str | Path | None) -> tuple[str, str | None]:
-    """エージェント定義ファイルから provider と model を読み取る。"""
-    file_provider = None
+_CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config"
+_llm_providers_cache: dict[str, str] | None = None
+_SHARED_DIR = str(Path(__file__).resolve().parent.parent.parent / "shared")
+if _SHARED_DIR not in sys.path:
+    sys.path.insert(0, _SHARED_DIR)
+from agent_util import (  # noqa: E402
+    LLMQuotaError,
+    _is_quota_error,
+    _notify_quota_limit,
+)
+
+
+def _notify_unconfigured_provider(agent_name: str) -> None:
+    """provider 未設定のエージェントについて Discord に通知する。"""
+    try:
+        from discord_notifier import send_webhook
+        embed = {
+            "title": "⚙️ LLM Provider 未設定",
+            "description": (
+                f"エージェント **{agent_name}** の provider が "
+                f"`config/portfolio_config.yml` に設定されていません。\n"
+                f"LLMの設定をしてください。"
+            ),
+            "color": 0xFFA500,
+        }
+        send_webhook(embed)
+    except Exception as e:
+        print(f"  [通知] provider 未設定の Discord 通知に失敗: {e}")
+
+
+def _load_llm_providers() -> dict[str, str]:
+    """portfolio_config.yml の llm_providers セクションを読み込む（キャッシュ付き）。"""
+    global _llm_providers_cache
+    if _llm_providers_cache is not None:
+        return _llm_providers_cache
+    config_path = _CONFIG_DIR / "portfolio_config.yml"
+    if config_path.exists():
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        _llm_providers_cache = data.get("llm_providers") or {}
+    else:
+        _llm_providers_cache = {}
+    return _llm_providers_cache
+
+
+def _detect_provider(file_path: str | Path | None) -> tuple[str | None, str | None]:
+    """
+    エージェントの LLM プロバイダーと model を決定する。
+
+    provider は portfolio_config.yml の llm_providers のみで決定する。
+    yaml に未記載のエージェントは None を返す（呼び出し側でエラー処理）。
+    model は .md ファイルの frontmatter から読み取る。
+    """
     file_model = None
+    provider = None
+
     if file_path:
+        agent_name = Path(file_path).stem
+        providers_map = _load_llm_providers()
+        provider = providers_map.get(agent_name)
+
         try:
             content = Path(file_path).read_text(encoding="utf-8")
             if content.startswith("---"):
                 end_idx = content.find("---", 3)
                 if end_idx != -1:
                     fm = yaml.safe_load(content[3:end_idx].strip()) or {}
-                    file_provider = fm.get("provider")
                     file_model = fm.get("model")
         except Exception:
             pass
-    provider = (file_provider or os.environ.get("ANALYZER_LLM_PROVIDER", "claude")).lower()
-    return provider, str(file_model) if file_model else None
+
+    return provider.lower() if provider else None, str(file_model) if file_model else None
 
 
 async def call_agent(
@@ -244,23 +298,37 @@ async def call_agent(
     """
     プロンプトを受け取り、LLMに渡して応答を表示し、結果を返す。
 
-    provider の決定順:
-      1. .md ファイルの provider フィールド（エージェント単位の切り替え）
-      2. ANALYZER_LLM_PROVIDER 環境変数（グローバル切り替え）
-      3. デフォルト "claude"
+    provider は portfolio_config.yml の llm_providers で決定する。
+    未記載のエージェントは Discord 通知を送信し RuntimeError を送出する。
     """
     _provider, _file_model = _detect_provider(file_path)
+
+    if _provider is None:
+        agent_name = Path(file_path).stem if file_path else "(unknown)"
+        _notify_unconfigured_provider(agent_name)
+        raise RuntimeError(
+            f"エージェント '{agent_name}' の provider が portfolio_config.yml に未設定です。"
+            f" llm_providers セクションに追加してください。"
+        )
+
+    _agent_name = Path(file_path).stem if file_path else "(unknown)"
 
     if _provider == "codex":
         _shared = str(Path(__file__).resolve().parent.parent.parent / "shared")
         if _shared not in sys.path:
             sys.path.insert(0, _shared)
         from llm_client import call_codex as _call_codex
-        _r = await _call_codex(
-            messages, file_path=file_path,
-            show_prompt=show_prompt, show_response=show_response,
-            show_cost=show_cost, show_tools=show_tools,
-        )
+        try:
+            _r = await _call_codex(
+                messages, file_path=file_path,
+                show_prompt=show_prompt, show_response=show_response,
+                show_cost=show_cost, show_tools=show_tools,
+            )
+        except Exception as e:
+            if _is_quota_error(e):
+                _notify_quota_limit(_provider, _agent_name, e)
+                raise LLMQuotaError(_provider, _agent_name, e) from e
+            raise
         return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
 
     if _provider == "glm":
@@ -269,11 +337,17 @@ async def call_agent(
             sys.path.insert(0, _shared)
         from llm_client import call_glm_agent as _call_glm_agent
         _glm_model = _file_model or os.environ.get("ANALYZER_GLM_MODEL", "glm-4.7-flash")
-        _r = await _call_glm_agent(
-            messages, file_path=file_path, model=_glm_model,
-            show_options=show_options, show_prompt=show_prompt,
-            show_response=show_response, show_cost=show_cost, show_tools=show_tools,
-        )
+        try:
+            _r = await _call_glm_agent(
+                messages, file_path=file_path, model=_glm_model,
+                show_options=show_options, show_prompt=show_prompt,
+                show_response=show_response, show_cost=show_cost, show_tools=show_tools,
+            )
+        except Exception as e:
+            if _is_quota_error(e):
+                _notify_quota_limit(_provider, _agent_name, e)
+                raise LLMQuotaError(_provider, _agent_name, e) from e
+            raise
         return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
 
     # Claude ルート（既存動作）

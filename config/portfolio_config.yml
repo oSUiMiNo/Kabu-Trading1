@@ -41,6 +41,33 @@ max_allocation_pct:
   med: 10
   high: 15
 
+# ── LLM プロバイダー設定 ──
+# エージェントごとの LLM プロバイダーを指定する。
+# ここに記載があればエージェント .md の provider より優先される。
+# 未記載のエージェントは .md の provider → 環境変数 → claude の順でフォールバック。
+# 選択肢: claude, codex, glm
+llm_providers:
+  # Analyzer
+  analyst: codex
+  devils-advocate: codex
+  judge: codex
+  opinion: codex
+  final-judge: glm
+  # Monitor
+  monitor-checker: codex
+  notify-summarizer: glm
+  # Planning
+  plan-generator: codex
+  price-fetcher: glm
+  # Watch
+  watch-summarizer: glm
+  # NightWorker
+  archive-reviewer: glm
+  issue-consolidator: glm
+  # ActionLog
+  handoff-generator: glm
+  story-generator: glm
+
 # ── Analyzer パラメータ ──
 analyzer_num_lanes: 2
 analyzer_max_rounds: 4
