@@ -104,10 +104,15 @@ def _mode_directive(mode: str, holding: dict | None = None) -> str:
 
 
 _HORIZON_LABELS: dict[str, str] = {
-    "short": "短期（数日〜数週間）",
-    "mid": "中期（数週間〜数ヶ月）",
+    "short": "短期（1か月未満）",
+    "mid": "中期（1か月以上〜半年未満）",
     "long": "長期（半年以上）",
 }
+
+
+def set_horizon_labels(labels: dict[str, str]) -> None:
+    global _HORIZON_LABELS
+    _HORIZON_LABELS = labels
 
 
 def _horizon_directive(horizon: str) -> str:

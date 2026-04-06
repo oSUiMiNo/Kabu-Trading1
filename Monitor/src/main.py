@@ -26,6 +26,7 @@ from supabase_client import (
     update_archivelog,
     get_client,
     get_holding,
+    get_portfolio_config,
 )
 
 from AgentUtil import call_agent, load_debug_config
@@ -34,6 +35,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "commands"
 
 JST = timezone(timedelta(hours=9))
+
+_cfg = safe_db(get_portfolio_config) or {}
+_SPAN_DEFS: dict[str, str] = (_cfg.get("span_definitions") or {})
 
 
 def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None = None) -> str:
@@ -276,7 +280,7 @@ def build_check_prompt(ticker: str, archivelog: dict, today_archive: dict | None
         f"【銘柄】{ticker}\n"
         f"【判定】{verdict}\n"
         f"【confidence】{confidence}\n"
-        f"【投資期間】{horizon}\n"
+        f"【投資期間】{_SPAN_DEFS.get(horizon.lower(), horizon)}\n"
         f"【プラン時点の株価】{plan_price}\n"
         f"\n"
         f"【判定根拠】\n{basis_text}\n"

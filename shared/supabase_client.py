@@ -82,6 +82,16 @@ def get_analyzer_config() -> dict:
     }
 
 
+def get_span_definitions() -> dict[str, str]:
+    """投資期間の定義ラベルを portfolio_config から取得。"""
+    cfg = get_portfolio_config()
+    return cfg.get("span_definitions") or {
+        "short": "短期（1か月未満）",
+        "mid": "中期（1か月以上〜半年未満）",
+        "long": "長期（半年以上）",
+    }
+
+
 def get_due_regular_schedules(now_utc: datetime) -> list[dict]:
     """
     現在時刻に該当する定期Monitorスケジュールを返す。

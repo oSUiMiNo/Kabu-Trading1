@@ -24,9 +24,10 @@ from supabase_client import (
     get_analyzer_config,
     get_archivelog_by_id,
     ensure_technical_data,
+    get_span_definitions,
 )
 
-from analyzer_orchestrator import LOGS_DIR
+from analyzer_orchestrator import LOGS_DIR, set_horizon_labels
 from lane_orchestrator import run_lane, LaneResult
 from AgentUtil import side_ja, load_debug_config
 from final_judge_orchestrator import run_final_judge_orchestrator
@@ -212,6 +213,10 @@ async def run_parallel(
     display_name: str = "",
     existing_archive_id: str | None = None,
 ):
+    span_defs = safe_db(get_span_definitions)
+    if span_defs:
+        set_horizon_labels(span_defs)
+
     if num_sets is None or max_rounds is None or opinions_per_set is None:
         disc_cfg = safe_db(get_analyzer_config) or {}
         num_sets = num_sets or disc_cfg.get("num_sets", 2)

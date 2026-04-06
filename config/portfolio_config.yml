@@ -14,6 +14,12 @@ default_take_profit_pct: 20.00
 min_rr_ratio: 1.0
 notes: "テスト用ポートフォリオ（5銘柄: NVDA, TSLA, AMZN, 6702, U）"
 
+# 投資期間の定義（LLMプロンプトに使用）
+span_definitions:
+  short: "短期（1か月未満）"
+  mid: "中期（1か月以上〜半年未満）"
+  long: "長期（半年以上）"
+
 # 損切り幅（投資期間別 %）
 stop_loss_pct:
   short: -4

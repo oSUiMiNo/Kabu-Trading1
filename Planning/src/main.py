@@ -132,8 +132,8 @@ _HORIZON_MAP: dict[str, str] = {
 }
 
 _HORIZON_JA: dict[str, str] = {
-    "SHORT": "短期（数日〜数週間）",
-    "MID": "中期（数週間〜数ヶ月）",
+    "SHORT": "短期（1か月未満）",
+    "MID": "中期（1か月以上〜半年未満）",
     "LONG": "長期（半年以上）",
 }
 
@@ -314,6 +314,8 @@ def build_commentary_prompt(
         f"\n"
         f"【PlanSpec（確定済み数値）】\n"
         f"```yaml\n{yaml_str}```\n"
+        f"\n"
+        f"【投資期間の定義】{_HORIZON_JA.get(spec.horizon, spec.horizon)}\n"
         f"\n"
         f"【最終判定ログ（プロンプト埋め込み分）】\n"
         f"--- ここから ---\n"
@@ -883,6 +885,10 @@ if __name__ == "__main__":
     if budget == 0:
         print("エラー: 予算が 0 です。CLI 引数または Supabase の portfolio_config を設定してください。")
         sys.exit(1)
+
+    _span_defs = (_db_config or {}).get("span_definitions")
+    if _span_defs and isinstance(_span_defs, dict):
+        _HORIZON_JA.update({k.upper(): v for k, v in _span_defs.items()})
 
     plan_config = load_plan_config(_db_config)
 
