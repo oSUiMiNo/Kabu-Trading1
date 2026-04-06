@@ -202,7 +202,7 @@ async def run_pipeline(
             summary_label = NotifyLabel.ERROR
         elif error_tickers:
             title = f"{market_name} チェック完了（一部エラー）"
-            summary_label = NotifyLabel.COMPLETE
+            summary_label = NotifyLabel.WARNING
         else:
             title = f"{market_name} 全銘柄OK"
             summary_label = NotifyLabel.COMPLETE
