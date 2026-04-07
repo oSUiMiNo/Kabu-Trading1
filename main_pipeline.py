@@ -104,7 +104,7 @@ def _sync_holding_prices(wl: list[dict], target_ticker: str | None = None):
 def _build_schedule_context(market: str | None, skip_spans: set[str] | None) -> ScheduleContext:
     """引数 + 現在時刻から定期フル実行対象の span を決定する。
     - 引け後スケジュール（skip_spans に "long" が含まれる）の場合:
-      short は毎営業日フル実行、mid は月水金のみフル実行
+      short は毎営業日フル実行、mid は火金のみフル実行
     - 週末スケジュール（market=None かつ土日）の場合: long をフル実行
     """
     now = datetime.now(_JST)
@@ -116,7 +116,7 @@ def _build_schedule_context(market: str | None, skip_spans: set[str] | None) -> 
         full_run_spans.add("long")
     elif is_close_schedule and dow < 5:
         full_run_spans.add("short")
-        if dow in (0, 2, 4):  # Mon/Wed/Fri
+        if dow in (1, 4):  # Tue/Fri
             full_run_spans.add("mid")
 
     return ScheduleContext(full_run_spans=full_run_spans)
