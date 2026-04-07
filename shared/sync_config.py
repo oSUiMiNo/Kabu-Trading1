@@ -27,6 +27,8 @@ JSONB_COLUMNS = {
     "stop_loss_pct", "price_tolerance_pct", "max_log_age_days",
     "max_allocation_pct", "monitor_schedules", "span_definitions",
     "filter_event_threshold_days",
+    "full_run_mid_days",
+    "llm_providers",
 }
 
 

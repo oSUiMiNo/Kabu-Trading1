@@ -96,6 +96,10 @@ filter_event_threshold_days:
   mid: 3
   long: 2
 
+# 定期フル実行の曜日（mid span 用、0=月〜6=日）
+# 火曜（週初材料消化後）と金曜（週末前確認）
+full_run_mid_days: [1, 4]
+
 # ── Analyzer パラメータ ──
 analyzer_num_lanes: 2
 analyzer_max_rounds: 4

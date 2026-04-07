@@ -101,22 +101,27 @@ def _sync_holding_prices(wl: list[dict], target_ticker: str | None = None):
         print(f"  [holdings] 更新スキップ: {e}")
 
 
-def _build_schedule_context(market: str | None, skip_spans: set[str] | None) -> ScheduleContext:
-    """引数 + 現在時刻から定期フル実行対象の span を決定する。
+def _build_schedule_context(
+    market: str | None,
+    skip_spans: set[str] | None,
+    config: dict | None = None,
+) -> ScheduleContext:
+    """引数 + 現在時刻 + config から定期フル実行対象の span を決定する。
     - 引け後スケジュール（skip_spans に "long" が含まれる）の場合:
-      short は毎営業日フル実行、mid は火金のみフル実行
+      short は毎営業日フル実行、mid は config の full_run_mid_days の曜日のみフル実行
     - 週末スケジュール（market=None かつ土日）の場合: long をフル実行
     """
     now = datetime.now(_JST)
     dow = now.weekday()  # 0=Mon
     is_close_schedule = skip_spans and "long" in skip_spans
+    mid_days = (config or {}).get("full_run_mid_days", [1, 4])
 
     full_run_spans: set[str] = set()
     if dow >= 5 and not market:
         full_run_spans.add("long")
     elif is_close_schedule and dow < 5:
         full_run_spans.add("short")
-        if dow in (1, 4):  # Tue/Fri
+        if dow in mid_days:
             full_run_spans.add("mid")
 
     return ScheduleContext(full_run_spans=full_run_spans)
@@ -181,7 +186,7 @@ async def run_pipeline(
         print(f"=== Phase 1.7: IndicatorFilter ===")
         print(f"{'='*60}")
         all_tickers_list = [w["ticker"] for w in wl]
-        schedule_ctx = _build_schedule_context(market, skip_spans)
+        schedule_ctx = _build_schedule_context(market, skip_spans, cfg)
         print(f"  full_run_spans: {schedule_ctx.full_run_spans or '(なし)'}")
 
         filter_result = run_filter(all_tickers_list, pipeline_start, cfg, schedule_ctx)
