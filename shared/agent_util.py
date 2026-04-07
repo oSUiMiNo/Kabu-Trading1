@@ -175,12 +175,35 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
 _CONFIG_DIR = _PROJECT_ROOT / "config"
 _llm_providers_cache: dict[str, str] | None = None
 
-# ── フォールバック関連の状態（プロセスライフタイム） ──
-_run_quota_exhausted: set[str] = set()   # quota hit した provider（同一 run で再試行しない）
-_run_fallback_failed: set[str] = set()   # fallback も失敗した provider（再試行しない）
-_run_notified: set[str] = set()          # 通知済み provider（provider ごとに1回）
+# ── フォールバック関連 ──
+#
+# LLM の使用量上限（クォータ）に達した場合、自動的に OpenAI API に切り替える仕組み。
+#
+# 動作の流れ：
+#   1. codex や glm を呼んで「使用量上限」エラーが返ってきたら
+#   2. その provider を「このパイプライン実行中は使えない」とマークし
+#   3. 代わりに OpenAI API（GPT-5.4）で同じ処理を実行する
+#   4. 次のパイプライン実行（別プロセス）ではマークがリセットされ、元の provider を再び試す
+#
+# 3つの set はこのプロセスが生きている間だけ有効。ファイルや DB には保存しない。
 
-# quota exhausted → fallback 対象
+_run_quota_exhausted: set[str] = set()
+# 「この provider は上限に達した」を記録する。
+# ここに入っている provider は、同じパイプライン実行中は二度と試さず、直接 OpenAI に回す。
+# 例：{"codex"} → codex を使うエージェントは全て OpenAI にフォールバック
+
+_run_fallback_failed: set[str] = set()
+# 「OpenAI へのフォールバックも失敗した」を記録する。
+# ここに入っている provider は、同じ実行中はフォールバックすら試さず即エラーにする。
+# OpenAI の API キー不備やサーバー障害のときに、同じ失敗を何度も繰り返さないための安全装置。
+
+_run_notified: set[str] = set()
+# 「この provider の上限到達を Discord に通知済み」を記録する。
+# 同じパイプライン実行中に同じ provider の通知が何度も飛ぶのを防ぐ。
+
+# ── エラーメッセージの判定パターン ──
+
+# 「使用量の上限に達した」系のエラー → OpenAI にフォールバックする対象
 _FALLBACK_PATTERNS = [
     "usage limit",
     "quota exceeded",
@@ -188,7 +211,7 @@ _FALLBACK_PATTERNS = [
     "purchase more credits",
 ]
 
-# 一時的なレート制限 → 既存リトライに任せる（fallback しない）
+# 「一時的にリクエストが多すぎる」系のエラー → しばらく待てば回復するのでフォールバックしない
 _TRANSIENT_RATE_PATTERNS = [
     "rate limit",
     "too many requests",
@@ -200,7 +223,7 @@ _RESET_TIME_RE = re.compile(
 
 
 class LLMQuotaError(RuntimeError):
-    """LLM プロバイダーのクォータ上限エラー。"""
+    """使用量上限エラー。エラーの発生元（provider 名、エージェント名）を保持する。"""
     def __init__(self, provider: str, agent_name: str, original_error: Exception):
         self.provider = provider
         self.agent_name = agent_name
@@ -209,19 +232,20 @@ class LLMQuotaError(RuntimeError):
 
 
 class LLMFallbackError(RuntimeError):
-    """フォールバック先 LLM も失敗した場合のエラー。リトライしても回復しない。"""
+    """フォールバック先の OpenAI API も失敗した場合のエラー。
+    リトライしても同じ結果になるため、呼び出し元はこれを受け取ったら諦める。"""
     pass
 
 
 def _is_fallback_target(error: Exception) -> bool:
-    """エラーがクォータ枯渇（fallback 対象）に該当するか判定する。
-    rate limit（一時的なレート制限）は対象外。"""
+    """このエラーは「使用量の上限」か？（→ Yes なら OpenAI にフォールバック）
+    「一時的にリクエストが多い」（rate limit）は対象外。"""
     msg = str(error).lower()
     return any(p in msg for p in _FALLBACK_PATTERNS)
 
 
 def _is_quota_error(error: Exception) -> bool:
-    """エラーメッセージがクォータ/使用量上限に該当するか判定する（後方互換）。"""
+    """このエラーは使用量関連か？（上限 + 一時的レート制限の両方を含む、後方互換用）"""
     msg = str(error).lower()
     return _is_fallback_target(error) or any(p in msg for p in _TRANSIENT_RATE_PATTERNS)
 
@@ -233,7 +257,9 @@ def _extract_reset_time(error: Exception) -> str | None:
 
 
 def _extract_tools_from_agent(file_path: str | Path | None) -> list[str]:
-    """agent ファイルの frontmatter から OpenAI 互換の tools リストを抽出する。"""
+    """エージェント定義ファイル（.md）の frontmatter を読み、
+    OpenAI API で使える tools（例：web_search）のリストを返す。
+    フォールバック時に「このエージェントは Web 検索が必要か？」を判定するために使う。"""
     if not file_path:
         return []
     try:
@@ -251,7 +277,8 @@ def _extract_tools_from_agent(file_path: str | Path | None) -> list[str]:
 
 
 def _load_fallback_config() -> dict:
-    """portfolio_config.yml からフォールバック設定を読む。"""
+    """フォールバック先の設定（モデル名と推論強度）を portfolio_config.yml から読む。
+    config に未記載の場合は GPT-5.4 / high をデフォルトとして使う。"""
     config_path = _CONFIG_DIR / "portfolio_config.yml"
     if config_path.exists():
         data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
@@ -302,7 +329,9 @@ async def _fallback_to_openai(
     show_response: bool = False,
     show_cost: bool = True,
 ) -> AgentResult:
-    """クォータ上限時に OpenAI API にフォールバックする。"""
+    """元の provider（codex/glm）が使用量上限に達した場合に、OpenAI API で代わりに実行する。
+    - 初回呼び出し：OpenAI を試し、成功すれば結果を返す。失敗すれば記録して LLMFallbackError。
+    - 2回目以降（同じ provider）：既に失敗済みなので OpenAI を試さず即エラー。"""
     if original_provider in _run_fallback_failed:
         raise LLMFallbackError(f"{original_provider} の fallback は既に失敗済み")
 
@@ -436,9 +465,9 @@ async def call_agent(
         )
 
     _agent_name = Path(file_path).stem if file_path else "(unknown)"
-    _agent_tools = _extract_tools_from_agent(file_path)
+    _agent_tools = _extract_tools_from_agent(file_path)  # WebSearch 等が必要か事前に読む
 
-    # cooldown チェック: 既に quota hit した provider は直接 fallback
+    # この provider は既にこの実行中に上限に達している → 元の LLM は試さず直接 OpenAI へ
     if _provider in _run_quota_exhausted:
         return await _fallback_to_openai(
             messages, file_path, _agent_name, _provider, None,
@@ -459,13 +488,14 @@ async def call_agent(
             )
         except Exception as e:
             if _is_fallback_target(e):
+                # 使用量上限エラー → この provider を「使えない」とマークして OpenAI に切替
                 _run_quota_exhausted.add(_provider)
                 return await _fallback_to_openai(
                     messages, file_path, _agent_name, _provider, e,
                     tools=_agent_tools,
                     show_prompt=show_prompt, show_response=show_response, show_cost=show_cost,
                 )
-            raise
+            raise  # 上限以外のエラーはそのまま上位に伝える
         return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
 
     if _provider == "glm":
