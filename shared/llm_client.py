@@ -221,6 +221,7 @@ async def call_openai(
     tools: list[str] | None = None,
     temperature: float = 0.7,
     max_tokens: int | None = None,
+    reasoning_effort: str | None = None,
     show_prompt: bool = False,
     show_response: bool = False,
     show_cost: bool = True,
@@ -242,6 +243,9 @@ async def call_openai(
                指定すると Responses API に切り替わる
         temperature: サンプリング温度
         max_tokens: 最大出力トークン数
+        reasoning_effort: reasoning モデルの推論強度。"low" / "medium" / "high"。
+                          Responses API では reasoning: {"effort": ...} として送信。
+                          Chat API では reasoning_effort として送信。
         show_prompt: リクエスト内容をコンソール出力
         show_response: レスポンスをコンソール出力
         show_cost: コストをコンソール出力
@@ -264,12 +268,12 @@ async def call_openai(
     if tools:
         return await _call_openai_responses(
             client, messages, config, model, tools,
-            temperature, max_tokens,
+            temperature, max_tokens, reasoning_effort,
             show_prompt, show_response, show_cost,
         )
     return await _call_openai_chat(
         client, messages, config, model,
-        temperature, max_tokens,
+        temperature, max_tokens, reasoning_effort,
         show_prompt, show_response, show_cost,
     )
 
@@ -281,6 +285,7 @@ async def _call_openai_chat(
     model: str,
     temperature: float,
     max_tokens: int | None,
+    reasoning_effort: str | None,
     show_prompt: bool,
     show_response: bool,
     show_cost: bool,
@@ -309,6 +314,8 @@ async def _call_openai_chat(
         kwargs["temperature"] = temperature
     if max_tokens is not None:
         kwargs["max_tokens"] = max_tokens
+    if reasoning_effort:
+        kwargs["reasoning_effort"] = reasoning_effort
 
     response = await _call_with_retry(
         lambda: client.chat.completions.create(**kwargs),
@@ -349,6 +356,7 @@ async def _call_openai_responses(
     tools: list[str],
     temperature: float,
     max_tokens: int | None,
+    reasoning_effort: str | None,
     show_prompt: bool,
     show_response: bool,
     show_cost: bool,
@@ -384,6 +392,8 @@ async def _call_openai_responses(
         kwargs["instructions"] = instructions
     if max_tokens is not None:
         kwargs["max_output_tokens"] = max_tokens
+    if reasoning_effort:
+        kwargs["reasoning"] = {"effort": reasoning_effort}
 
     response = await _call_with_retry(
         lambda: client.responses.create(**kwargs),

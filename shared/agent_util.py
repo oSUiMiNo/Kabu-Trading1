@@ -174,14 +174,24 @@ def parse_agent_file(file_path: str | Path) -> ClaudeAgentOptions:
 
 _CONFIG_DIR = _PROJECT_ROOT / "config"
 _llm_providers_cache: dict[str, str] | None = None
-_quota_notified_providers: set[str] = set()
 
-_QUOTA_LIMIT_PATTERNS = [
+# ── フォールバック関連の状態（プロセスライフタイム） ──
+_provider_cooldown: dict[str, str | None] = {}  # provider → reset_time
+_fallback_attempted: set[str] = set()            # fallback を試みて失敗した provider
+_quota_notified: set[str] = set()                # "provider:reset_time" の通知済みキー
+
+# quota exhausted → fallback 対象
+_FALLBACK_PATTERNS = [
     "usage limit",
-    "rate limit",
     "quota exceeded",
     "insufficient_quota",
     "purchase more credits",
+]
+
+# 一時的なレート制限 → 既存リトライに任せる（fallback しない）
+_TRANSIENT_RATE_PATTERNS = [
+    "rate limit",
+    "too many requests",
 ]
 
 _RESET_TIME_RE = re.compile(
@@ -198,10 +208,22 @@ class LLMQuotaError(RuntimeError):
         super().__init__(str(original_error))
 
 
-def _is_quota_error(error: Exception) -> bool:
-    """エラーメッセージがクォータ/使用量上限に該当するか判定する。"""
+class LLMFallbackError(RuntimeError):
+    """フォールバック先 LLM も失敗した場合のエラー。リトライしても回復しない。"""
+    pass
+
+
+def _is_fallback_target(error: Exception) -> bool:
+    """エラーがクォータ枯渇（fallback 対象）に該当するか判定する。
+    rate limit（一時的なレート制限）は対象外。"""
     msg = str(error).lower()
-    return any(p in msg for p in _QUOTA_LIMIT_PATTERNS)
+    return any(p in msg for p in _FALLBACK_PATTERNS)
+
+
+def _is_quota_error(error: Exception) -> bool:
+    """エラーメッセージがクォータ/使用量上限に該当するか判定する（後方互換）。"""
+    msg = str(error).lower()
+    return _is_fallback_target(error) or any(p in msg for p in _TRANSIENT_RATE_PATTERNS)
 
 
 def _extract_reset_time(error: Exception) -> str | None:
@@ -210,36 +232,111 @@ def _extract_reset_time(error: Exception) -> str | None:
     return m.group(1).strip() if m else None
 
 
-def _notify_quota_limit(provider: str, agent_name: str, error: Exception) -> None:
-    """クォータ上限を Discord に通知する（provider ごとに1回のみ）。"""
-    if provider in _quota_notified_providers:
-        return
-    _quota_notified_providers.add(provider)
+def _extract_tools_from_agent(file_path: str | Path | None) -> list[str]:
+    """agent ファイルの frontmatter から OpenAI 互換の tools リストを抽出する。"""
+    if not file_path:
+        return []
+    try:
+        options = parse_agent_file(file_path)
+    except Exception:
+        return []
+    if not options or not getattr(options, "allowed_tools", None):
+        return []
+    openai_tools: list[str] = []
+    for t in options.allowed_tools:
+        if t in ("WebSearch", "WebFetch", "web_search"):
+            if "web_search" not in openai_tools:
+                openai_tools.append("web_search")
+    return openai_tools
 
-    reset_time = _extract_reset_time(error)
-    reset_line = f"\n⏰ リセット予定：**{reset_time}**" if reset_time else ""
+
+def _load_fallback_config() -> dict:
+    """portfolio_config.yml からフォールバック設定を読む。"""
+    config_path = _CONFIG_DIR / "portfolio_config.yml"
+    if config_path.exists():
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        return {
+            "model": data.get("fallback_openai_model", "gpt-5.4"),
+            "reasoning_effort": data.get("fallback_openai_reasoning_effort", "high"),
+        }
+    return {"model": "gpt-5.4", "reasoning_effort": "high"}
+
+
+def _notify_quota_fallback(
+    provider: str, agent_name: str, reset_time: str | None, fallback_model: str,
+) -> None:
+    """クォータ上限 + フォールバック実行を Discord に通知（quota window ごとに1回のみ）。"""
+    reset_display = reset_time or "不明"
+    notify_key = f"{provider}:{reset_display}"
+    if notify_key in _quota_notified:
+        return
+    _quota_notified.add(notify_key)
 
     try:
         from discord_notifier import send_webhook
         embed = {
-            "title": "🚫 LLM クォータ上限到達",
+            "title": "\U0001f504 LLM クォータ上限 → 自動切替",
             "description": (
-                f"**{provider}** のクォータ上限に達しました。\n"
-                f"この provider を使う全エージェントが影響を受けます。"
-                f"{reset_line}\n\n"
-                f"`config/portfolio_config.yml` の `llm_providers` で "
-                f"該当エージェントの provider を一時的に変更するか、"
-                f"リセットをお待ちください。"
+                f"**{provider}** のクォータ上限に達したため、"
+                f"**OpenAI API ({fallback_model})** に切り替えて実行します。"
             ),
-            "color": 0xFF0000,
+            "color": 0xFFA500,
             "fields": [
                 {"name": "検出元", "value": agent_name, "inline": True},
-                {"name": "Provider", "value": provider, "inline": True},
+                {"name": "解除予定", "value": reset_display, "inline": True},
+                {"name": "切替先", "value": f"OpenAI API ({fallback_model})", "inline": True},
             ],
         }
         send_webhook(embed)
     except Exception as e:
-        print(f"  [通知] クォータ上限の Discord 通知に失敗: {e}")
+        print(f"  [通知] フォールバック通知に失敗: {e}")
+
+
+async def _fallback_to_openai(
+    messages,
+    file_path: str | Path | None,
+    agent_name: str,
+    original_provider: str,
+    reset_time: str | None,
+    show_prompt: bool = False,
+    show_response: bool = False,
+    show_cost: bool = True,
+) -> AgentResult:
+    """クォータ上限時に OpenAI API にフォールバックする。"""
+    if original_provider in _fallback_attempted:
+        raise LLMFallbackError(f"{original_provider} の fallback は既に失敗済み")
+
+    fb_cfg = _load_fallback_config()
+    fb_model = fb_cfg["model"]
+    fb_reasoning = fb_cfg["reasoning_effort"]
+
+    print(f"  [{agent_name}] {original_provider} quota → OpenAI {fb_model} にフォールバック")
+    _notify_quota_fallback(original_provider, agent_name, reset_time, fb_model)
+
+    tools = _extract_tools_from_agent(file_path)
+
+    _shared = Path(__file__).resolve().parent
+    if str(_shared) not in sys.path:
+        sys.path.insert(0, str(_shared))
+    from llm_client import call_openai
+
+    try:
+        _r = await call_openai(
+            messages,
+            file_path=file_path,
+            model=fb_model,
+            tools=tools or None,
+            reasoning_effort=fb_reasoning,
+            show_prompt=show_prompt,
+            show_response=show_response,
+            show_cost=show_cost,
+        )
+        return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
+    except Exception as fallback_err:
+        _fallback_attempted.add(original_provider)
+        raise LLMFallbackError(
+            f"{original_provider} → OpenAI fallback 失敗: {fallback_err}"
+        ) from fallback_err
 
 
 def _notify_unconfigured_provider(agent_name: str) -> None:
@@ -341,6 +438,14 @@ async def call_agent(
 
     _agent_name = Path(file_path).stem if file_path else "(unknown)"
 
+    # cooldown チェック: 既に quota hit した provider は直接 fallback
+    if _provider in _provider_cooldown:
+        return await _fallback_to_openai(
+            messages, file_path, _agent_name, _provider,
+            _provider_cooldown[_provider],
+            show_prompt=show_prompt, show_response=show_response, show_cost=show_cost,
+        )
+
     if _provider == "codex":
         _shared = Path(__file__).resolve().parent
         if str(_shared) not in sys.path:
@@ -353,9 +458,13 @@ async def call_agent(
                 show_cost=show_cost, show_tools=show_tools,
             )
         except Exception as e:
-            if _is_quota_error(e):
-                _notify_quota_limit(_provider, _agent_name, e)
-                raise LLMQuotaError(_provider, _agent_name, e) from e
+            if _is_fallback_target(e):
+                reset_time = _extract_reset_time(e)
+                _provider_cooldown[_provider] = reset_time
+                return await _fallback_to_openai(
+                    messages, file_path, _agent_name, _provider, reset_time,
+                    show_prompt=show_prompt, show_response=show_response, show_cost=show_cost,
+                )
             raise
         return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
 
@@ -372,9 +481,13 @@ async def call_agent(
                 show_response=show_response, show_cost=show_cost, show_tools=show_tools,
             )
         except Exception as e:
-            if _is_quota_error(e):
-                _notify_quota_limit(_provider, _agent_name, e)
-                raise LLMQuotaError(_provider, _agent_name, e) from e
+            if _is_fallback_target(e):
+                reset_time = _extract_reset_time(e)
+                _provider_cooldown[_provider] = reset_time
+                return await _fallback_to_openai(
+                    messages, file_path, _agent_name, _provider, reset_time,
+                    show_prompt=show_prompt, show_response=show_response, show_cost=show_cost,
+                )
             raise
         return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
 
