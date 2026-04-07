@@ -26,6 +26,7 @@ SKIP_COLUMNS = {"id", "updated_at", "monitor_last_runs"}
 JSONB_COLUMNS = {
     "stop_loss_pct", "price_tolerance_pct", "max_log_age_days",
     "max_allocation_pct", "monitor_schedules", "span_definitions",
+    "filter_event_threshold_days",
 }
 
 

@@ -74,6 +74,28 @@ llm_providers:
   handoff-generator: glm
   story-generator: glm
 
+# ── IndicatorFilter 設定 ──
+# Technical + ImportantIndicators の結果から Monitor 実行要否を決定論的に判定する。
+# false にするとフィルターをバイパスし、従来通り全銘柄 Monitor を実行する。
+indicator_filter_enabled: true
+
+# 市場全体ゲート
+filter_vix_threshold: 30
+filter_vix_delta_pt: 4.0
+filter_yield_delta_bp: 15
+filter_central_bank_event_days: 1
+
+# 個別トリガー
+filter_eps_surprise_hard_pct: -10
+filter_volume_ratio_threshold: 2.0
+filter_rsi_oversold: 30
+
+# イベント近接閾値（投資期間別 日数）
+filter_event_threshold_days:
+  short: 5
+  mid: 3
+  long: 2
+
 # ── Analyzer パラメータ ──
 analyzer_num_lanes: 2
 analyzer_max_rounds: 4

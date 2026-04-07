@@ -1,7 +1,8 @@
 """
-パイプラインオーケストレーター（Technical → Monitor → Analyzer → Planning → Watch）
+パイプラインオーケストレーター
+Technical → ImportantIndicators → Monitor → Analyzer → Planning → Watch → ActionLog
 
-5 大ブロックを順番に実行する。各ブロックは DB（伝言板方式）で連携し、
+各ブロックは DB（伝言板方式）で連携し、
 ブロック間のデータ受け渡しは archive テーブルを介して行う。
 
 各ブロックの複数銘柄並列実行は *_batch.py が担い、
@@ -37,9 +38,11 @@ from supabase_client import (
     get_archivelog_by_id,
     update_archivelog,
     upsert_holding,
+    get_portfolio_config,
 )
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA, LABEL_COLOR
 from discord_notifier import notify, send_start_notification
+from indicator_filter import run_filter, ScheduleContext
 
 
 # ── ユーティリティ ───────────────────────────────────────
@@ -98,6 +101,27 @@ def _sync_holding_prices(wl: list[dict], target_ticker: str | None = None):
         print(f"  [holdings] 更新スキップ: {e}")
 
 
+def _build_schedule_context(market: str | None, skip_spans: set[str] | None) -> ScheduleContext:
+    """引数 + 現在時刻から定期フル実行対象の span を決定する。
+    - 引け後スケジュール（skip_spans に "long" が含まれる）の場合:
+      short は毎営業日フル実行、mid は月水金のみフル実行
+    - 週末スケジュール（market=None かつ土日）の場合: long をフル実行
+    """
+    now = datetime.now(_JST)
+    dow = now.weekday()  # 0=Mon
+    is_close_schedule = skip_spans and "long" in skip_spans
+
+    full_run_spans: set[str] = set()
+    if dow >= 5 and not market:
+        full_run_spans.add("long")
+    elif is_close_schedule and dow < 5:
+        full_run_spans.add("short")
+        if dow in (0, 2, 4):  # Mon/Wed/Fri
+            full_run_spans.add("mid")
+
+    return ScheduleContext(full_run_spans=full_run_spans)
+
+
 # ── パイプライン本体 ─────────────────────────────────────
 
 async def run_pipeline(
@@ -137,6 +161,74 @@ async def run_pipeline(
     # ── holdings.current_price を最新化 ──
     _sync_holding_prices(wl, target_ticker)
 
+    # ── Phase 1.5: ImportantIndicators ──
+    print(f"\n{'='*60}")
+    print(f"=== Phase 1.5: ImportantIndicators ===")
+    print(f"{'='*60}")
+    ii_args = []
+    if target_ticker:
+        ii_args.extend(["--ticker", target_ticker])
+    _run_batch("importantindicators_batch.py", ii_args)
+
+    # ── Phase 1.7: IndicatorFilter ──
+    # バイパス条件: --ticker 指定 / --monitor-only / filter_enabled=false
+    cfg = safe_db(get_portfolio_config) or {}
+    filter_enabled = cfg.get("indicator_filter_enabled", True) and not target_ticker and not monitor_only
+
+    filtered_tickers: list[str] | None = None  # None = フィルター未適用（全銘柄 Monitor）
+    if filter_enabled:
+        print(f"\n{'='*60}")
+        print(f"=== Phase 1.7: IndicatorFilter ===")
+        print(f"{'='*60}")
+        all_tickers_list = [w["ticker"] for w in wl]
+        schedule_ctx = _build_schedule_context(market, skip_spans)
+        print(f"  full_run_spans: {schedule_ctx.full_run_spans or '(なし)'}")
+
+        filter_result = run_filter(all_tickers_list, pipeline_start, cfg, schedule_ctx)
+
+        print(f"  status: {filter_result.status}")
+        print(f"  market_gate: {filter_result.market_gate_triggered}")
+        if filter_result.full_run_tickers:
+            full_names = [dn_map.get(t, t) for t in filter_result.full_run_tickers]
+            print(f"  full_run: {full_names}")
+        if filter_result.triggered_tickers:
+            trig_names = [dn_map.get(t, t) for t in filter_result.triggered_tickers]
+            print(f"  triggered: {trig_names}")
+        if filter_result.skipped_tickers:
+            skip_names = [dn_map.get(t, t) for t in filter_result.skipped_tickers]
+            print(f"  skipped: {skip_names}")
+        for tk, reasons in filter_result.trigger_details.items():
+            print(f"    [{tk}] {reasons}")
+
+        monitor_target_tickers = filter_result.triggered_tickers + filter_result.full_run_tickers
+
+        if not monitor_target_tickers:
+            print("\nIndicatorFilter: 全銘柄スキップ。Monitor 以降は起動しません。", flush=True)
+
+            # ── ActionLog（FILTER_SKIPPED path） ──
+            print(f"\n{'='*60}")
+            print(f"=== Phase 6: ActionLog ===")
+            print(f"{'='*60}")
+            _run_batch("actionlog_batch.py")
+
+            market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+            all_names = [dn_map.get(t, t) for t in all_tickers_list]
+            gate_text = "市場全体ゲート発火なし" if not filter_result.market_gate_triggered else "市場全体ゲート発火"
+            payload = NotifyPayload(
+                label=NotifyLabel.COMPLETE,
+                ticker=f"{market_name} フィルター通過なし",
+                monitor_data={
+                    "tickers": all_names,
+                    "filter_status": "FILTER_SKIPPED",
+                    "gate": gate_text,
+                },
+                event_context=event_context,
+            )
+            await notify(payload)
+            return
+
+        filtered_tickers = monitor_target_tickers
+
     # ── Phase 2: Monitor ──
     print(f"\n{'='*60}")
     print(f"=== Phase 2: Monitor ===")
@@ -144,9 +236,11 @@ async def run_pipeline(
     mon_args = []
     if target_ticker:
         mon_args.extend(["--ticker", target_ticker])
+    elif filtered_tickers is not None:
+        mon_args.extend(["--tickers", ",".join(filtered_tickers)])
     if market:
         mon_args.extend(["--market", market])
-    if skip_spans:
+    if skip_spans and filtered_tickers is None:
         for span in skip_spans:
             mon_args.extend(["--skip-span", span])
     _run_batch("monitor_batch.py", mon_args)
