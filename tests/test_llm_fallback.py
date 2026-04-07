@@ -20,9 +20,9 @@ from agent_util import (
     _extract_tools_from_agent,
     _notify_quota_fallback,
     _fallback_to_openai,
-    _provider_cooldown,
-    _fallback_attempted,
-    _quota_notified,
+    _run_quota_exhausted,
+    _run_fallback_failed,
+    _run_notified,
     AgentResult,
     LLMFallbackError,
 )
@@ -31,13 +31,13 @@ from agent_util import (
 @pytest.fixture(autouse=True)
 def reset_state():
     """各テスト前にモジュールレベルの状態をリセットする。"""
-    _provider_cooldown.clear()
-    _fallback_attempted.clear()
-    _quota_notified.clear()
+    _run_quota_exhausted.clear()
+    _run_fallback_failed.clear()
+    _run_notified.clear()
     yield
-    _provider_cooldown.clear()
-    _fallback_attempted.clear()
-    _quota_notified.clear()
+    _run_quota_exhausted.clear()
+    _run_fallback_failed.clear()
+    _run_notified.clear()
 
 
 # ══════════════════════════════════════════════════════
@@ -143,10 +143,10 @@ class TestNotifyQuotaFallback:
             assert mock_webhook.call_count == 1
 
     @patch("agent_util.send_webhook", create=True)
-    def test_different_window_notifies_again(self, mock_webhook):
+    def test_different_provider_notifies_separately(self, mock_webhook):
         with patch.dict("sys.modules", {"discord_notifier": MagicMock(send_webhook=mock_webhook)}):
             _notify_quota_fallback("codex", "monitor-checker", "Apr 8th", "gpt-5.4")
-            _notify_quota_fallback("codex", "monitor-checker", "Apr 9th", "gpt-5.4")
+            _notify_quota_fallback("glm", "analyst", "Apr 9th", "gpt-5.4")
             assert mock_webhook.call_count == 2
 
 
@@ -161,8 +161,9 @@ class TestFallbackToOpenai:
         with patch("llm_client.call_openai", new_callable=AsyncMock, return_value=mock_result) as mock_call:
             with patch("agent_util._notify_quota_fallback"):
                 with patch("agent_util._load_fallback_config", return_value={"model": "gpt-5.4", "reasoning_effort": "high"}):
+                    err = Exception("usage limit reached. try again at Apr 8th.")
                     result = await _fallback_to_openai(
-                        "test prompt", None, "test-agent", "codex", "Apr 8th",
+                        "test prompt", None, "test-agent", "codex", err,
                     )
                     assert result.text == "fallback result"
                     mock_call.assert_called_once()
@@ -172,11 +173,12 @@ class TestFallbackToOpenai:
         with patch("llm_client.call_openai", new_callable=AsyncMock, side_effect=Exception("OpenAI down")):
             with patch("agent_util._notify_quota_fallback"):
                 with patch("agent_util._load_fallback_config", return_value={"model": "gpt-5.4", "reasoning_effort": "high"}):
+                    err = Exception("usage limit reached")
                     with pytest.raises(LLMFallbackError):
                         await _fallback_to_openai(
-                            "test prompt", None, "test-agent", "codex", "Apr 8th",
+                            "test prompt", None, "test-agent", "codex", err,
                         )
-                    assert "codex" in _fallback_attempted
+                    assert "codex" in _run_fallback_failed
 
     @pytest.mark.anyio
     async def test_second_attempt_blocked(self):
@@ -190,17 +192,18 @@ class TestFallbackToOpenai:
         with patch("llm_client.call_openai", new_callable=AsyncMock, side_effect=counting_openai):
             with patch("agent_util._notify_quota_fallback"):
                 with patch("agent_util._load_fallback_config", return_value={"model": "gpt-5.4", "reasoning_effort": "high"}):
+                    err = Exception("usage limit reached")
                     # 1回目: OpenAI を叩いて失敗
                     with pytest.raises(LLMFallbackError):
                         await _fallback_to_openai(
-                            "test", None, "test-agent", "codex", "Apr 8th",
+                            "test", None, "test-agent", "codex", err,
                         )
                     assert call_count == 1
 
                     # 2回目: OpenAI を叩かず即失敗
                     with pytest.raises(LLMFallbackError, match="既に失敗済み"):
                         await _fallback_to_openai(
-                            "test", None, "test-agent", "codex", "Apr 8th",
+                            "test", None, "test-agent", "codex", err,
                         )
                     assert call_count == 1  # 呼び出し回数は増えていない
 
@@ -213,7 +216,7 @@ class TestProviderCooldown:
     @pytest.mark.anyio
     async def test_cooldown_skips_original_provider(self):
         """cooldown 中は元 provider を試さず直接 fallback する。"""
-        _provider_cooldown["codex"] = "Apr 8th"
+        _run_quota_exhausted.add("codex")
 
         mock_result = AgentResult(text="fallback", cost=0.01, tools_used=[])
         with patch("agent_util._fallback_to_openai", new_callable=AsyncMock, return_value=mock_result) as mock_fb:

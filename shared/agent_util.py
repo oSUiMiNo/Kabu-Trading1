@@ -176,9 +176,9 @@ _CONFIG_DIR = _PROJECT_ROOT / "config"
 _llm_providers_cache: dict[str, str] | None = None
 
 # ── フォールバック関連の状態（プロセスライフタイム） ──
-_provider_cooldown: dict[str, str | None] = {}  # provider → reset_time
-_fallback_attempted: set[str] = set()            # fallback を試みて失敗した provider
-_quota_notified: set[str] = set()                # "provider:reset_time" の通知済みキー
+_run_quota_exhausted: set[str] = set()   # quota hit した provider（同一 run で再試行しない）
+_run_fallback_failed: set[str] = set()   # fallback も失敗した provider（再試行しない）
+_run_notified: set[str] = set()          # 通知済み provider（provider ごとに1回）
 
 # quota exhausted → fallback 対象
 _FALLBACK_PATTERNS = [
@@ -265,12 +265,11 @@ def _load_fallback_config() -> dict:
 def _notify_quota_fallback(
     provider: str, agent_name: str, reset_time: str | None, fallback_model: str,
 ) -> None:
-    """クォータ上限 + フォールバック実行を Discord に通知（quota window ごとに1回のみ）。"""
-    reset_display = reset_time or "不明"
-    notify_key = f"{provider}:{reset_display}"
-    if notify_key in _quota_notified:
+    """クォータ上限 + フォールバック実行を Discord に通知（provider ごとに run 中1回のみ）。"""
+    if provider in _run_notified:
         return
-    _quota_notified.add(notify_key)
+    _run_notified.add(provider)
+    reset_display = reset_time or "不明"
 
     try:
         from discord_notifier import send_webhook
@@ -297,23 +296,23 @@ async def _fallback_to_openai(
     file_path: str | Path | None,
     agent_name: str,
     original_provider: str,
-    reset_time: str | None,
+    quota_error: Exception | None,
+    tools: list[str] | None = None,
     show_prompt: bool = False,
     show_response: bool = False,
     show_cost: bool = True,
 ) -> AgentResult:
     """クォータ上限時に OpenAI API にフォールバックする。"""
-    if original_provider in _fallback_attempted:
+    if original_provider in _run_fallback_failed:
         raise LLMFallbackError(f"{original_provider} の fallback は既に失敗済み")
 
     fb_cfg = _load_fallback_config()
     fb_model = fb_cfg["model"]
     fb_reasoning = fb_cfg["reasoning_effort"]
+    reset_time = _extract_reset_time(quota_error) if quota_error else None
 
     print(f"  [{agent_name}] {original_provider} quota → OpenAI {fb_model} にフォールバック")
     _notify_quota_fallback(original_provider, agent_name, reset_time, fb_model)
-
-    tools = _extract_tools_from_agent(file_path)
 
     _shared = Path(__file__).resolve().parent
     if str(_shared) not in sys.path:
@@ -333,7 +332,7 @@ async def _fallback_to_openai(
         )
         return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
     except Exception as fallback_err:
-        _fallback_attempted.add(original_provider)
+        _run_fallback_failed.add(original_provider)
         raise LLMFallbackError(
             f"{original_provider} → OpenAI fallback 失敗: {fallback_err}"
         ) from fallback_err
@@ -437,12 +436,13 @@ async def call_agent(
         )
 
     _agent_name = Path(file_path).stem if file_path else "(unknown)"
+    _agent_tools = _extract_tools_from_agent(file_path)
 
     # cooldown チェック: 既に quota hit した provider は直接 fallback
-    if _provider in _provider_cooldown:
+    if _provider in _run_quota_exhausted:
         return await _fallback_to_openai(
-            messages, file_path, _agent_name, _provider,
-            _provider_cooldown[_provider],
+            messages, file_path, _agent_name, _provider, None,
+            tools=_agent_tools,
             show_prompt=show_prompt, show_response=show_response, show_cost=show_cost,
         )
 
@@ -459,10 +459,10 @@ async def call_agent(
             )
         except Exception as e:
             if _is_fallback_target(e):
-                reset_time = _extract_reset_time(e)
-                _provider_cooldown[_provider] = reset_time
+                _run_quota_exhausted.add(_provider)
                 return await _fallback_to_openai(
-                    messages, file_path, _agent_name, _provider, reset_time,
+                    messages, file_path, _agent_name, _provider, e,
+                    tools=_agent_tools,
                     show_prompt=show_prompt, show_response=show_response, show_cost=show_cost,
                 )
             raise
@@ -482,10 +482,10 @@ async def call_agent(
             )
         except Exception as e:
             if _is_fallback_target(e):
-                reset_time = _extract_reset_time(e)
-                _provider_cooldown[_provider] = reset_time
+                _run_quota_exhausted.add(_provider)
                 return await _fallback_to_openai(
-                    messages, file_path, _agent_name, _provider, reset_time,
+                    messages, file_path, _agent_name, _provider, e,
+                    tools=_agent_tools,
                     show_prompt=show_prompt, show_response=show_response, show_cost=show_cost,
                 )
             raise
