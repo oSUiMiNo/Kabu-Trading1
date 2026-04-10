@@ -153,10 +153,10 @@ monitor_schedules:
     skip_spans: []
 
   - label: JP_PM
-    description: "平日 JP 2回目: 15:20 JST（大引け前、longスキップ）"
+    description: "平日 JP 2回目: 16:00 JST（大引け後、longスキップ）"
     market: JP
-    hour_jst: 15
-    minute_jst: 20
+    hour_jst: 16
+    minute_jst: 0
     days_of_week: [0, 1, 2, 3, 4]
     skip_spans: [long]
 
