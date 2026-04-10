@@ -395,5 +395,103 @@ class TestPlanComparison(unittest.TestCase):
         self.assertNotIn("前回プランとの比較", field_names)
 
 
+class TestHoldingAndActionLog(unittest.TestCase):
+    """NG通知に保有状況 + ActionLog URL が付与されるテスト"""
+
+    def _make_ng_payload(self, label, holding=None):
+        return NotifyPayload(
+            label=label,
+            ticker="NVDA",
+            monitor_data={
+                "result": "NG",
+                "current_price": 100.0,
+                "plan_price": 110.0,
+                "price_change_pct": -9.0,
+                "summary": "下落",
+            },
+            new_plan={"decision_final": "HOLD", "confidence": "high"},
+            holding=holding,
+        )
+
+    def test_warning_has_holding_and_actionlog(self):
+        payload = self._make_ng_payload(
+            NotifyLabel.WARNING,
+            holding={"ticker": "NVDA", "shares": 10, "avg_cost": 105.5},
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertIn("保有状況", field_names)
+        self.assertIn("ActionLog", field_names)
+        holding_field = next(f for f in embed["fields"] if f["name"] == "保有状況")
+        self.assertIn("10株", holding_field["value"])
+        self.assertIn("105.5", holding_field["value"])
+        al_field = next(f for f in embed["fields"] if f["name"] == "ActionLog")
+        self.assertIn("localhost:8080/ticker/NVDA", al_field["value"])
+
+    def test_urgent_has_holding_and_actionlog(self):
+        payload = self._make_ng_payload(
+            NotifyLabel.URGENT,
+            holding={"ticker": "NVDA", "shares": 5, "avg_cost": 120.0},
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertIn("保有状況", field_names)
+        self.assertIn("ActionLog", field_names)
+
+    def test_good_news_has_holding_and_actionlog(self):
+        payload = self._make_ng_payload(
+            NotifyLabel.GOOD_NEWS,
+            holding={"ticker": "NVDA", "shares": 20, "avg_cost": 80.0},
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertIn("保有状況", field_names)
+        self.assertIn("ActionLog", field_names)
+
+    def test_no_holding_shows_not_held(self):
+        payload = self._make_ng_payload(NotifyLabel.WARNING, holding=None)
+        embed = build_embed(payload)
+        holding_field = next(f for f in embed["fields"] if f["name"] == "保有状況")
+        self.assertIn("未保有", holding_field["value"])
+
+    def test_zero_shares_shows_not_held(self):
+        payload = self._make_ng_payload(
+            NotifyLabel.WARNING,
+            holding={"ticker": "NVDA", "shares": 0, "avg_cost": 0},
+        )
+        embed = build_embed(payload)
+        holding_field = next(f for f in embed["fields"] if f["name"] == "保有状況")
+        self.assertIn("未保有", holding_field["value"])
+
+    def test_check_label_no_holding_field(self):
+        payload = NotifyPayload(
+            label=NotifyLabel.CHECK,
+            ticker="AAPL",
+            monitor_data={
+                "result": "OK",
+                "current_price": 180.0,
+                "plan_price": 175.0,
+                "price_change_pct": 2.86,
+                "summary": "問題なし",
+                "risk_flags": ["マクロショック"],
+            },
+            holding={"ticker": "AAPL", "shares": 10, "avg_cost": 170.0},
+        )
+        embed = build_embed(payload)
+        field_names = [f["name"] for f in embed["fields"]]
+        self.assertNotIn("保有状況", field_names)
+        self.assertNotIn("ActionLog", field_names)
+
+    def test_holding_and_actionlog_are_last_fields(self):
+        payload = self._make_ng_payload(
+            NotifyLabel.WARNING,
+            holding={"ticker": "NVDA", "shares": 10, "avg_cost": 105.5},
+        )
+        embed = build_embed(payload)
+        fields = embed["fields"]
+        self.assertEqual(fields[-2]["name"], "保有状況")
+        self.assertEqual(fields[-1]["name"], "ActionLog")
+
+
 if __name__ == "__main__":
     unittest.main()

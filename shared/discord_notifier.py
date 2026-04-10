@@ -17,6 +17,7 @@ from notification_types import NotifyLabel, NotifyPayload, LABEL_COLOR, MARKET_J
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = _PROJECT_ROOT / "Monitor" / ".claude" / "commands"
+_ACTIONLOG_BASE_URL = os.environ.get("ACTIONLOG_URL", "http://localhost:8080")
 
 _RESULT_JA = {"OK": "OK", "NG": "NG", "ERROR": "エラー"}
 
@@ -140,14 +141,16 @@ def build_embed(payload: NotifyPayload) -> dict:
             fields.append({"name": "NG銘柄（再プラン済み）", "value": ", ".join(ng_tickers)})
         if error_tickers:
             fields.append({"name": "エラー銘柄", "value": ", ".join(error_tickers)})
+        is_single = count == 1
+        single_name = (tickers[0] if tickers else error_tickers[0]) if is_single else None
         if error_tickers and not tickers:
-            description = "全銘柄でエラーが発生しました。個別のエラー通知を確認してください。"
+            description = f"{single_name}でエラーが発生しました。" if is_single else "全銘柄でエラーが発生しました。個別のエラー通知を確認してください。"
         elif error_tickers:
             description = "一部銘柄でエラーが発生しました。正常な銘柄のプランは有効です。"
         elif ng_tickers:
-            description = "全銘柄のチェックとプラン更新が完了しました。"
+            description = f"{single_name}のチェックとプラン更新が完了しました。" if is_single else "全銘柄のチェックとプラン更新が完了しました。"
         else:
-            description = "全銘柄のプランが現在の市場状況に対して有効です。"
+            description = f"{single_name}のプランが現在の市場状況に対して有効です。" if is_single else "全銘柄のプランが現在の市場状況に対して有効です。"
         return {"title": title, "description": description, "color": color, "timestamp": timestamp, "fields": fields}
 
     current_price = md.get("current_price", "?")
@@ -238,6 +241,20 @@ def build_embed(payload: NotifyPayload) -> dict:
         event_str = event_name + (f"（{watch_kind_ja}）" if watch_kind_ja else "")
         fields.append({"name": "トリガイベント", "value": event_str})
 
+    if label in (NotifyLabel.URGENT, NotifyLabel.GOOD_NEWS, NotifyLabel.WARNING):
+        holding = payload.holding
+        if holding and holding.get("shares"):
+            shares = holding["shares"]
+            avg_cost = holding.get("avg_cost", "?")
+            holding_text = f"> {shares}株 / 平均取得単価: {avg_cost}"
+        else:
+            holding_text = "> 未保有"
+        fields.append({"name": "保有状況", "value": holding_text})
+        fields.append({
+            "name": "ActionLog",
+            "value": f"[ActionLog を開く]({_ACTIONLOG_BASE_URL}/ticker/{payload.ticker})",
+        })
+
     return embed
 
 
@@ -277,19 +294,22 @@ def send_webhook(embed: dict, content: str = "") -> bool:
         return False
 
 
-def send_start_notification(market: str | None) -> bool:
+def send_start_notification(market: str | None, target_ticker: str | None = None) -> bool:
     """Monitor 開始時に Discord に通知する。"""
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone(timedelta(hours=9)))
     time_str = now.strftime("%Y-%m-%d %H:%M JST")
-    market_ja = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
+    if target_ticker:
+        label = target_ticker
+    else:
+        label = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
     embed = {
         "description": f"🕐  **{time_str}**",
         "color": LABEL_COLOR[NotifyLabel.START],
     }
     content = (
         "## ============================\n"
-        f"# {market_ja} Monitor 開始\n"
+        f"# {label} Monitor 開始\n"
         "## ============================"
     )
     return send_webhook(embed, content=content)

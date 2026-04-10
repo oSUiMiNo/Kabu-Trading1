@@ -193,9 +193,10 @@ _run_quota_exhausted: set[str] = set()
 # 例：{"codex"} → codex を使うエージェントは全て OpenAI にフォールバック
 
 _run_fallback_failed: set[str] = set()
-# 「OpenAI へのフォールバックも失敗した」を記録する。
+# 「OpenAI へのフォールバックが認証エラー等の永続的失敗をした」を記録する。
 # ここに入っている provider は、同じ実行中はフォールバックすら試さず即エラーにする。
-# OpenAI の API キー不備やサーバー障害のときに、同じ失敗を何度も繰り返さないための安全装置。
+# API キー不備など、リトライしても回復しないエラーのみを記録する。
+# 一時的な障害（タイムアウト・レート制限等）は記録せず、リトライ時に再試行させる。
 
 _run_notified: set[str] = set()
 # 「この provider の上限到達を Discord に通知済み」を記録する。
@@ -215,6 +216,17 @@ _FALLBACK_PATTERNS = [
 _TRANSIENT_RATE_PATTERNS = [
     "rate limit",
     "too many requests",
+]
+
+# OpenAI フォールバック時に「リトライしても回復しない」と判断するパターン。
+# これに該当するエラーのみ _run_fallback_failed に記録し、以降の試行をブロックする。
+_PERMANENT_FAILURE_PATTERNS = [
+    "invalid api key",
+    "invalid_api_key",
+    "authentication",
+    "authorization",
+    "permission denied",
+    "account deactivated",
 ]
 
 _RESET_TIME_RE = re.compile(
@@ -254,6 +266,17 @@ def _extract_reset_time(error: Exception) -> str | None:
     """エラーメッセージからリセット日時を抽出する。"""
     m = _RESET_TIME_RE.search(str(error))
     return m.group(1).strip() if m else None
+
+
+def _normalize_fallback_output(text: str) -> str:
+    """OpenAI フォールバックの出力を正規化する。
+    GPT 系モデルはコードフェンスなしで bare YAML を返すことがあるため、
+    コードフェンスが無く YAML らしき内容がある場合は ```yaml ``` で囲む。"""
+    if not text or "```" in text:
+        return text
+    if re.search(r"^\w[\w_]*:", text, re.MULTILINE):
+        return f"```yaml\n{text.strip()}\n```"
+    return text
 
 
 def _extract_tools_from_agent(file_path: str | Path | None) -> list[str]:
@@ -359,9 +382,12 @@ async def _fallback_to_openai(
             show_response=show_response,
             show_cost=show_cost,
         )
-        return AgentResult(text=_r.text, cost=_r.cost, tools_used=list(_r.tools_used))
+        text = _normalize_fallback_output(_r.text)
+        return AgentResult(text=text, cost=_r.cost, tools_used=list(_r.tools_used))
     except Exception as fallback_err:
-        _run_fallback_failed.add(original_provider)
+        err_msg = str(fallback_err).lower()
+        if any(p in err_msg for p in _PERMANENT_FAILURE_PATTERNS):
+            _run_fallback_failed.add(original_provider)
         raise LLMFallbackError(
             f"{original_provider} → OpenAI fallback 失敗: {fallback_err}"
         ) from fallback_err

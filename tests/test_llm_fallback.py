@@ -169,7 +169,8 @@ class TestFallbackToOpenai:
                     mock_call.assert_called_once()
 
     @pytest.mark.anyio
-    async def test_fallback_failure_marks_attempted(self):
+    async def test_transient_failure_does_not_block(self):
+        """一時的エラー（タイムアウト等）は _run_fallback_failed に記録しない。"""
         with patch("llm_client.call_openai", new_callable=AsyncMock, side_effect=Exception("OpenAI down")):
             with patch("agent_util._notify_quota_fallback"):
                 with patch("agent_util._load_fallback_config", return_value={"model": "gpt-5.4", "reasoning_effort": "high"}):
@@ -178,34 +179,64 @@ class TestFallbackToOpenai:
                         await _fallback_to_openai(
                             "test prompt", None, "test-agent", "codex", err,
                         )
-                    assert "codex" in _run_fallback_failed
+                    assert "codex" not in _run_fallback_failed
 
     @pytest.mark.anyio
-    async def test_second_attempt_blocked(self):
-        """fallback 失敗後の2回目で OpenAI を再度叩かない。"""
+    async def test_auth_failure_blocks_future_attempts(self):
+        """認証エラーは _run_fallback_failed に記録し、以降の試行をブロックする。"""
         call_count = 0
         async def counting_openai(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            raise Exception("OpenAI down")
+            raise Exception("Invalid API key provided")
 
         with patch("llm_client.call_openai", new_callable=AsyncMock, side_effect=counting_openai):
             with patch("agent_util._notify_quota_fallback"):
                 with patch("agent_util._load_fallback_config", return_value={"model": "gpt-5.4", "reasoning_effort": "high"}):
                     err = Exception("usage limit reached")
-                    # 1回目: OpenAI を叩いて失敗
+                    # 1回目: 認証エラーで失敗 → 記録される
                     with pytest.raises(LLMFallbackError):
                         await _fallback_to_openai(
                             "test", None, "test-agent", "codex", err,
                         )
                     assert call_count == 1
+                    assert "codex" in _run_fallback_failed
 
                     # 2回目: OpenAI を叩かず即失敗
                     with pytest.raises(LLMFallbackError, match="既に失敗済み"):
                         await _fallback_to_openai(
                             "test", None, "test-agent", "codex", err,
                         )
-                    assert call_count == 1  # 呼び出し回数は増えていない
+                    assert call_count == 1
+
+    @pytest.mark.anyio
+    async def test_transient_failure_allows_retry(self):
+        """一時的エラー後の2回目で OpenAI を再度試行する。"""
+        call_count = 0
+        async def counting_then_succeed(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("Connection timeout")
+            return AgentResult(text="recovered", cost=0.01, tools_used=[])
+
+        with patch("llm_client.call_openai", new_callable=AsyncMock, side_effect=counting_then_succeed):
+            with patch("agent_util._notify_quota_fallback"):
+                with patch("agent_util._load_fallback_config", return_value={"model": "gpt-5.4", "reasoning_effort": "high"}):
+                    err = Exception("usage limit reached")
+                    # 1回目: 一時的エラーで失敗
+                    with pytest.raises(LLMFallbackError):
+                        await _fallback_to_openai(
+                            "test", None, "test-agent", "codex", err,
+                        )
+                    assert call_count == 1
+
+                    # 2回目: リトライして成功
+                    result = await _fallback_to_openai(
+                        "test", None, "test-agent", "codex", err,
+                    )
+                    assert call_count == 2
+                    assert result.text == "recovered"
 
 
 # ══════════════════════════════════════════════════════

@@ -26,8 +26,9 @@ from supabase_client import (
     get_latest_archivelog_with_newplan,
     get_previous_archivelog_with_newplan,
     list_watchlist,
+    get_holding,
 )
-from notification_types import NotifyPayload, classify_label
+from notification_types import NotifyLabel, NotifyPayload, classify_label
 from discord_notifier import notify
 
 from AgentUtil import call_agent
@@ -172,6 +173,9 @@ async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool
                     pass
             new_plan = _build_new_plan_dict(newplan_full, verdict)
             dn = next((w.get("display_name") or ticker for w in wl if w["ticker"] == ticker), ticker)
+            holding = None
+            if label in (NotifyLabel.URGENT, NotifyLabel.GOOD_NEWS, NotifyLabel.WARNING):
+                holding = safe_db(get_holding, ticker)
             payload = NotifyPayload(
                 label=label,
                 ticker=ticker,
@@ -180,6 +184,7 @@ async def process_one_ticker(ticker: str, archive_id: str | None = None) -> bool
                 event_context=event_context,
                 display_name=dn,
                 plan_comparison=plan_comparison,
+                holding=holding,
             )
             await notify(payload)
             print(f"  [{ticker}] Discord 通知送信完了 (label={label.value})")

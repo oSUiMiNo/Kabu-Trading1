@@ -36,7 +36,11 @@ async def _run_one(ticker: str, python: str, script: str, extra_args: list[str])
     return ticker, proc.returncode
 
 
-async def run(target_ticker: str | None = None, market: str | None = None):
+async def run(
+    target_ticker: str | None = None,
+    market: str | None = None,
+    create_archive: bool | None = None,
+):
     market_label = f" [{market}]" if market else ""
     print(f"\n{'='*60}")
     print(f"=== Technical Batch{market_label} ===")
@@ -45,7 +49,7 @@ async def run(target_ticker: str | None = None, market: str | None = None):
     if target_ticker:
         tickers = [target_ticker.upper()]
         market_map = {}
-        create_archive = False
+        _create = create_archive if create_archive is not None else False
     else:
         watchlist = safe_db(list_watchlist, active_only=True, market=market)
         if not watchlist:
@@ -53,7 +57,7 @@ async def run(target_ticker: str | None = None, market: str | None = None):
             return 0
         tickers = [w["ticker"] for w in watchlist]
         market_map = {w["ticker"]: w.get("market") for w in watchlist}
-        create_archive = True
+        _create = create_archive if create_archive is not None else True
 
     python = _find_venv_python()
     script = str(TECHNICAL_DIR / "src" / "main.py")
@@ -66,7 +70,7 @@ async def run(target_ticker: str | None = None, market: str | None = None):
     tasks = []
     for t in tickers:
         args = []
-        if create_archive:
+        if _create:
             args.append("--create-archive")
         m = market_map.get(t)
         if m:
@@ -94,6 +98,7 @@ async def run(target_ticker: str | None = None, market: str | None = None):
 if __name__ == "__main__":
     target = None
     _market = None
+    _create_archive = None
     args = sys.argv[1:]
     i = 0
     while i < len(args):
@@ -103,7 +108,10 @@ if __name__ == "__main__":
         elif args[i] == "--market" and i + 1 < len(args):
             _market = args[i + 1].upper()
             i += 2
+        elif args[i] == "--create-archive":
+            _create_archive = True
+            i += 1
         else:
             i += 1
 
-    sys.exit(asyncio.run(run(target, _market)))
+    sys.exit(asyncio.run(run(target, _market, _create_archive)))

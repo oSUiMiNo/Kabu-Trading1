@@ -44,6 +44,7 @@ class NotifyPayload:
     error_detail: str = ""
     display_name: str = ""
     plan_comparison: str = ""
+    holding: dict | None = None
 
 
 def classify_label(monitor_data: dict, mode: str | None = None) -> NotifyLabel | None:

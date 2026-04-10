@@ -20,7 +20,7 @@ from supabase_client import (
     get_holding,
 )
 from auto_populate import populate_action_log
-from data_service import _sync_holdings_from_logs
+from data_service import _sync_holdings_from_logs, _utc_to_jst_date
 
 
 def process_one_ticker(ticker: str, archive_id: str) -> bool:
@@ -48,7 +48,7 @@ def process_one_ticker(ticker: str, archive_id: str) -> bool:
                 ticker=ticker,
                 archive_id=archive_id,
                 newplan_full=newplan_full,
-                action_date=archivelog.get("created_at", "")[:10],
+                action_date=_utc_to_jst_date(archivelog.get("created_at")),
                 fallback_market=wl_market,
                 fallback_usd_jpy_rate=fb_rate,
             )

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import calendar
 import sys
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "shared"))
@@ -25,6 +26,19 @@ from supabase_client import (
 )
 from calc_engine import recalculate_from, calc_pnl, calc_total_shares
 from auto_populate import populate_action_log
+
+_JST = timezone(timedelta(hours=9))
+
+
+def _utc_to_jst_date(created_at: str | None) -> str | None:
+    """UTC の created_at 文字列を JST の日付（YYYY-MM-DD）に変換する。"""
+    if not created_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(created_at)
+        return dt.astimezone(_JST).strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        return created_at[:10] if len(created_at) >= 10 else None
 
 
 def get_monthly_data(ticker: str, year: int, month: int) -> list[dict]:
@@ -193,7 +207,7 @@ def populate_existing_archives(ticker: str) -> int:
         if isinstance(mon, dict) and mon.get("result") == "ERROR":
             continue
 
-        action_date = arc["created_at"][:10] if arc.get("created_at") else None
+        action_date = _utc_to_jst_date(arc.get("created_at"))
 
         tech = arc.get("technical") or {}
         arc_rate = tech.get("usd_jpy_rate") if isinstance(tech, dict) else None

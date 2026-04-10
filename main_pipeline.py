@@ -142,11 +142,15 @@ async def run_pipeline(
         load_dotenv(env_path, override=False)
 
     event_context = _load_event_context()
-    send_start_notification(market)
+    send_start_notification(market, target_ticker=target_ticker)
 
     # display_names を事前取得（全フェーズの通知で使用）
     wl = safe_db(list_watchlist, active_only=True, market=market) or []
     dn_map = {w["ticker"]: w.get("display_name") or w["ticker"] for w in wl}
+    if target_ticker:
+        display_label = dn_map.get(target_ticker, target_ticker)
+    else:
+        display_label = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
 
     # Technical が archive レコードを作成するため、その前にタイムスタンプを記録
     # （後続の fetch_monitor_results_since で created_at >= この時刻を使う）
@@ -156,7 +160,7 @@ async def run_pipeline(
     print(f"\n{'='*60}", flush=True)
     print(f"=== Phase 1: Technical (market={market}) ===", flush=True)
     print(f"{'='*60}", flush=True)
-    tech_args = []
+    tech_args = ["--create-archive"]
     if target_ticker:
         tech_args.extend(["--ticker", target_ticker])
     if market:
@@ -216,12 +220,11 @@ async def run_pipeline(
             print(f"{'='*60}")
             _run_batch("actionlog_batch.py")
 
-            market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
             all_names = [dn_map.get(t, t) for t in all_tickers_list]
             gate_text = "市場全体ゲート発火なし" if not filter_result.market_gate_triggered else "市場全体ゲート発火"
             payload = NotifyPayload(
                 label=NotifyLabel.COMPLETE,
-                ticker=f"{market_name} フィルター通過なし",
+                ticker=f"{display_label} フィルター通過なし",
                 monitor_data={
                     "tickers": all_names,
                     "filter_status": "FILTER_SKIPPED",
@@ -293,17 +296,16 @@ async def run_pipeline(
                       if (rec.get("monitor") or {}).get("result") == "OK"]
         error_tickers = [rec["ticker"] for rec in monitor_results
                          if (rec.get("monitor") or {}).get("result") == "ERROR"]
-        market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
         ok_names = [dn_map.get(t, t) for t in ok_tickers]
         error_names = [dn_map.get(t, t) for t in error_tickers]
         if error_tickers and not ok_tickers:
-            title = f"{market_name} 全銘柄エラー"
+            title = f"{display_label} エラー" if target_ticker else f"{display_label} 全銘柄エラー"
             summary_label = NotifyLabel.ERROR
         elif error_tickers:
-            title = f"{market_name} チェック完了（一部エラー）"
+            title = f"{display_label} チェック完了（エラーあり）" if target_ticker else f"{display_label} チェック完了（一部エラー）"
             summary_label = NotifyLabel.WARNING
         else:
-            title = f"{market_name} 全銘柄OK"
+            title = f"{display_label} OK" if target_ticker else f"{display_label} 全銘柄OK"
             summary_label = NotifyLabel.COMPLETE
         payload = NotifyPayload(
             label=summary_label,
@@ -389,12 +391,11 @@ async def run_pipeline(
     print(f"{'='*60}")
 
     all_tickers = [rec["ticker"] for rec in monitor_results]
-    market_name = MARKET_JA.get(market, "全銘柄") if market else "全銘柄"
     all_names = [dn_map.get(t, t) for t in all_tickers]
     ng_names = [dn_map.get(t, t) for t in ng_ticker_names]
     payload = NotifyPayload(
         label=NotifyLabel.COMPLETE,
-        ticker=f"{market_name} 全銘柄チェック完了",
+        ticker=f"{display_label} チェック完了" if target_ticker else f"{display_label} 全銘柄チェック完了",
         monitor_data={
             "tickers": all_names,
             "ng_tickers": ng_names,
