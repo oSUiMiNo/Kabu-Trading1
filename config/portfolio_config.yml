@@ -183,13 +183,3 @@ monitor_schedules:
     minute_jst: 0
     days_of_week: [5, 6]
     skip_spans: []
-
-# 実験用スケジュール（test: true で時刻・曜日チェックをスキップし即発火）
-  - label: TEST
-    description: "テスト用"
-    market: JP
-    hour_jst: 23
-    minute_jst: 40
-    days_of_week: [0, 1, 2, 3, 4, 5, 6]
-    skip_spans: []
-    test: true
