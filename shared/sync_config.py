@@ -21,7 +21,8 @@ from supabase_client import get_portfolio_config, update_portfolio_config
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "portfolio_config.yml"
 
-SKIP_COLUMNS = {"id", "updated_at", "monitor_last_runs"}
+SKIP_COLUMNS = {"id", "updated_at", "monitor_last_runs",
+                 "fallback_openai_model", "fallback_openai_reasoning_effort"}
 
 JSONB_COLUMNS = {
     "stop_loss_pct", "price_tolerance_pct", "max_log_age_days",
@@ -29,6 +30,7 @@ JSONB_COLUMNS = {
     "filter_event_threshold_days",
     "full_run_mid_days",
     "llm_providers",
+    "risk_overlay",
 }
 
 

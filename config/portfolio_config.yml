@@ -8,11 +8,11 @@
 #   - days_of_week: 0=月, 1=火, 2=水, 3=木, 4=金, 5=土, 6=日
 
 # ── 投資パラメータ ──
-total_budget_jpy: 3000000
-risk_limit_pct: 5.00
-default_take_profit_pct: 20.00
-min_rr_ratio: 1.0
-notes: "テスト用ポートフォリオ（5銘柄: NVDA, TSLA, AMZN, 6702, U）"
+total_budget_jpy: 1000000
+risk_limit_pct: 2.50
+default_take_profit_pct: 8.00
+min_rr_ratio: 1.5
+notes: "最終テスト用ポートフォリオ（神戸物産、NVDA、TSLA、Intel、AMD）"
 
 # 投資期間の定義（LLMプロンプトに使用）
 span_definitions:
@@ -22,18 +22,18 @@ span_definitions:
 
 # 損切り幅（投資期間別 %）
 stop_loss_pct:
-  short: -4
-  mid: -8
-  long: -15
+  short: -3
+  mid: -6
+  long: -12
 
 # 価格ズレ許容幅（投資期間別 %）
 price_tolerance_pct:
-  short: 3
-  mid: 5
-  long: 7
+  short: 2
+  mid: 4
+  long: 6
 
 # 価格ズレ停止閾値（%）
-price_block_pct: 10
+price_block_pct: 7
 
 # ログ鮮度上限（投資期間別 日数）
 max_log_age_days:
@@ -46,6 +46,62 @@ max_allocation_pct:
   low: 5
   med: 10
   high: 15
+
+# ── 指標フィルター ──
+indicator_filter_enabled: true
+
+# VIX（恐怖指数）
+filter_vix_threshold: 30           # この値を超えたら「市場が荒れている」と判断
+filter_vix_delta_pt: 4.0           # 短期間でこのポイント以上動いたら警戒
+
+# 国債利回り
+filter_yield_delta_bp: 12          # 米国債利回りがこのbp以上動いたら警戒
+
+# イベント系
+filter_central_bank_event_days: 1  # FOMC/日銀会合の何日前からフィルターを効かせるか
+filter_event_threshold_days:       # 決算等イベント前の慎重モード開始日数（期間別）
+  short: 4
+  mid: 3
+  long: 2
+
+# 決算
+filter_eps_surprise_hard_pct: -10  # 予想をこの%以上下回ったら強制アクション
+
+# テクニカル
+filter_volume_ratio_threshold: 2.0 # 通常の何倍の出来高で「異常な売買」と判断
+filter_rsi_oversold: 30            # RSIがこの値以下なら「売られすぎ」と判断
+
+# ── リスクオーバーレイ ──
+# 市場全体のリスク状態に応じてポジションを自動制限するルール群
+risk_overlay:
+  shadow_mode: false               # false = 実際にポジションを制限する（本番）
+  # VIX 水準
+  vix_stress: 25                   # ストレス水準
+  vix_crisis: 35                   # 危機水準
+  # 市場幅（breadth）
+  breadth_stress: -10
+  breadth_crisis: -20
+  # 各水準での最大リスク（bp）
+  normal_max_risk_bps: 50
+  stress_max_risk_bps: 35
+  crisis_max_risk_bps: 15
+  # ポートフォリオ上限率
+  tier1_portfolio_cap: 0.7
+  tier2_portfolio_cap: 0.85
+  stress_portfolio_cap: 0.6
+  crisis_portfolio_cap: 0.25
+  # 決算前の制限
+  earnings_freeze_days: 3          # 決算前の新規ポジション凍結日数
+  earnings_reduce_days: 7          # 決算前のポジション縮小開始日数
+  earnings_reduce_cap: 0.7         # 決算前の縮小率
+  # エントリーポイント帯
+  ep_band_1: 0.7
+  ep_band_2: 1.0
+  ep_band_3: 1.3
+
+# ── 中期フルラン曜日 ──
+# 中期銘柄をフルパイプライン実行する曜日（0=月, 1=火, ... 6=日）
+full_run_mid_days: [1, 4]
 
 # ── LLM プロバイダー設定 ──
 # エージェントごとの LLM プロバイダーを指定する。
@@ -81,8 +137,8 @@ fallback_openai_reasoning_effort: "high"
 
 # ── Analyzer パラメータ ──
 analyzer_num_lanes: 2
-analyzer_max_rounds: 4
-analyzer_opinions_per_lane: 2
+analyzer_max_rounds: 3
+analyzer_opinions_per_lane: 1
 
 # ── Monitor 定期スケジュール ──
 monitor_schedule_enabled: true
@@ -97,10 +153,10 @@ monitor_schedules:
     skip_spans: []
 
   - label: JP_PM
-    description: "平日 JP 2回目: 16:00 JST（大引け前、longスキップ）"
+    description: "平日 JP 2回目: 15:20 JST（大引け前、longスキップ）"
     market: JP
-    hour_jst: 16
-    minute_jst: 0
+    hour_jst: 15
+    minute_jst: 20
     days_of_week: [0, 1, 2, 3, 4]
     skip_spans: [long]
 
