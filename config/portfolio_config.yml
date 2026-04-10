@@ -137,8 +137,8 @@ fallback_openai_reasoning_effort: "high"
 
 # ── Analyzer パラメータ ──
 analyzer_num_lanes: 2
-analyzer_max_rounds: 3
-analyzer_opinions_per_lane: 1
+analyzer_max_rounds: 4
+analyzer_opinions_per_lane: 2
 
 # ── Monitor 定期スケジュール ──
 monitor_schedule_enabled: true
