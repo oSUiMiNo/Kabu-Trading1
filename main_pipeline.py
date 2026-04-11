@@ -43,6 +43,7 @@ from supabase_client import (
 from notification_types import NotifyLabel, NotifyPayload, classify_label, MARKET_JA, LABEL_COLOR
 from discord_notifier import notify, send_start_notification
 from indicator_filter import run_filter, ScheduleContext
+from agent_util import clear_fallback_notify_flags
 
 
 # ── ユーティリティ ───────────────────────────────────────
@@ -63,6 +64,7 @@ def _load_event_context() -> dict | None:
 
 def _run_batch(script_name: str, extra_args: list[str] | None = None) -> int:
     """PJTルートの batch スクリプトを subprocess で実行する。"""
+    clear_fallback_notify_flags()
     cmd = [sys.executable, str(PROJECT_ROOT / script_name)] + (extra_args or [])
     print(f"  起動: {' '.join(cmd)}", flush=True)
     sys.stdout.flush()

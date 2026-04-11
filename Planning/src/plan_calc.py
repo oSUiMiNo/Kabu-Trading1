@@ -322,10 +322,9 @@ def calc_allocation(
     available_budget = max(0, budget_total_jpy - int(existing_investment_jpy))
     alloc_jpy = int(available_budget * alloc_pct / 100)
 
-    if risk_limit_jpy is not None:
-        alloc_jpy = min(alloc_jpy, risk_limit_jpy)
-
-    # ポジションサイジング制限
+    # ポジションサイジング制限（許容損失から逆算した投入上限で制限）
+    # risk_limit_jpy は損失額の上限であり投入額の上限ではないため、
+    # 配分額の制限には position_size_jpy を使用する
     if position_size_jpy is not None:
         alloc_jpy = min(alloc_jpy, position_size_jpy)
 

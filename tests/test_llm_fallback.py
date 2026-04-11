@@ -135,6 +135,15 @@ class TestExtractToolsFromAgent:
 # ══════════════════════════════════════════════════════
 
 class TestNotifyQuotaFallback:
+    def setup_method(self):
+        import agent_util
+        agent_util._run_notified.clear()
+        agent_util.clear_fallback_notify_flags()
+
+    def teardown_method(self):
+        import agent_util
+        agent_util.clear_fallback_notify_flags()
+
     @patch("agent_util.send_webhook", create=True)
     def test_notifies_once_per_window(self, mock_webhook):
         with patch.dict("sys.modules", {"discord_notifier": MagicMock(send_webhook=mock_webhook)}):
