@@ -8,9 +8,12 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 ## システム全体像
 
 ```
-[Technical] → [ImportantIndicators] → [IndicatorFilter] → [Monitor] → [Analyzer] → [Planning] → [Watch] → [ActionLog]
-                                                              ↑                                                   |
-                                                              └──────────────── archive テーブル ←─────────────────┘
+定期ルート:  [Technical] → [ImportantIndicators] → [IndicatorFilter] → [Monitor] → [Analyzer] → [Planning] → [Watch] → [ActionLog]
+                                                                          ↑                                                   |
+                                                                          └──────────────── archive テーブル ←─────────────────┘
+
+手動ルート:  [Admission] → [Technical] → [ImportantIndicators] → [Analyzer] → [Planning] → [Watch] → [ActionLog]
+             (Monitor / IndicatorFilter をスキップ)
 ```
 
 1. **Technical** が watchlist 全銘柄のテクニカル指標を取得し archive に記録
@@ -45,6 +48,7 @@ Claude Code / GLM のマルチエージェント構成で運用する。
 | **EventScheduler** | 経済イベント取得・DB登録 | `EventScheduler/src/main.py` |
 | **NightWorker** | archive 品質レビュー + Issue 作成 + 用語集統合 | `NightWorker/src/main.py`<br>`NightWorker/src/words_consolidator.py` |
 | **ActionLog** | 月次アクションログ表示 Web UI（NiceGUI） | `ActionLog/src/main.py` |
+| **ManualEntry** | 手動銘柄入力による分析パイプライン | `manual_pipeline.py` |
 | **shared** | DB・通知・LLM クライアント共通 | `shared/supabase_client.py`<br>`shared/discord_notifier.py`<br>`shared/llm_client.py` |
 
 ---
@@ -66,6 +70,10 @@ python main_pipeline.py --market US
 
 # 監視バッチ（単体実行）
 python monitor_batch.py
+
+# 手動銘柄入力（Monitor をスキップして直接分析）
+python manual_pipeline.py NVDA
+python manual_pipeline.py 3038 --market JP --display-name 神戸物産
 ```
 
 ---

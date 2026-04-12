@@ -471,6 +471,32 @@ def update_watchlist(ticker: str, **fields) -> dict:
     return resp.data[0] if resp.data else {}
 
 
+def upsert_watchlist(ticker: str, **fields) -> dict:
+    """watchlist に銘柄を upsert する。存在しなければ INSERT、存在すれば UPDATE。"""
+    ticker_upper = ticker.upper()
+    existing = (
+        get_client()
+        .from_("watchlist")
+        .select("id")
+        .eq("ticker", ticker_upper)
+        .execute()
+    )
+    if existing.data:
+        if not fields:
+            return existing.data[0]
+        resp = (
+            get_client()
+            .from_("watchlist")
+            .update(fields)
+            .eq("ticker", ticker_upper)
+            .execute()
+        )
+    else:
+        row = {"ticker": ticker_upper, "active": True, **fields}
+        resp = get_client().from_("watchlist").insert(row).execute()
+    return resp.data[0] if resp.data else {}
+
+
 # ── event_master ─────────────────────────────────────────
 
 def upsert_event_master(event: dict) -> dict:

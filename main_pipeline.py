@@ -33,6 +33,7 @@ from supabase_client import (
     list_watchlist,
     fetch_active_for_analyzer,
     fetch_active_for_planning,
+    fetch_active_for_watch,
     fetch_today_monitor_results,
     fetch_monitor_results_since,
     get_archivelog_by_id,
@@ -136,8 +137,11 @@ async def run_pipeline(
     monitor_only: bool = False,
     market: str | None = None,
     skip_spans: set[str] | None = None,
+    manual: bool = False,
 ):
-    """Technical → Monitor → Analyzer → Planning → Watch パイプライン。"""
+    """Technical → Monitor → Analyzer → Planning → Watch パイプライン。
+    manual=True 時は Admission 済みの archive を使い、Monitor/IndicatorFilter をスキップ。
+    """
     from dotenv import load_dotenv
     env_path = PROJECT_ROOT / ".env.local"
     if env_path.exists():
@@ -162,7 +166,7 @@ async def run_pipeline(
     print(f"\n{'='*60}", flush=True)
     print(f"=== Phase 1: Technical (market={market}) ===", flush=True)
     print(f"{'='*60}", flush=True)
-    tech_args = ["--create-archive"]
+    tech_args = [] if manual else ["--create-archive"]
     if target_ticker:
         tech_args.extend(["--ticker", target_ticker])
     if market:
@@ -182,9 +186,9 @@ async def run_pipeline(
     _run_batch("importantindicators_batch.py", ii_args)
 
     # ── Phase 1.7: IndicatorFilter ──
-    # バイパス条件: --ticker 指定 / --monitor-only / filter_enabled=false
+    # バイパス条件: --ticker 指定 / --monitor-only / --manual / filter_enabled=false
     cfg = safe_db(get_portfolio_config) or {}
-    filter_enabled = cfg.get("indicator_filter_enabled", True) and not target_ticker and not monitor_only
+    filter_enabled = cfg.get("indicator_filter_enabled", True) and not target_ticker and not monitor_only and not manual
 
     filtered_tickers: list[str] | None = None  # None = フィルター未適用（全銘柄 Monitor）
     if filter_enabled:
@@ -240,47 +244,53 @@ async def run_pipeline(
         filtered_tickers = monitor_target_tickers
 
     # ── Phase 2: Monitor ──
-    print(f"\n{'='*60}")
-    print(f"=== Phase 2: Monitor ===")
-    print(f"{'='*60}")
-    mon_args = []
-    if target_ticker:
-        mon_args.extend(["--ticker", target_ticker])
-    elif filtered_tickers is not None:
-        mon_args.extend(["--tickers", ",".join(filtered_tickers)])
-    if market:
-        mon_args.extend(["--market", market])
-    if skip_spans and filtered_tickers is None:
-        for span in skip_spans:
-            mon_args.extend(["--skip-span", span])
-    _run_batch("monitor_batch.py", mon_args)
+    monitor_results = []
+    if not manual:
+        print(f"\n{'='*60}")
+        print(f"=== Phase 2: Monitor ===")
+        print(f"{'='*60}")
+        mon_args = []
+        if target_ticker:
+            mon_args.extend(["--ticker", target_ticker])
+        elif filtered_tickers is not None:
+            mon_args.extend(["--tickers", ",".join(filtered_tickers)])
+        if market:
+            mon_args.extend(["--market", market])
+        if skip_spans and filtered_tickers is None:
+            for span in skip_spans:
+                mon_args.extend(["--skip-span", span])
+        _run_batch("monitor_batch.py", mon_args)
 
-    # Monitor 後処理：この実行で作られた結果のみ取得し、対象 market で絞る
-    wl_tickers = {w["ticker"] for w in wl}
-    monitor_results = safe_db(fetch_monitor_results_since, pipeline_start) or []
-    monitor_results = [r for r in monitor_results if r["ticker"] in wl_tickers]
-    for rec in monitor_results:
-        ticker = rec["ticker"]
-        monitor_data = rec.get("monitor") or {}
-        if monitor_data.get("retries_exhausted"):
-            payload = NotifyPayload(
-                label=NotifyLabel.ERROR,
-                ticker=ticker,
-                monitor_data=monitor_data,
-                event_context=event_context,
-                error_detail=monitor_data.get("error_detail", "Monitor リトライ上限到達"),
-                display_name=dn_map.get(ticker, ticker),
-            )
-            await notify(payload)
-        elif classify_label(monitor_data) == NotifyLabel.CHECK:
-            payload = NotifyPayload(
-                label=NotifyLabel.CHECK,
-                ticker=ticker,
-                monitor_data=monitor_data,
-                event_context=event_context,
-                display_name=dn_map.get(ticker, ticker),
-            )
-            await notify(payload)
+        # Monitor 後処理：この実行で作られた結果のみ取得し、対象 market で絞る
+        wl_tickers = {w["ticker"] for w in wl}
+        monitor_results = safe_db(fetch_monitor_results_since, pipeline_start) or []
+        monitor_results = [r for r in monitor_results if r["ticker"] in wl_tickers]
+        for rec in monitor_results:
+            ticker = rec["ticker"]
+            monitor_data = rec.get("monitor") or {}
+            if monitor_data.get("retries_exhausted"):
+                payload = NotifyPayload(
+                    label=NotifyLabel.ERROR,
+                    ticker=ticker,
+                    monitor_data=monitor_data,
+                    event_context=event_context,
+                    error_detail=monitor_data.get("error_detail", "Monitor リトライ上限到達"),
+                    display_name=dn_map.get(ticker, ticker),
+                )
+                await notify(payload)
+            elif classify_label(monitor_data) == NotifyLabel.CHECK:
+                payload = NotifyPayload(
+                    label=NotifyLabel.CHECK,
+                    ticker=ticker,
+                    monitor_data=monitor_data,
+                    event_context=event_context,
+                    display_name=dn_map.get(ticker, ticker),
+                )
+                await notify(payload)
+    else:
+        print(f"\n{'='*60}")
+        print(f"=== Phase 2: Monitor スキップ（手動入力） ===")
+        print(f"{'='*60}")
 
     # NG 銘柄の有無を DB から確認（伝言板方式）
     ng_tickers = safe_db(fetch_active_for_analyzer) or []
@@ -330,6 +340,7 @@ async def run_pipeline(
 
     # Post-Analyzer: エラー検出
     ng_ticker_names = []
+    failed_tickers = []
     for row in ng_tickers:
         ticker = row["ticker"]
         archive_id = row["id"]
@@ -339,6 +350,7 @@ async def run_pipeline(
             print(f"  [{ticker}] Analyzer 完了 → Planning に引き継ぎ")
         else:
             print(f"  [{ticker}] Analyzer 失敗（final_judge 未生成）")
+            failed_tickers.append(ticker)
             safe_db(update_archivelog, archive_id, status="failed", active=False)
             dn = dn_map.get(ticker, ticker)
             payload = NotifyPayload(
@@ -363,6 +375,7 @@ async def run_pipeline(
         ticker = row["ticker"]
         archive_id = row["id"]
         print(f"  [{ticker}] Planning 失敗（newplan_full 未生成）")
+        failed_tickers.append(ticker)
         safe_db(update_archivelog, archive_id, status="failed", active=False)
         dn = dn_map.get(ticker, ticker)
         payload = NotifyPayload(
@@ -381,26 +394,63 @@ async def run_pipeline(
     print(f"{'='*60}")
     _run_batch("watch_batch.py")
 
+    # Post-Watch: エラー検出（active=True が残っていれば Watch 失敗）
+    watch_failed = safe_db(fetch_active_for_watch) or []
+    for row in watch_failed:
+        ticker = row["ticker"]
+        archive_id = row["id"]
+        if ticker not in failed_tickers:
+            print(f"  [{ticker}] Watch 失敗（active が True のまま）")
+            failed_tickers.append(ticker)
+            safe_db(update_archivelog, archive_id, status="failed", active=False)
+            dn = dn_map.get(ticker, ticker)
+            payload = NotifyPayload(
+                label=NotifyLabel.ERROR,
+                ticker=ticker,
+                monitor_data={},
+                event_context=event_context,
+                error_detail="Watch で処理が完了しませんでした",
+                display_name=dn,
+            )
+            await notify(payload)
+
     # ── Phase 6: ActionLog ──
     print(f"\n{'='*60}")
     print(f"=== Phase 6: ActionLog ===")
     print(f"{'='*60}")
     _run_batch("actionlog_batch.py")
 
-    # ── COMPLETE 通知 ──
+    # ── 最終通知 ──
     print(f"\n{'='*60}")
     print(f"=== パイプライン完了 ===")
     print(f"{'='*60}")
 
     all_tickers = [rec["ticker"] for rec in monitor_results]
+    if not all_tickers and target_ticker:
+        all_tickers = [target_ticker]
     all_names = [dn_map.get(t, t) for t in all_tickers]
     ng_names = [dn_map.get(t, t) for t in ng_ticker_names]
+    failed_names = [dn_map.get(t, t) for t in failed_tickers]
+    failed_set = set(failed_tickers)
+    succeeded_tickers = [t for t in ng_ticker_names if t not in failed_set]
+
+    if failed_tickers and not succeeded_tickers:
+        summary_label = NotifyLabel.ERROR
+        title = f"{display_label} エラー（全銘柄失敗）"
+    elif failed_tickers:
+        summary_label = NotifyLabel.WARNING
+        title = f"{display_label} チェック完了（一部エラー）"
+    else:
+        summary_label = NotifyLabel.COMPLETE
+        title = f"{display_label} チェック完了" if target_ticker else f"{display_label} 全銘柄チェック完了"
+
     payload = NotifyPayload(
-        label=NotifyLabel.COMPLETE,
-        ticker=f"{display_label} チェック完了" if target_ticker else f"{display_label} 全銘柄チェック完了",
+        label=summary_label,
+        ticker=title,
         monitor_data={
             "tickers": all_names,
             "ng_tickers": ng_names,
+            "failed_tickers": failed_names,
         },
         event_context=event_context,
     )
@@ -410,6 +460,7 @@ async def run_pipeline(
 if __name__ == "__main__":
     target = None
     monitor_only = False
+    _manual = False
     _market = None
     _skip_spans: set[str] = set()
 
@@ -428,12 +479,15 @@ if __name__ == "__main__":
         elif args[i] == "--monitor-only":
             monitor_only = True
             i += 1
+        elif args[i] == "--manual":
+            _manual = True
+            i += 1
         else:
             target = args[i]
             i += 1
 
     try:
-        anyio.run(lambda: run_pipeline(target, monitor_only, _market, _skip_spans or None))
+        anyio.run(lambda: run_pipeline(target, monitor_only, _market, _skip_spans or None, _manual))
     except Exception as e:
         print(f"\n[FATAL] パイプライン異常終了: {e}", flush=True)
         try:
