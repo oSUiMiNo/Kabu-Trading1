@@ -120,19 +120,6 @@ jobs:
           model_reasoning_effort = "high"
           EOF
 
-      - name: Debug Codex files
-        if: steps.resolve.outputs.should_run == 'true'
-        run: |
-          echo "=== auth.json validation ==="
-          python3 -c "import json; json.load(open('$HOME/.codex/auth.json')); print('auth.json: VALID JSON')" || echo "auth.json: INVALID JSON"
-          echo "=== auth.json line/byte count ==="
-          wc -l -c ~/.codex/auth.json
-          echo "=== auth.json hex tail (last 20 bytes) ==="
-          tail -c 20 ~/.codex/auth.json | xxd
-          echo "=== config.toml content ==="
-          cat -A ~/.codex/config.toml
-          echo "=== codex version ==="
-          codex --version || echo "codex not found"
 
       - name: Install Technical dependencies
         if: steps.resolve.outputs.should_run == 'true'
