@@ -114,7 +114,7 @@ jobs:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
           mkdir -p ~/.codex
-          echo "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+          printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
           cat > ~/.codex/config.toml << 'EOF'
           model = "gpt-5.4"
           model_reasoning_effort = "high"

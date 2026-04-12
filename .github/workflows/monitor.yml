@@ -59,7 +59,7 @@ jobs:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
           mkdir -p ~/.codex
-          echo "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+          printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
 
       - name: Install Technical dependencies
         working-directory: Technical
