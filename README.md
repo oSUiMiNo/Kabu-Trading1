@@ -71,9 +71,9 @@ python main_pipeline.py --market US
 # 監視バッチ（単体実行）
 python monitor_batch.py
 
-# 手動銘柄入力（Monitor をスキップして直接分析）
-python manual_pipeline.py NVDA
-python manual_pipeline.py 3038 --market JP --display-name 神戸物産
+# 手動銘柄入力（GitHub Actions 経由・Monitor をスキップして直接分析）
+gh workflow run manual-analysis.yml -f ticker=NVDA
+gh workflow run manual-analysis.yml -f ticker=3038 -f market=JP -f display_name=神戸物産
 ```
 
 ---

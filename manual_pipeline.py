@@ -1,13 +1,12 @@
 """
-手動銘柄入力パイプライン
+手動銘柄入力パイプライン（Admission + main_pipeline.py --manual 委譲）
 
-ユーザーが銘柄を指定して分析を直接起動する。
-Admission（対話 + watchlist + archive 作成）を行い、
-main_pipeline.py --manual --ticker を呼び出す。
+GH Actions の workflow_dispatch から呼ばれることを前提とした非対話スクリプト。
+Admission（watchlist 登録 + archive 作成）を行い、main_pipeline.py --manual に委譲する。
 
 Usage:
-    python manual_pipeline.py NVDA
-    python manual_pipeline.py 3038 --market JP --display-name 神戸物産
+    python manual_pipeline.py NVDA --mode buy --span mid
+    python manual_pipeline.py 3038 --mode buy --span mid --market JP --display-name 神戸物産
 """
 import subprocess
 import sys
@@ -29,76 +28,31 @@ from discord_notifier import send_webhook
 from notification_types import NotifyLabel, LABEL_COLOR
 
 
-# ── ユーティリティ ───────────────────────────────────────
-
-def _ask(prompt: str, choices: list[str] | None = None, default: str | None = None) -> str:
-    if choices:
-        options = "/".join(choices)
-        if default:
-            prompt_text = f"{prompt} [{options}] (デフォルト: {default}): "
-        else:
-            prompt_text = f"{prompt} [{options}]: "
-    else:
-        prompt_text = f"{prompt}: "
-
-    while True:
-        answer = input(prompt_text).strip()
-        if not answer and default:
-            return default
-        if choices and answer not in choices:
-            print(f"  '{answer}' は選択肢にありません。{'/'.join(choices)} から選んでください。")
-            continue
-        if answer:
-            return answer
-        print("  入力してください。")
-
-
-def _confirm(prompt: str) -> bool:
-    answer = input(f"{prompt} [y/n]: ").strip().lower()
-    return answer in ("y", "yes")
-
-
-# ── Admission + main_pipeline.py 呼び出し ──────────────
-
 def run_manual_pipeline(
     ticker: str,
+    mode: str = "buy",
+    span: str = "mid",
     market: str | None = None,
     display_name: str | None = None,
 ):
     ticker = ticker.upper()
     print(f"\n{'='*60}")
     print(f"=== 手動分析パイプライン: {ticker} ===")
+    print(f"=== mode={mode}, span={span} ===")
     print(f"{'='*60}\n")
 
-    # ── 対話: mode と span ──
-    mode = _ask("投資モード", ["buy", "sell"], default="buy")
-    span = _ask("投資期間", ["short", "mid", "long"], default="mid")
-
-    # ── watchlist チェック ──
+    # ── watchlist 登録（未登録なら追加） ──
     wl = safe_db(list_watchlist, active_only=False) or []
     wl_tickers = {w["ticker"] for w in wl}
-    is_new = ticker not in wl_tickers
 
-    if not is_new:
-        print(f"\n  {ticker} は既に watchlist に登録されています。")
-        if not _confirm("  この銘柄の分析を続行しますか？"):
-            print("  中止しました。")
-            return
-
-    if is_new:
-        add_to_wl = _confirm(f"\n  {ticker} を watchlist に追加して今後の定期チェック対象にしますか？")
-        if add_to_wl:
-            wl_fields = {"market": (market or "US").upper()}
-            if display_name:
-                wl_fields["display_name"] = display_name
-            safe_db(upsert_watchlist, ticker, **wl_fields)
-            print(f"  watchlist に追加しました: {ticker} (market={wl_fields['market']})")
-        else:
-            print(f"  watchlist には追加せず、分析のみ実行します。")
-            safe_db(upsert_watchlist, ticker, market=(market or "US").upper(), active=False)
-            if display_name:
-                safe_db(upsert_watchlist, ticker, display_name=display_name)
-            print(f"  (Watch 連携のため watchlist に非アクティブで仮登録)")
+    if ticker not in wl_tickers:
+        wl_fields = {"market": (market or "US").upper()}
+        if display_name:
+            wl_fields["display_name"] = display_name
+        safe_db(upsert_watchlist, ticker, **wl_fields)
+        print(f"  watchlist に追加: {ticker} (market={wl_fields['market']})")
+    else:
+        print(f"  watchlist 登録済み: {ticker}")
 
     # ── Admission: archive 作成 + active/monitor 設定 ──
     print(f"\n{'='*60}")
@@ -148,13 +102,21 @@ if __name__ == "__main__":
         load_dotenv(env_path, override=False)
 
     _ticker = None
+    _mode = "buy"
+    _span = "mid"
     _market = None
     _display_name = None
 
     args = sys.argv[1:]
     i = 0
     while i < len(args):
-        if args[i] == "--market" and i + 1 < len(args):
+        if args[i] == "--mode" and i + 1 < len(args):
+            _mode = args[i + 1]
+            i += 2
+        elif args[i] == "--span" and i + 1 < len(args):
+            _span = args[i + 1]
+            i += 2
+        elif args[i] == "--market" and i + 1 < len(args):
             _market = args[i + 1].upper()
             i += 2
         elif args[i] == "--display-name" and i + 1 < len(args):
@@ -167,16 +129,11 @@ if __name__ == "__main__":
             i += 1
 
     if not _ticker:
-        print("使い方: python manual_pipeline.py <TICKER> [--market US|JP] [--display-name 名前]")
-        print("例: python manual_pipeline.py NVDA")
-        print("例: python manual_pipeline.py 3038 --market JP --display-name 神戸物産")
+        print("使い方: python manual_pipeline.py <TICKER> --mode buy --span mid [--market US|JP] [--display-name 名前]")
         sys.exit(1)
 
     try:
-        run_manual_pipeline(_ticker, _market, _display_name)
-    except KeyboardInterrupt:
-        print("\n中断されました。")
-        sys.exit(1)
+        run_manual_pipeline(_ticker, _mode, _span, _market, _display_name)
     except Exception as e:
         print(f"\n[FATAL] 手動パイプライン異常終了: {e}", flush=True)
         try:
