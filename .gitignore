@@ -6,3 +6,4 @@ Planning/logs/
 **/*.pyc
 **/.venv/
 .playwright-mcp/
+logs/

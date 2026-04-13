@@ -71,34 +71,49 @@ python main_pipeline.py --market US
 # 監視バッチ（単体実行）
 python monitor_batch.py
 
-# 手動銘柄入力（GitHub Actions 経由・Monitor をスキップして直接分析）
-gh workflow run manual-analysis.yml -f ticker=NVDA
-gh workflow run manual-analysis.yml -f ticker=3038 -f market=JP -f display_name=神戸物産
+# 手動銘柄入力（Monitor をスキップして直接分析）
+python manual_pipeline.py NVDA --mode buy --span mid
+python manual_pipeline.py 3038 --mode buy --span mid --market JP --display-name 神戸物産
 ```
+
+※ 上記コマンドは全て `uv run --project Monitor/src python ...` で実行する。
 
 ---
 
-## 自動実行（GitHub Actions）
+## 自動実行（ローカル PC）
 
-| ワークフロー | スケジュール | 内容 |
-|-------------|------------|------|
-| `event-monitor.yml` | 5分間隔 24時間稼働 | イベント watch + 定期スケジュール検出 → パイプライン起動 |
-| `monitor.yml` | 手動（workflow_dispatch） | テスト・特定銘柄の手動チェック |
-| `event-scheduler.yml` | 年1回・月1回 | FOMC・雇用統計等の経済イベント取得・DB登録 |
-| `night-worker.yml` | JST 3:05 / 4:05 / 5:05 | archive 品質レビュー → GitHub Issue 作成 |
-| `sync-config.yml` | push 時自動 | `config/portfolio_config.yml` → DB 反映 |
+Windows タスクスケジューラーから `local_scheduler.py` を5分間隔で実行する。
+`local_scheduler.py` が DB の monitor_schedule + portfolio_config.monitor_schedules を照合し、マッチしたら `main_pipeline.py` を起動する。
 
-### 定期 Monitor スケジュール（pg_cron）
+| タスク | スケジュール | 内容 |
+|--------|------------|------|
+| `Investment_Scheduler` | 5分間隔 | イベント watch + 定期スケジュール検出 → パイプライン起動 |
+| `Investment_NightWorker` | 毎日 3:05 JST | archive 品質レビュー → GitHub Issue 作成 |
+| `Investment_EventScheduler` | 毎月1日 9:00 JST | 経済イベント取得・DB登録 |
 
-| ジョブ | 発火時刻（UTC） | 対象（JST） |
-|--------|---------------|------------|
-| monitor_JP_AM | 月〜金 01:10 | 日本株 10:10 |
-| monitor_JP_PM | 月〜金 07:00 | 日本株 16:00 |
-| monitor_US_AM | 日〜木 15:00 | 米国株 0:00 |
-| monitor_US_PM | 日〜木 21:30 | 米国株 6:30 |
+### 定期 Monitor スケジュール
 
-メイン経路は pg_cron → pg_net → GitHub Actions workflow_dispatch。
-フォールバックとして GitHub Actions 5分ポーリングが二重化カバーする。
+portfolio_config.monitor_schedules に定義。local_scheduler.py が時刻マッチで起動する。
+
+| ラベル | 対象（JST） | 市場 |
+|--------|------------|------|
+| JP_AM | 月〜金 10:10 | 日本株 |
+| JP_PM | 月〜金 16:00 | 日本株 |
+| US_AM | 日〜木 0:00 | 米国株 |
+| US_PM | 日〜木 6:30 | 米国株 |
+| WEEKEND | 土日 10:00 | 全銘柄 |
+
+### GitHub Actions ワークフロー（schedule 無効化済み）
+
+ワークフローファイルは参考用に残置。schedule トリガーはコメントアウト済み、workflow_dispatch のみ有効。
+
+| ワークフロー | 状態 |
+|-------------|------|
+| `event-monitor.yml` | schedule 無効化 |
+| `night-worker.yml` | schedule 無効化 |
+| `event-scheduler.yml` | schedule 無効化 |
+| `sync-config.yml` | push トリガー無効化（手動：`python shared/sync_config.py`） |
+| `monitor.yml` / `manual-analysis.yml` | workflow_dispatch のみ（元から） |
 
 ---
 

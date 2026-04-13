@@ -21,8 +21,8 @@
 name: Event Monitor
 
 on:
-  schedule:
-    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'  # 5分間隔（:00 回避）
+  # schedule:
+  #   - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'  # ローカル移行により無効化
   workflow_dispatch:
     inputs:
       fire_now:

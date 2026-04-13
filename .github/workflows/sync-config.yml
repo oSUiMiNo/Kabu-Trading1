@@ -7,10 +7,10 @@
 name: Sync Config
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'config/portfolio_config.yml'
+  # push:                              # ローカル移行により無効化
+  #   branches: [main]
+  #   paths:
+  #     - 'config/portfolio_config.yml'
   workflow_dispatch:
     inputs:
       dry_run:

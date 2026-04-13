@@ -19,9 +19,9 @@
 name: EventScheduler
 
 on:
-  schedule:
-    - cron: '0 0 2 1 *'    # 年次: 1月2日 09:00 JST → annual
-    - cron: '0 0 1 * *'    # 月次: 毎月1日 09:00 JST → monthly
+  # schedule:
+  #   - cron: '0 0 2 1 *'  # ローカル移行により無効化
+  #   - cron: '0 0 1 * *'
   workflow_dispatch:
     inputs:
       command:

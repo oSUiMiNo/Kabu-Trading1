@@ -1,5 +1,6 @@
 # pg_cron によるスケジュール発火（GitHub Actions の遅延対策）
 
+> **ローカル移行済み（2026-04）**: pg_cron 全ジョブは `active=false` に無効化済み。GitHub Actions の schedule トリガーもコメントアウト済み。現在は `local_scheduler.py` + Windows タスクスケジューラーで定期実行している。本ドキュメントは旧方式の設計参考として残置。
 
 ## 用語解説
 
